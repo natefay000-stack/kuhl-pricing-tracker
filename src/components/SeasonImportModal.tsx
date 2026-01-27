@@ -13,6 +13,7 @@ import {
 
 interface ImportStats {
   lineListCount: number;
+  pricingCount: number;
   landedCostMatches: number;
   productsCount: number;
   costsCount: number;
@@ -36,6 +37,7 @@ interface ImportResult {
   stats: ImportStats;
   data: {
     products: Record<string, unknown>[];
+    pricing: Record<string, unknown>[];
     costs: Record<string, unknown>[];
     sales: Record<string, unknown>[];
   };
@@ -44,7 +46,13 @@ interface ImportResult {
 
 interface SeasonImportModalProps {
   existingSeasons: string[];
-  onImport: (data: { products: Record<string, unknown>[]; costs: Record<string, unknown>[]; sales: Record<string, unknown>[]; season: string }) => void;
+  onImport: (data: {
+    products: Record<string, unknown>[];
+    pricing: Record<string, unknown>[];
+    costs: Record<string, unknown>[];
+    sales: Record<string, unknown>[];
+    season: string
+  }) => void;
   onClose: () => void;
 }
 
@@ -62,20 +70,24 @@ export default function SeasonImportModal({
 }: SeasonImportModalProps) {
   const [selectedSeason, setSelectedSeason] = useState('27SP');
   const [lineListFile, setLineListFile] = useState<File | null>(null);
+  const [pricingFile, setPricingFile] = useState<File | null>(null);
   const [landedFile, setLandedFile] = useState<File | null>(null);
   const [salesFile, setSalesFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [salesProgress, setSalesProgress] = useState<number>(0);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileDrop = useCallback(
-    (e: React.DragEvent, type: 'lineList' | 'landed' | 'sales') => {
+    (e: React.DragEvent, type: 'lineList' | 'pricing' | 'landed' | 'sales') => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
       if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
         if (type === 'lineList') {
           setLineListFile(file);
+        } else if (type === 'pricing') {
+          setPricingFile(file);
         } else if (type === 'landed') {
           setLandedFile(file);
         } else {
@@ -90,12 +102,14 @@ export default function SeasonImportModal({
 
   const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'lineList' | 'landed' | 'sales'
+    type: 'lineList' | 'pricing' | 'landed' | 'sales'
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       if (type === 'lineList') {
         setLineListFile(file);
+      } else if (type === 'pricing') {
+        setPricingFile(file);
       } else if (type === 'landed') {
         setLandedFile(file);
       } else {
@@ -114,6 +128,7 @@ export default function SeasonImportModal({
 
     setIsProcessing(true);
     setProcessingStatus('Processing Line List...');
+    setSalesProgress(0);
     setError(null);
 
     try {
@@ -121,13 +136,18 @@ export default function SeasonImportModal({
       formData.append('lineList', lineListFile);
       formData.append('season', selectedSeason);
 
+      if (pricingFile) {
+        formData.append('pricing', pricingFile);
+        setProcessingStatus('Processing Line List and Pricing...');
+      }
+
       if (landedFile) {
         formData.append('landed', landedFile);
       }
 
       if (salesFile) {
         formData.append('sales', salesFile);
-        setProcessingStatus('Processing Line List and Sales Data (this may take a moment for large files)...');
+        setProcessingStatus('Processing all files (large sales files may take a moment)...');
       }
 
       const response = await fetch('/api/import-season', {
@@ -155,6 +175,7 @@ export default function SeasonImportModal({
     if (result && result.data) {
       onImport({
         products: result.data.products,
+        pricing: result.data.pricing || [],
         costs: result.data.costs,
         sales: result.data.sales || [],
         season: selectedSeason,
@@ -215,195 +236,193 @@ export default function SeasonImportModal({
 
           {/* File Upload Zones */}
           <div className="space-y-4">
-            {/* Line List (Required) */}
+            {/* 1. Line List (Required) */}
             <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
               <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                  <span className="font-bold text-gray-900">
-                    1. Line List
-                  </span>
+                  <span className="font-bold text-gray-900">1. Line List</span>
                   <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-red-100 text-red-700 rounded">
                     Required
                   </span>
                 </div>
-                <span className="text-sm text-gray-500">
-                  Style info + pricing
-                </span>
+                <span className="text-sm text-gray-500">Style info + base pricing</span>
               </div>
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleFileDrop(e, 'lineList')}
-                className={`p-6 text-center transition-colors ${
+                className={`p-4 text-center transition-colors ${
                   lineListFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                 }`}
               >
                 {lineListFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">
-                        {lineListFile.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {(lineListFile.size / 1024).toFixed(1)} KB
-                      </p>
+                      <p className="font-medium text-gray-900 text-sm">{lineListFile.name}</p>
+                      <p className="text-xs text-gray-500">{(lineListFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                     <button
-                      onClick={() => {
-                        setLineListFile(null);
-                        setResult(null);
-                      }}
-                      className="ml-4 text-sm text-red-600 hover:text-red-700"
+                      onClick={() => { setLineListFile(null); setResult(null); }}
+                      className="ml-4 text-xs text-red-600 hover:text-red-700"
                     >
                       Remove
                     </button>
                   </div>
                 ) : (
-                  <div>
-                    <FileSpreadsheet className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                    <p className="text-gray-600 mb-2">
-                      Drag & drop your Line List Excel file
-                    </p>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 cursor-pointer transition-colors">
+                  <div className="flex items-center justify-center gap-4">
+                    <FileSpreadsheet className="w-8 h-8 text-gray-400" />
+                    <div className="text-left">
+                      <p className="text-gray-600 text-sm">Drag & drop or select Line List file</p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-cyan-600 text-white text-sm rounded-lg hover:bg-cyan-700 cursor-pointer transition-colors">
                       <Upload className="w-4 h-4" />
-                      Select File
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => handleFileSelect(e, 'lineList')}
-                        className="hidden"
-                      />
+                      Select
+                      <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'lineList')} className="hidden" />
                     </label>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Landed Costs (Optional) */}
+            {/* 2. Pricing (Optional) */}
             <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
               <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                  <span className="font-bold text-gray-900">
-                    2. Landed Costs
-                  </span>
+                  <span className="font-bold text-gray-900">2. Pricing</span>
                   <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
                     Optional
                   </span>
                 </div>
-                <span className="text-sm text-gray-500">
-                  Overrides Line List costs
-                </span>
+                <span className="text-sm text-gray-500">Overrides Line List pricing</span>
+              </div>
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleFileDrop(e, 'pricing')}
+                className={`p-4 text-center transition-colors ${
+                  pricingFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
+                }`}
+              >
+                {pricingFile ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 text-sm">{pricingFile.name}</p>
+                      <p className="text-xs text-gray-500">{(pricingFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <button
+                      onClick={() => { setPricingFile(null); setResult(null); }}
+                      className="ml-4 text-xs text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-4">
+                    <FileSpreadsheet className="w-8 h-8 text-gray-300" />
+                    <div className="text-left">
+                      <p className="text-gray-500 text-sm">pricebyseason.xlsx (source of truth for pricing)</p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
+                      <Upload className="w-4 h-4" />
+                      Select
+                      <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'pricing')} className="hidden" />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Landed Costs (Optional) */}
+            <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-gray-900">3. Landed Costs</span>
+                  <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
+                    Optional
+                  </span>
+                </div>
+                <span className="text-sm text-gray-500">Overrides Line List costs</span>
               </div>
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleFileDrop(e, 'landed')}
-                className={`p-6 text-center transition-colors ${
+                className={`p-4 text-center transition-colors ${
                   landedFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                 }`}
               >
                 {landedFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">
-                        {landedFile.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {(landedFile.size / 1024).toFixed(1)} KB
-                      </p>
+                      <p className="font-medium text-gray-900 text-sm">{landedFile.name}</p>
+                      <p className="text-xs text-gray-500">{(landedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                     <button
-                      onClick={() => {
-                        setLandedFile(null);
-                        setResult(null);
-                      }}
-                      className="ml-4 text-sm text-red-600 hover:text-red-700"
+                      onClick={() => { setLandedFile(null); setResult(null); }}
+                      className="ml-4 text-xs text-red-600 hover:text-red-700"
                     >
                       Remove
                     </button>
                   </div>
                 ) : (
-                  <div>
-                    <FileSpreadsheet className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500 mb-2">
-                      Optional: Add Landed Request Sheet
-                    </p>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
+                  <div className="flex items-center justify-center gap-4">
+                    <FileSpreadsheet className="w-8 h-8 text-gray-300" />
+                    <div className="text-left">
+                      <p className="text-gray-500 text-sm">Landed Request Sheet (FOB, LDP, duties)</p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
                       <Upload className="w-4 h-4" />
-                      Select File
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => handleFileSelect(e, 'landed')}
-                        className="hidden"
-                      />
+                      Select
+                      <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'landed')} className="hidden" />
                     </label>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Sales Data (Optional) */}
+            {/* 4. Sales Data (Optional) */}
             <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
               <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
                 <div>
-                  <span className="font-bold text-gray-900">
-                    3. Sales Data
-                  </span>
+                  <span className="font-bold text-gray-900">4. Sales Data</span>
                   <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
                     Optional
                   </span>
                 </div>
-                <span className="text-sm text-gray-500">
-                  Customer orders & revenue
-                </span>
+                <span className="text-sm text-gray-500">Historical sales performance</span>
               </div>
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleFileDrop(e, 'sales')}
-                className={`p-6 text-center transition-colors ${
+                className={`p-4 text-center transition-colors ${
                   salesFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                 }`}
               >
                 {salesFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
                     <div className="text-left">
-                      <p className="font-medium text-gray-900">
-                        {salesFile.name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {(salesFile.size / 1024 / 1024).toFixed(1)} MB
-                      </p>
+                      <p className="font-medium text-gray-900 text-sm">{salesFile.name}</p>
+                      <p className="text-xs text-gray-500">{(salesFile.size / 1024 / 1024).toFixed(1)} MB</p>
                     </div>
                     <button
-                      onClick={() => {
-                        setSalesFile(null);
-                        setResult(null);
-                      }}
-                      className="ml-4 text-sm text-red-600 hover:text-red-700"
+                      onClick={() => { setSalesFile(null); setResult(null); }}
+                      className="ml-4 text-xs text-red-600 hover:text-red-700"
                     >
                       Remove
                     </button>
                   </div>
                 ) : (
-                  <div>
-                    <FileSpreadsheet className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500 mb-2">
-                      Optional: Add Sales Data file
-                    </p>
-                    <p className="text-xs text-gray-400 mb-2">
-                      Large files (200K+ rows) supported
-                    </p>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
+                  <div className="flex items-center justify-center gap-4">
+                    <FileSpreadsheet className="w-8 h-8 text-gray-300" />
+                    <div className="text-left">
+                      <p className="text-gray-500 text-sm">Sales data (220K+ rows supported)</p>
+                      <p className="text-xs text-amber-600">⚠️ Large files processed in batches</p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
                       <Upload className="w-4 h-4" />
-                      Select File
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => handleFileSelect(e, 'sales')}
-                        className="hidden"
-                      />
+                      Select
+                      <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'sales')} className="hidden" />
                     </label>
                   </div>
                 )}
@@ -460,6 +479,9 @@ export default function SeasonImportModal({
                     </p>
                     <p className="text-sm text-emerald-600 mt-1">
                       {result.stats.lineListCount.toLocaleString()} from Line List
+                      {result.stats.pricingCount > 0 && (
+                        <>, {result.stats.pricingCount.toLocaleString()} pricing overrides</>
+                      )}
                       {result.stats.landedCostMatches > 0 && (
                         <>, {result.stats.landedCostMatches.toLocaleString()} with Landed costs</>
                       )}

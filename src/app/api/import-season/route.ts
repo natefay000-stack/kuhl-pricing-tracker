@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   parseLineListXLSX,
+  parsePricingXLSX,
   parseLandedSheetXLSX,
   parseSalesXLSX,
   mergeSeasonData,
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
 
     const lineListFile = formData.get('lineList') as File | null;
+    const pricingFile = formData.get('pricing') as File | null;
     const landedFile = formData.get('landed') as File | null;
     const salesFile = formData.get('sales') as File | null;
     const season = formData.get('season') as string;
@@ -38,6 +40,15 @@ export async function POST(request: NextRequest) {
     const lineListData = parseLineListXLSX(lineListBuffer);
     console.log('Parsed Line List:', lineListData.length, 'items');
 
+    // Parse Pricing Sheet if provided (source of truth for pricing)
+    let pricingData: ReturnType<typeof parsePricingXLSX> = [];
+    if (pricingFile) {
+      console.log('Pricing file:', pricingFile.name, pricingFile.size);
+      const pricingBuffer = await pricingFile.arrayBuffer();
+      pricingData = parsePricingXLSX(pricingBuffer);
+      console.log('Parsed Pricing Sheet:', pricingData.length, 'items');
+    }
+
     // Parse Landed Sheet if provided
     let landedData: ReturnType<typeof parseLandedSheetXLSX> = [];
     if (landedFile) {
@@ -56,7 +67,30 @@ export async function POST(request: NextRequest) {
       console.log('Parsed Sales Data:', salesData.length, 'items');
     }
 
-    // Merge data
+    // Apply pricing overrides to line list data (pricing file is source of truth)
+    let pricingOverrideCount = 0;
+    if (pricingData.length > 0) {
+      // Create a map for fast lookup by style+color
+      const pricingMap = new Map<string, typeof pricingData[0]>();
+      for (const p of pricingData) {
+        const key = `${p.styleNumber}-${p.colorCode}`.toLowerCase();
+        pricingMap.set(key, p);
+      }
+
+      // Apply overrides
+      for (const item of lineListData) {
+        const key = `${item.styleNumber}-${item.colorCode}`.toLowerCase();
+        const priceOverride = pricingMap.get(key);
+        if (priceOverride) {
+          if (priceOverride.price > 0) item.usWholesale = priceOverride.price;
+          if (priceOverride.msrp > 0) item.usMsrp = priceOverride.msrp;
+          pricingOverrideCount++;
+        }
+      }
+      console.log('Applied pricing overrides:', pricingOverrideCount);
+    }
+
+    // Merge data (applies landed cost overrides)
     const mergedResult = mergeSeasonData(lineListData, landedData, season);
     console.log('Merged result:', {
       products: mergedResult.products.length,
@@ -65,6 +99,21 @@ export async function POST(request: NextRequest) {
 
     // Convert to app formats
     const appData = convertToAppFormats(mergedResult, season);
+
+    // Convert pricing data to app format for separate storage
+    const pricingAppData = pricingData.map((p, index) => ({
+      id: `price-${season}-${index}`,
+      styleNumber: p.styleNumber,
+      styleDesc: p.styleDesc,
+      colorCode: p.colorCode,
+      colorDesc: p.colorDesc,
+      season: p.season || season,
+      seasonType: 'Main',
+      seasonDesc: p.seasonDesc || '',
+      price: p.price,
+      msrp: p.msrp,
+      cost: p.cost,
+    }));
 
     // Convert sales data to app format
     const salesAppData = salesData.map((s, index) => ({
@@ -97,6 +146,7 @@ export async function POST(request: NextRequest) {
       season,
       stats: {
         lineListCount: mergedResult.stats.lineListCount,
+        pricingCount: pricingOverrideCount,
         landedCostMatches: mergedResult.stats.landedCostMatches,
         productsCount: appData.products.length,
         costsCount: appData.costs.length,
@@ -104,6 +154,7 @@ export async function POST(request: NextRequest) {
       },
       data: {
         products: appData.products,
+        pricing: pricingAppData,
         costs: appData.costs,
         sales: salesAppData,
       },

@@ -256,6 +256,53 @@ export function parseLandedSheetXLSX(buffer: ArrayBuffer): LandedCostItem[] {
     });
 }
 
+export interface ImportedPricingItem {
+  styleNumber: string;
+  styleDesc: string;
+  colorCode: string;
+  colorDesc: string;
+  season: string;
+  seasonDesc: string;
+  price: number;
+  msrp: number;
+  cost: number;
+}
+
+export function parsePricingXLSX(buffer: ArrayBuffer): ImportedPricingItem[] {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+
+  console.log('Pricing rows:', rows.length);
+  if (rows.length > 0) {
+    console.log('Pricing columns:', Object.keys(rows[0]));
+  }
+
+  return rows
+    .filter(row => {
+      const styleNumber = parseString(row['Style'] || row['Style #'] || row['Style#']);
+      return styleNumber && styleNumber.length > 0;
+    })
+    .map((row) => {
+      const rawSeason = parseString(row['Season']);
+      const season = normalizeSeasonCode(rawSeason);
+
+      return {
+        styleNumber: parseString(row['Style'] || row['Style #'] || row['Style#']),
+        styleDesc: parseString(row['Description'] || row['Style Desc'] || row['Style Description']),
+        colorCode: parseString(row['Clr'] || row['Color'] || row['Color Code']),
+        colorDesc: parseString(row['Clr_Desc'] || row['Clr Desc'] || row['Color Desc']),
+        season,
+        seasonDesc: parseString(row['Sea Desc'] || row['Season Desc']),
+        price: parseNumber(row['Price'] || row['Wholesale'] || row['WHSL']),
+        msrp: parseNumber(row['MSRP'] || row['Retail']),
+        cost: parseNumber(row['Cost']),
+      };
+    });
+}
+
 export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
   const workbook = XLSX.read(buffer, { type: 'array' });
 

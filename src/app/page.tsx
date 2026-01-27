@@ -242,23 +242,27 @@ export default function Home() {
   // Handle import from Season Import Modal
   const handleSeasonImport = async (data: {
     products: Record<string, unknown>[];
+    pricing: Record<string, unknown>[];
     costs: Record<string, unknown>[];
     sales: Record<string, unknown>[];
     season: string;
   }) => {
-    console.log('Importing season data:', data.season, data.products.length, 'products', data.sales?.length || 0, 'sales');
+    console.log('Importing season data:', data.season, data.products.length, 'products', data.pricing?.length || 0, 'pricing', data.sales?.length || 0, 'sales');
 
     // Remove existing data for this season, then add new data
     const filteredProducts = products.filter(p => p.season !== data.season);
+    const filteredPricing = pricing.filter(p => p.season !== data.season);
     const filteredCosts = costs.filter(c => c.season !== data.season);
     const filteredSales = sales.filter(s => s.season !== data.season);
 
-    // Add new products, costs, and sales (cast through unknown to satisfy TypeScript)
+    // Add new products, pricing, costs, and sales (cast through unknown to satisfy TypeScript)
     const newProducts = [...filteredProducts, ...(data.products as unknown as Product[])];
+    const newPricing = [...filteredPricing, ...(data.pricing as unknown as PricingRecord[])];
     const newCosts = [...filteredCosts, ...(data.costs as unknown as CostRecord[])];
     const newSales = [...filteredSales, ...(data.sales as unknown as SalesRecord[])];
 
     setProducts(newProducts);
+    setPricing(newPricing);
     setCosts(newCosts);
     setSales(newSales);
 
@@ -266,7 +270,7 @@ export default function Home() {
     setCachedData({
       products: newProducts,
       sales: newSales,
-      pricing,
+      pricing: newPricing,
       costs: newCosts,
     });
 
@@ -282,6 +286,21 @@ export default function Home() {
             season: data.season,
             data: data.products,
             fileName: `${data.season}_import`,
+            replaceExisting: true,
+          }),
+        });
+      }
+
+      // Import pricing to database
+      if (data.pricing && data.pricing.length > 0) {
+        await fetch('/api/data/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'pricing',
+            season: data.season,
+            data: data.pricing,
+            fileName: `${data.season}_pricing_import`,
             replaceExisting: true,
           }),
         });
