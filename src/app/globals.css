@@ -1,0 +1,220 @@
+@import url('https://api.fontshare.com/v2/css?f[]=supreme@100,200,300,400,500,600,700,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Supreme', system-ui, sans-serif;
+  --font-body: 'Supreme', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #f0f4f8;
+  color: #2d2926;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4b7a6;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9c7a5a;
+}
+
+/* Table styles */
+.pricing-table {
+  @apply w-full border-collapse text-sm;
+}
+
+.pricing-table th {
+  @apply font-display font-semibold text-xs uppercase tracking-wider px-4 py-3 border-b-2 whitespace-nowrap;
+  color: rgba(45, 41, 38, 0.7);
+  border-color: rgba(196, 183, 166, 0.5);
+  background-color: #f0f4f8;
+  position: sticky;
+  top: 0;
+  text-align: left;
+}
+
+.pricing-table th[class*="text-right"] {
+  text-align: right;
+}
+
+.pricing-table th[class*="text-center"] {
+  text-align: center;
+}
+
+.pricing-table td {
+  @apply px-4 py-3 align-middle;
+  border-bottom: 1px solid rgba(196, 183, 166, 0.3);
+}
+
+.pricing-table td[class*="text-right"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-table td[class*="text-center"] {
+  text-align: center;
+}
+
+.pricing-table tbody tr:hover td {
+  background-color: rgba(196, 183, 166, 0.1);
+}
+
+.pricing-table tfoot td {
+  @apply font-semibold;
+  background-color: rgba(196, 183, 166, 0.2);
+  border-top: 2px solid rgba(196, 183, 166, 0.5);
+}
+
+/* Ensure numbers are tabular for alignment */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Margin indicators */
+.margin-excellent {
+  @apply text-emerald-700 bg-emerald-50;
+}
+
+.margin-good {
+  @apply text-kuhl-sage bg-kuhl-sage/10;
+}
+
+.margin-fair {
+  @apply text-amber-700 bg-amber-50;
+}
+
+.margin-poor {
+  @apply text-kuhl-rust bg-kuhl-rust/10;
+}
+
+/* Input styles */
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  @apply font-body bg-white border border-kuhl-sand rounded-lg py-2 text-kuhl-stone focus:outline-none focus:ring-2 focus:ring-kuhl-sage/50 focus:border-kuhl-sage transition-all;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply font-display font-medium bg-kuhl-stone text-kuhl-cream px-4 py-2 rounded-lg hover:bg-kuhl-earth transition-colors;
+}
+
+.btn-secondary {
+  @apply font-display font-medium bg-kuhl-sand/50 text-kuhl-stone px-4 py-2 rounded-lg hover:bg-kuhl-sand transition-colors;
+}
+
+/* Card styles */
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden;
+}
+
+.card-header {
+  @apply px-6 py-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700;
+}
+
+.card-body {
+  @apply p-4;
+}
+
+/* Data table styling */
+.data-table {
+  @apply w-full border border-gray-200 rounded-lg overflow-hidden;
+}
+
+.data-table th {
+  @apply bg-gray-100 border-b border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wide;
+}
+
+.data-table td {
+  @apply px-4 py-3 border-b border-gray-100;
+}
+
+.data-table tr:last-child td {
+  @apply border-b-0;
+}
+
+.data-table tbody tr:hover {
+  @apply bg-gray-50;
+}
+
+/* Data grid - for label/value pairs with borders */
+.data-grid {
+  @apply border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100;
+}
+
+.data-grid-row {
+  @apply grid grid-cols-[140px_1fr] items-center;
+}
+
+.data-grid-row-3col {
+  @apply grid grid-cols-[140px_80px_1fr] items-center;
+}
+
+.data-label {
+  @apply px-4 py-3 text-sm font-medium text-gray-500 bg-gray-50 border-r border-gray-100;
+}
+
+.data-value {
+  @apply px-4 py-3 text-sm text-gray-900;
+}
+
+.data-code {
+  @apply font-mono bg-gray-100 px-2 py-0.5 rounded text-center text-sm;
+}
+
+/* Stat card */
+.stat-card {
+  @apply bg-white rounded-xl p-5 border border-kuhl-sand/30 shadow-sm;
+}
+
+.stat-value {
+  @apply font-display text-3xl font-bold text-kuhl-stone;
+}
+
+.stat-label {
+  @apply text-sm text-kuhl-stone/60 font-medium uppercase tracking-wide;
+}
+
+/* Animation utilities */
+.animate-stagger > * {
+  animation: slideUp 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 250ms; }

@@ -1,0 +1,26 @@
+node_modules
+.next
+out
+
+# Keep environment variables out of version control
+.env
+.env.local
+.env.production.local
+
+# Data files (use database in production)
+/data/*.xlsx
+
+# Prisma
+/src/generated/prisma
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/

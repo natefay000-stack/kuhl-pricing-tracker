@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Products from Line List
+model Product {
+  id                      String   @id @default(cuid())
+  styleNumber             String
+  styleDesc               String?
+  color                   String?
+  colorDesc               String?
+  styleColor              String?
+  season                  String
+  seasonType              String?
+  divisionDesc            String?
+  categoryDesc            String?
+  category                String?
+  productLine             String?
+  productLineDesc         String?
+  labelDesc               String?
+  designerName            String?
+  techDesignerName        String?
+  countryOfOrigin         String?
+  factoryName             String?
+  msrp                    Float    @default(0)
+  price                   Float    @default(0)
+  cost                    Float    @default(0)
+  cadMsrp                 Float?
+  cadPrice                Float?
+  carryOver               Boolean  @default(false)
+  carryForward            Boolean  @default(false)
+  sellingSeasons          String?
+  htsCode                 String?
+  styleColorNotes         String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@unique([styleNumber, color, season])
+  @@index([season])
+  @@index([styleNumber])
+  @@index([divisionDesc])
+  @@index([categoryDesc])
+}
+
+// Sales data
+model Sale {
+  id                String   @id @default(cuid())
+  styleNumber       String
+  styleDesc         String?
+  colorCode         String?
+  colorDesc         String?
+  season            String
+  seasonType        String?
+  customer          String?
+  customerType      String?
+  salesRep          String?
+  divisionDesc      String?
+  categoryDesc      String?
+  gender            String?
+  unitsBooked       Int      @default(0)
+  unitsOpen         Int      @default(0)
+  revenue           Float    @default(0)
+  shipped           Float    @default(0)
+  cost              Float    @default(0)
+  wholesalePrice    Float    @default(0)
+  msrp              Float    @default(0)
+  netUnitPrice      Float    @default(0)
+  orderType         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([season])
+  @@index([styleNumber])
+  @@index([customer])
+  @@index([customerType])
+}
+
+// Pricing by season (from pricebyseason file)
+model Pricing {
+  id          String   @id @default(cuid())
+  styleNumber String
+  styleDesc   String?
+  colorCode   String?
+  colorDesc   String?
+  season      String
+  seasonType  String?
+  seasonDesc  String?
+  price       Float    @default(0)
+  msrp        Float    @default(0)
+  cost        Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([styleNumber, colorCode, season])
+  @@index([season])
+  @@index([styleNumber])
+}
+
+// Cost data from Landed Request Sheet
+model Cost {
+  id                  String   @id @default(cuid())
+  styleNumber         String
+  styleName           String?
+  season              String
+  seasonType          String?
+  factory             String?
+  countryOfOrigin     String?
+  designTeam          String?
+  developer           String?
+  fob                 Float    @default(0)
+  landed              Float    @default(0)
+  dutyCost            Float    @default(0)
+  tariffCost          Float    @default(0)
+  freightCost         Float    @default(0)
+  overheadCost        Float    @default(0)
+  suggestedMsrp       Float?
+  suggestedWholesale  Float?
+  margin              Float?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([styleNumber, season])
+  @@index([season])
+  @@index([styleNumber])
+}
+
+// Import history to track what files have been imported
+model ImportLog {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileType    String   // 'linelist', 'sales', 'pricing', 'costs'
+  season      String?
+  recordCount Int
+  importedBy  String?
+  importedAt  DateTime @default(now())
+}
