@@ -198,7 +198,7 @@ export default function SeasonImportModal({
         {/* Header */}
         <div className="px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between bg-gray-50">
           <h2 className="text-2xl font-display font-bold text-gray-900">
-            Import Season Data
+            Import Season Data (v2 - 4 sections)
           </h2>
           <button
             onClick={onClose}
