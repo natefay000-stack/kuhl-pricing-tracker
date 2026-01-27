@@ -164,33 +164,41 @@ export default function Home() {
           console.log('Database not available, falling back to Excel files:', dbErr);
         }
 
-        // If database is empty, fall back to Excel files (local dev)
+        // If database is empty, try Excel files (local dev only)
         if (data.products.length === 0) {
-          setLoadingStatus('Loading Excel files (this may take a moment)...');
+          setLoadingStatus('Checking for local data files...');
           setLoadingProgress(20);
           console.log('Fetching data from Excel API...');
 
-          const response = await fetch('/api/load-data');
-          setLoadingProgress(60);
+          try {
+            const response = await fetch('/api/load-data');
+            setLoadingProgress(60);
 
-          if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            if (response.ok) {
+              setLoadingStatus('Processing data...');
+              setLoadingProgress(70);
+
+              const result = await response.json();
+              console.log('Loaded from Excel:', result.counts);
+
+              if (result.success) {
+                data = {
+                  products: result.data.products || [],
+                  sales: result.data.sales || [],
+                  pricing: result.data.pricing || [],
+                  costs: result.data.costs || [],
+                };
+              }
+            }
+          } catch (excelErr) {
+            console.log('Excel files not available:', excelErr);
           }
+        }
 
-          setLoadingStatus('Processing data...');
-          setLoadingProgress(70);
-
-          const result = await response.json();
-          console.log('Loaded from Excel:', result.counts);
-
-          if (result.success) {
-            data = {
-              products: result.data.products || [],
-              sales: result.data.sales || [],
-              pricing: result.data.pricing || [],
-              costs: result.data.costs || [],
-            };
-          }
+        // If still no data, show empty state (user needs to import)
+        if (data.products.length === 0) {
+          console.log('No data found - user needs to import via Season Import Modal');
+          setLoadingStatus('Ready - Import data to get started');
         }
 
         setLoadingProgress(85);
@@ -208,7 +216,8 @@ export default function Home() {
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize data:', err);
-        setLoadingStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setLoadingStatus('Ready - Import data to get started');
+        setIsLoading(false);
       }
     }
 
