@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface LineListViewProps {
@@ -133,6 +133,7 @@ export default function LineListView({
   const [sortColumn, setSortColumn] = useState<string>('styleNumber');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [hideNoSales, setHideNoSales] = useState<boolean>(false);
 
   // Get filter options
   const divisions = useMemo(() => {
@@ -191,6 +192,23 @@ export default function LineListView({
     return lookup;
   }, [pricing]);
 
+  // Build set of all styles that have ANY sales
+  const stylesWithSales = useMemo(() => {
+    const styles = new Set<string>();
+    sales.forEach((s) => {
+      if (s.styleNumber && (s.revenue > 0 || s.unitsBooked > 0)) {
+        styles.add(s.styleNumber);
+      }
+    });
+    return styles;
+  }, [sales]);
+
+  // Check if current season is a future season (27SP or later)
+  const isFutureSeason = useMemo(() => {
+    const futureSessions = ['27SP', '27FA', '28SP', '28FA', '29SP', '29FA'];
+    return futureSessions.includes(selectedSeason);
+  }, [selectedSeason]);
+
   // Get styles in previous season for new/dropped detection
   const previousSeasonStyles = useMemo(() => {
     const prevSeason = getPreviousSeason(selectedSeason);
@@ -215,6 +233,11 @@ export default function LineListView({
     if (categoryFilter) data = data.filter((d) => normalizeCategory(d.categoryDesc) === categoryFilter);
     if (designerFilter) data = data.filter((d) => d.designerName === designerFilter);
     if (productLineFilter) data = data.filter((d) => d.productLine === productLineFilter);
+
+    // Hide styles with no sales (only for historical seasons)
+    if (hideNoSales && !isFutureSeason) {
+      data = data.filter((d) => stylesWithSales.has(d.styleNumber));
+    }
 
     // Search
     if (searchQuery) {
@@ -310,6 +333,9 @@ export default function LineListView({
     previousSeasonStyles,
     currentSeasonStyles,
     seasons,
+    hideNoSales,
+    isFutureSeason,
+    stylesWithSales,
   ]);
 
   // Sort data
@@ -344,14 +370,18 @@ export default function LineListView({
     const newStyles = Array.from(uniqueStyles).filter((s) => !previousSeasonStyles.has(s));
     const droppedStyles = Array.from(previousSeasonStyles).filter((s) => !currentSeasonStyles.has(s));
 
+    // Count styles with no sales (only meaningful for historical seasons)
+    const noSalesStyles = Array.from(uniqueStyles).filter((s) => !stylesWithSales.has(s));
+
     return {
       styles: uniqueStyles.size,
       skus: seasonProducts.length,
       new: newStyles.length,
       dropped: droppedStyles.length,
       designers: uniqueDesigners.size,
+      noSales: noSalesStyles.length,
     };
-  }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles]);
+  }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles, stylesWithSales]);
 
   // Visible columns
   const visibleColumns = useMemo(() => {
@@ -575,11 +605,32 @@ export default function LineListView({
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
             />
           </div>
+
+          {/* Hide No Sales Toggle - only for historical seasons */}
+          {!isFutureSeason && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Filter</label>
+              <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={hideNoSales}
+                  onChange={(e) => {
+                    setHideNoSales(e.target.checked);
+                    setCurrentPage(1);
+                  }}
+                  className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                />
+                <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Hide no-sales styles
+                </span>
+              </label>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className={`grid gap-4 ${isFutureSeason ? 'grid-cols-5' : 'grid-cols-6'}`}>
         <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
           <p className="text-3xl font-bold font-mono text-gray-900">{stats.styles.toLocaleString()}</p>
           <p className="text-sm text-gray-500 font-bold uppercase mt-1">Styles</p>
@@ -600,6 +651,18 @@ export default function LineListView({
           <p className="text-3xl font-bold font-mono text-gray-900">{stats.designers}</p>
           <p className="text-sm text-gray-500 font-bold uppercase mt-1">Designers</p>
         </div>
+        {/* No Sales - only show for historical seasons */}
+        {!isFutureSeason && (
+          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-center gap-2">
+              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                {stats.noSales.toLocaleString()}
+              </p>
+              {stats.noSales > 0 && hideNoSales && <EyeOff className="w-5 h-5 text-amber-500" />}
+            </div>
+            <p className="text-sm text-gray-500 font-bold uppercase mt-1">No Sales</p>
+          </div>
+        )}
       </div>
 
       {/* Quick Filters */}

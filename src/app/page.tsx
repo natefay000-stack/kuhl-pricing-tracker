@@ -12,6 +12,7 @@ import PricingView from '@/components/views/PricingView';
 import MarginsView from '@/components/views/MarginsView';
 import StyleMasterView from '@/components/views/StyleMasterView';
 import LineListView from '@/components/views/LineListView';
+import ValidationView from '@/components/views/ValidationView';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SeasonImportModal from '@/components/SeasonImportModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
@@ -514,6 +515,14 @@ export default function Home() {
               sales={sales}
               pricing={pricing}
               costs={costs}
+              onStyleClick={handleStyleClick}
+            />
+          )}
+
+          {activeView === 'validation' && (
+            <ValidationView
+              products={products}
+              sales={sales}
               onStyleClick={handleStyleClick}
             />
           )}

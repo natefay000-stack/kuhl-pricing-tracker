@@ -10,9 +10,10 @@ import {
   Percent,
   Upload,
   List,
+  AlertTriangle,
 } from 'lucide-react';
 
-export type ViewId = 'dashboard' | 'season' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'linelist';
+export type ViewId = 'dashboard' | 'season' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'linelist' | 'validation';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -24,6 +25,7 @@ const views = [
   { id: 'dashboard' as ViewId, label: 'Dashboard', icon: LayoutDashboard },
   { id: 'season' as ViewId, label: 'Season View', icon: Calendar },
   { id: 'linelist' as ViewId, label: 'Line List', icon: List },
+  { id: 'validation' as ViewId, label: 'Validation', icon: AlertTriangle },
   { id: 'sales' as ViewId, label: 'Sales', icon: ShoppingBag },
   { id: 'costs' as ViewId, label: 'Costs', icon: DollarSign },
   { id: 'pricing' as ViewId, label: 'Pricing', icon: TrendingUp },
