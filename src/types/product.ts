@@ -146,12 +146,12 @@ export interface SalesRecord {
 
 // Customer type labels
 export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
+  'KI': 'KUHL International',
   'WH': 'Wholesale',
+  'BB': 'REI',
   'WD': 'Wholesale Direct',
-  'BB': 'Big Box/REI',
+  'EC': 'E-Commerce',
   'PS': 'Pro Sales',
-  'EC': 'E-commerce',
-  'KI': 'KÜHL Internal',
 };
 
 export interface PriceHistory {
