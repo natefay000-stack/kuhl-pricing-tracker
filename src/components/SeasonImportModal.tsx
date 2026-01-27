@@ -16,6 +16,7 @@ interface ImportStats {
   landedCostMatches: number;
   productsCount: number;
   costsCount: number;
+  salesCount: number;
 }
 
 interface PreviewItem {
@@ -36,13 +37,14 @@ interface ImportResult {
   data: {
     products: Record<string, unknown>[];
     costs: Record<string, unknown>[];
+    sales: Record<string, unknown>[];
   };
   preview: PreviewItem[];
 }
 
 interface SeasonImportModalProps {
   existingSeasons: string[];
-  onImport: (data: { products: Record<string, unknown>[]; costs: Record<string, unknown>[]; season: string }) => void;
+  onImport: (data: { products: Record<string, unknown>[]; costs: Record<string, unknown>[]; sales: Record<string, unknown>[]; season: string }) => void;
   onClose: () => void;
 }
 
@@ -61,19 +63,23 @@ export default function SeasonImportModal({
   const [selectedSeason, setSelectedSeason] = useState('27SP');
   const [lineListFile, setLineListFile] = useState<File | null>(null);
   const [landedFile, setLandedFile] = useState<File | null>(null);
+  const [salesFile, setSalesFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileDrop = useCallback(
-    (e: React.DragEvent, type: 'lineList' | 'landed') => {
+    (e: React.DragEvent, type: 'lineList' | 'landed' | 'sales') => {
       e.preventDefault();
       const file = e.dataTransfer.files[0];
       if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
         if (type === 'lineList') {
           setLineListFile(file);
-        } else {
+        } else if (type === 'landed') {
           setLandedFile(file);
+        } else {
+          setSalesFile(file);
         }
         setResult(null);
         setError(null);
@@ -84,14 +90,16 @@ export default function SeasonImportModal({
 
   const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'lineList' | 'landed'
+    type: 'lineList' | 'landed' | 'sales'
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       if (type === 'lineList') {
         setLineListFile(file);
-      } else {
+      } else if (type === 'landed') {
         setLandedFile(file);
+      } else {
+        setSalesFile(file);
       }
       setResult(null);
       setError(null);
@@ -105,6 +113,7 @@ export default function SeasonImportModal({
     }
 
     setIsProcessing(true);
+    setProcessingStatus('Processing Line List...');
     setError(null);
 
     try {
@@ -114,6 +123,11 @@ export default function SeasonImportModal({
 
       if (landedFile) {
         formData.append('landed', landedFile);
+      }
+
+      if (salesFile) {
+        formData.append('sales', salesFile);
+        setProcessingStatus('Processing Line List and Sales Data (this may take a moment for large files)...');
       }
 
       const response = await fetch('/api/import-season', {
@@ -128,8 +142,10 @@ export default function SeasonImportModal({
 
       const data = await response.json();
       setResult(data);
+      setProcessingStatus('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process files');
+      setProcessingStatus('');
     } finally {
       setIsProcessing(false);
     }
@@ -140,6 +156,7 @@ export default function SeasonImportModal({
       onImport({
         products: result.data.products,
         costs: result.data.costs,
+        sales: result.data.sales || [],
         season: selectedSeason,
       });
     }
@@ -325,6 +342,73 @@ export default function SeasonImportModal({
                 )}
               </div>
             </div>
+
+            {/* Sales Data (Optional) */}
+            <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-gray-900">
+                    3. Sales Data
+                  </span>
+                  <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
+                    Optional
+                  </span>
+                </div>
+                <span className="text-sm text-gray-500">
+                  Customer orders & revenue
+                </span>
+              </div>
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleFileDrop(e, 'sales')}
+                className={`p-6 text-center transition-colors ${
+                  salesFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
+                }`}
+              >
+                {salesFile ? (
+                  <div className="flex items-center justify-center gap-3">
+                    <CheckCircle className="w-6 h-6 text-emerald-600" />
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900">
+                        {salesFile.name}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {(salesFile.size / 1024 / 1024).toFixed(1)} MB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSalesFile(null);
+                        setResult(null);
+                      }}
+                      className="ml-4 text-sm text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <FileSpreadsheet className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-gray-500 mb-2">
+                      Optional: Add Sales Data file
+                    </p>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Large files (200K+ rows) supported
+                    </p>
+                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
+                      <Upload className="w-4 h-4" />
+                      Select File
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={(e) => handleFileSelect(e, 'sales')}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Preview Button */}
@@ -338,7 +422,7 @@ export default function SeasonImportModal({
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Processing...
+                    {processingStatus || 'Processing...'}
                   </>
                 ) : (
                   'Preview Import'
@@ -370,11 +454,17 @@ export default function SeasonImportModal({
                   <div>
                     <p className="font-bold text-emerald-800">
                       Ready to import {result.stats.productsCount.toLocaleString()} style/colors
+                      {result.stats.salesCount > 0 && (
+                        <> + {result.stats.salesCount.toLocaleString()} sales records</>
+                      )}
                     </p>
                     <p className="text-sm text-emerald-600 mt-1">
                       {result.stats.lineListCount.toLocaleString()} from Line List
                       {result.stats.landedCostMatches > 0 && (
                         <>, {result.stats.landedCostMatches.toLocaleString()} with Landed costs</>
+                      )}
+                      {result.stats.salesCount > 0 && (
+                        <>, {result.stats.salesCount.toLocaleString()} sales transactions</>
                       )}
                     </p>
                   </div>

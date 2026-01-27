@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   parseLineListXLSX,
   parseLandedSheetXLSX,
+  parseSalesXLSX,
   mergeSeasonData,
   convertToAppFormats,
 } from '@/lib/xlsx-import';
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
 
     const lineListFile = formData.get('lineList') as File | null;
     const landedFile = formData.get('landed') as File | null;
+    const salesFile = formData.get('sales') as File | null;
     const season = formData.get('season') as string;
 
     if (!lineListFile) {
@@ -45,6 +47,15 @@ export async function POST(request: NextRequest) {
       console.log('Parsed Landed Sheet:', landedData.length, 'items');
     }
 
+    // Parse Sales Data if provided
+    let salesData: ReturnType<typeof parseSalesXLSX> = [];
+    if (salesFile) {
+      console.log('Sales file:', salesFile.name, salesFile.size);
+      const salesBuffer = await salesFile.arrayBuffer();
+      salesData = parseSalesXLSX(salesBuffer);
+      console.log('Parsed Sales Data:', salesData.length, 'items');
+    }
+
     // Merge data
     const mergedResult = mergeSeasonData(lineListData, landedData, season);
     console.log('Merged result:', {
@@ -55,6 +66,32 @@ export async function POST(request: NextRequest) {
     // Convert to app formats
     const appData = convertToAppFormats(mergedResult, season);
 
+    // Convert sales data to app format
+    const salesAppData = salesData.map((s, index) => ({
+      id: `sale-${season}-${index}`,
+      styleNumber: s.styleNumber,
+      styleDesc: s.styleDesc,
+      colorCode: s.colorCode,
+      colorDesc: s.colorDesc,
+      season: s.season || season,
+      seasonType: 'Main',
+      customer: s.customer,
+      customerType: s.customerType,
+      unitsBooked: s.unitsBooked,
+      unitsOpen: 0,
+      revenue: s.revenue,
+      shipped: 0,
+      cost: 0,
+      wholesalePrice: 0,
+      msrp: 0,
+      netUnitPrice: s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0,
+      divisionDesc: s.divisionDesc,
+      categoryDesc: s.categoryDesc,
+      gender: '',
+      salesRep: '',
+      orderType: '',
+    }));
+
     return NextResponse.json({
       success: true,
       season,
@@ -63,10 +100,12 @@ export async function POST(request: NextRequest) {
         landedCostMatches: mergedResult.stats.landedCostMatches,
         productsCount: appData.products.length,
         costsCount: appData.costs.length,
+        salesCount: salesAppData.length,
       },
       data: {
         products: appData.products,
         costs: appData.costs,
+        sales: salesAppData,
       },
       preview: mergedResult.products.slice(0, 10).map(p => ({
         styleNumber: p.styleNumber,

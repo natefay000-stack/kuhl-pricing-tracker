@@ -243,25 +243,29 @@ export default function Home() {
   const handleSeasonImport = async (data: {
     products: Record<string, unknown>[];
     costs: Record<string, unknown>[];
+    sales: Record<string, unknown>[];
     season: string;
   }) => {
-    console.log('Importing season data:', data.season, data.products.length, 'products');
+    console.log('Importing season data:', data.season, data.products.length, 'products', data.sales?.length || 0, 'sales');
 
     // Remove existing data for this season, then add new data
     const filteredProducts = products.filter(p => p.season !== data.season);
     const filteredCosts = costs.filter(c => c.season !== data.season);
+    const filteredSales = sales.filter(s => s.season !== data.season);
 
-    // Add new products and costs (cast through unknown to satisfy TypeScript)
+    // Add new products, costs, and sales (cast through unknown to satisfy TypeScript)
     const newProducts = [...filteredProducts, ...(data.products as unknown as Product[])];
     const newCosts = [...filteredCosts, ...(data.costs as unknown as CostRecord[])];
+    const newSales = [...filteredSales, ...(data.sales as unknown as SalesRecord[])];
 
     setProducts(newProducts);
     setCosts(newCosts);
+    setSales(newSales);
 
     // Update cache with new data
     setCachedData({
       products: newProducts,
-      sales,
+      sales: newSales,
       pricing,
       costs: newCosts,
     });
@@ -297,6 +301,32 @@ export default function Home() {
           }),
         });
       }
+
+      // Import sales to database in batches (for large files)
+      if (data.sales && data.sales.length > 0) {
+        const BATCH_SIZE = 500;
+        const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
+        console.log(`Importing ${data.sales.length} sales records in ${totalBatches} batches`);
+
+        for (let i = 0; i < data.sales.length; i += BATCH_SIZE) {
+          const batch = data.sales.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
+
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'sales',
+              season: data.season,
+              data: batch,
+              fileName: `${data.season}_sales_import_batch_${batchNum}`,
+              replaceExisting: i === 0, // Only replace on first batch
+            }),
+          });
+        }
+      }
+
       console.log('Data persisted to database');
     } catch (dbErr) {
       console.warn('Could not persist to database (may not be configured):', dbErr);
