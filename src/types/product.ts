@@ -154,6 +154,37 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   'PS': 'Pro Sales',
 };
 
+// Category abbreviation to full name mapping
+export const CATEGORY_MAP: Record<string, string> = {
+  'JACK': 'JACKET',
+  'PANT': 'PANTS',
+  'SHOR': 'SHORTS',
+  'LEGG': 'LEGGINGS',
+  'DRES': 'DRESS',
+  'FLEE': 'FLEECE',
+  'HEAD': 'HEADWEAR',
+  'SLEE': 'SLEEVELESS',
+  'LONG': 'LONG SLEEVE',
+  'SHRT': 'SHORT SLEEVE',
+  'SWEA': 'SWEATER',
+  'UNDE': 'UNDERWEAR',
+  'SKIR': 'SKIRTS',
+  'SKOR': 'SKORTS',
+  'MISC': 'MISCELLANEOUS',
+  'FLAN': 'FLANNEL',
+  'BASE': 'BASELAYER',
+  'VEST': 'VEST',
+  'BAGS': 'BAGS',
+  'POP': 'POP',
+};
+
+// Normalize category abbreviations to full names
+export function normalizeCategory(category: string): string {
+  if (!category) return '';
+  const upper = category.toUpperCase().trim();
+  return CATEGORY_MAP[upper] || upper;
+}
+
 export interface PriceHistory {
   id: string;
   productId: string;

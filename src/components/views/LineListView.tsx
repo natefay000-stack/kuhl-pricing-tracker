@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
+import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { ArrowUpDown, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -143,7 +143,11 @@ export default function LineListView({
 
   const categories = useMemo(() => {
     const all = new Set<string>();
-    products.forEach((p) => p.categoryDesc && all.add(p.categoryDesc));
+    products.forEach((p) => {
+      if (p.categoryDesc) {
+        all.add(normalizeCategory(p.categoryDesc));
+      }
+    });
     return Array.from(all).sort();
   }, [products]);
 
@@ -208,7 +212,7 @@ export default function LineListView({
 
     // Apply filters
     if (divisionFilter) data = data.filter((d) => d.divisionDesc === divisionFilter);
-    if (categoryFilter) data = data.filter((d) => d.categoryDesc === categoryFilter);
+    if (categoryFilter) data = data.filter((d) => normalizeCategory(d.categoryDesc) === categoryFilter);
     if (designerFilter) data = data.filter((d) => d.designerName === designerFilter);
     if (productLineFilter) data = data.filter((d) => d.productLine === productLineFilter);
 
@@ -442,6 +446,9 @@ export default function LineListView({
     }
     if (key === 'carryOver') {
       return row.isCarryOver ? 'Y' : 'N';
+    }
+    if (key === 'categoryDesc') {
+      return normalizeCategory(row.categoryDesc) || '—';
     }
     const val = (row as unknown as Record<string, unknown>)[key];
     return val !== null && val !== undefined ? String(val) : '—';

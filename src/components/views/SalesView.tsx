@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { SalesRecord, Product, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
+import { SalesRecord, Product, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import {
   Banknote,
@@ -98,7 +98,11 @@ export default function SalesView({
 
   const categories = useMemo(() => {
     const all = new Set<string>();
-    sales.forEach((s) => s.categoryDesc && all.add(s.categoryDesc));
+    sales.forEach((s) => {
+      if (s.categoryDesc) {
+        all.add(normalizeCategory(s.categoryDesc));
+      }
+    });
     return Array.from(all).sort();
   }, [sales]);
 
@@ -124,7 +128,7 @@ export default function SalesView({
   const baseFilteredSales = useMemo(() => {
     return sales.filter((s) => {
       if (filterSeason && s.season !== filterSeason) return false;
-      if (filterCategory && s.categoryDesc !== filterCategory) return false;
+      if (filterCategory && normalizeCategory(s.categoryDesc) !== filterCategory) return false;
       if (filterCustomerType && s.customerType !== filterCustomerType) return false;
       if (filterCustomer && s.customer !== filterCustomer) return false;
       if (filterSalesRep && s.salesRep !== filterSalesRep) return false;
@@ -139,7 +143,7 @@ export default function SalesView({
   const filteredSales = useMemo(() => {
     return baseFilteredSales.filter((s) => {
       if (activeFilters.channel && s.customerType !== activeFilters.channel) return false;
-      if (activeFilters.category && s.categoryDesc !== activeFilters.category) return false;
+      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return false;
       if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return false;
       if (activeFilters.customer && s.customer !== activeFilters.customer) return false;
       return true;
@@ -176,7 +180,7 @@ export default function SalesView({
     const grouped = new Map<string, number>();
 
     salesForChart.forEach((s) => {
-      if (activeFilters.category && s.categoryDesc !== activeFilters.category) return;
+      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
       if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
       if (activeFilters.customer && s.customer !== activeFilters.customer) return;
 
@@ -202,7 +206,7 @@ export default function SalesView({
       if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
       if (activeFilters.customer && s.customer !== activeFilters.customer) return;
 
-      const key = s.categoryDesc || 'Other';
+      const key = normalizeCategory(s.categoryDesc) || 'Other';
       grouped.set(key, (grouped.get(key) || 0) + (s.revenue || 0));
     });
 
@@ -222,7 +226,7 @@ export default function SalesView({
 
     salesForChart.forEach((s) => {
       if (activeFilters.channel && s.customerType !== activeFilters.channel) return;
-      if (activeFilters.category && s.categoryDesc !== activeFilters.category) return;
+      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
       if (activeFilters.customer && s.customer !== activeFilters.customer) return;
 
       const key = getGenderFromDivision(s.divisionDesc);
@@ -247,7 +251,7 @@ export default function SalesView({
 
     salesForChart.forEach((s) => {
       if (activeFilters.channel && s.customerType !== activeFilters.channel) return;
-      if (activeFilters.category && s.categoryDesc !== activeFilters.category) return;
+      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
       if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
 
       const key = s.customer || 'Unknown';
@@ -284,7 +288,7 @@ export default function SalesView({
           styleNumber: key,
           styleDesc: s.styleDesc || '',
           gender: getGenderFromDivision(s.divisionDesc),
-          categoryDesc: s.categoryDesc || '',
+          categoryDesc: normalizeCategory(s.categoryDesc) || '',
           units: 0,
           revenue: 0,
           customers: new Set(),

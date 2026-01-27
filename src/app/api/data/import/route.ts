@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { normalizeCategory } from '@/types/product';
 
 interface ImportData {
   type: 'products' | 'sales' | 'pricing' | 'costs';
@@ -56,8 +57,8 @@ export async function POST(request: NextRequest) {
             season: String(item.season || season || ''),
             seasonType: String(item.seasonType || 'Main'),
             divisionDesc: String(item.divisionDesc || item.division || ''),
-            categoryDesc: String(item.categoryDesc || item.category || ''),
-            category: String(item.category || ''),
+            categoryDesc: normalizeCategory(String(item.categoryDesc || item.category || '')),
+            category: normalizeCategory(String(item.category || '')),
             productLine: String(item.productLine || ''),
             productLineDesc: String(item.productLineDesc || ''),
             labelDesc: String(item.labelDesc || item.label || ''),
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
             customerType: String(item.customerType || ''),
             salesRep: String(item.salesRep || ''),
             divisionDesc: String(item.divisionDesc || ''),
-            categoryDesc: String(item.categoryDesc || ''),
+            categoryDesc: normalizeCategory(String(item.categoryDesc || '')),
             gender: String(item.gender || ''),
             unitsBooked: Number(item.unitsBooked || 0),
             unitsOpen: Number(item.unitsOpen || 0),

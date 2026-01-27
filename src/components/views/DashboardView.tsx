@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Product, SalesRecord, CostRecord } from '@/types/product';
+import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -46,7 +46,7 @@ export default function DashboardView({
     return sales.filter((s) => {
       if (selectedSeason && s.season !== selectedSeason) return false;
       if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
-      if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
+      if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
       return true;
     });
   }, [sales, selectedSeason, selectedDivision, selectedCategory]);
@@ -83,7 +83,7 @@ export default function DashboardView({
   const salesByCategory = useMemo(() => {
     const grouped = new Map<string, number>();
     filteredSales.forEach((s) => {
-      const cat = s.categoryDesc || 'Unknown';
+      const cat = normalizeCategory(s.categoryDesc) || 'Unknown';
       grouped.set(cat, (grouped.get(cat) || 0) + (s.revenue || 0));
     });
     return Array.from(grouped.entries())

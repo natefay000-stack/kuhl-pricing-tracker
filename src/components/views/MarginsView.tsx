@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Product, SalesRecord, CostRecord } from '@/types/product';
+import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import {
   DollarSign,
   TrendingUp,
@@ -176,7 +176,7 @@ export default function MarginsView({
         byStyle.set(record.styleNumber, {
           styleNumber: record.styleNumber,
           styleDesc: record.styleDesc || '',
-          categoryDesc: record.categoryDesc || '',
+          categoryDesc: normalizeCategory(record.categoryDesc) || '',
           divisionDesc: record.divisionDesc || '',
           gender: (record as any).gender || '',
           revenue: 0,
@@ -296,7 +296,7 @@ export default function MarginsView({
     filteredSales.forEach(record => {
       // Apply division/category filters
       if (selectedDivision && record.divisionDesc !== selectedDivision) return;
-      if (selectedCategory && record.categoryDesc !== selectedCategory) return;
+      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = record.customerType || 'Other';
       const cost = costLookup.get(record.styleNumber) || 0;
