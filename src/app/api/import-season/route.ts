@@ -8,6 +8,10 @@ import {
   convertToAppFormats,
 } from '@/lib/xlsx-import';
 
+// Increase limits for large file uploads
+export const maxDuration = 300; // 5 minutes
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

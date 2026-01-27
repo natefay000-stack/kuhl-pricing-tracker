@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizeCategory } from '@/types/product';
 
+// Increase limits for large data imports
+export const maxDuration = 300; // 5 minutes
+export const dynamic = 'force-dynamic';
+
 interface ImportData {
   type: 'products' | 'sales' | 'pricing' | 'costs';
   season?: string;
