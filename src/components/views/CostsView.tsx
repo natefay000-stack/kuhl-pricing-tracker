@@ -41,8 +41,14 @@ function formatCurrency(value: number | null | undefined): string {
 }
 
 function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
+  if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '—';
   return `${(value * 100).toFixed(1)}%`;
+}
+
+// Calculate margin: (Wholesale - Landed) / Wholesale
+function calculateMargin(wholesale: number, landed: number): number | null {
+  if (!wholesale || wholesale <= 0 || !landed || landed <= 0) return null;
+  return (wholesale - landed) / wholesale;
 }
 
 // Get margin color class
@@ -164,23 +170,88 @@ export default function CostsView({
     return Array.from(all).sort();
   }, [costs]);
 
-  // Filter costs and merge with sales data
+  // Group costs by Style # + Season and aggregate
   const filteredCostsWithSales = useMemo(() => {
-    return costs
-      .filter((c) => {
-        if (filterSeason && c.season !== filterSeason) return false;
-        if (filterStyleNumber && !c.styleNumber.toLowerCase().includes(filterStyleNumber.toLowerCase())) return false;
-        if (filterFactory && c.factory !== filterFactory) return false;
-        if (filterCountry && c.countryOfOrigin !== filterCountry) return false;
-        if (filterTeam && c.designTeam !== filterTeam) return false;
-        if (filterDeveloper && c.developer !== filterDeveloper) return false;
-        return true;
-      })
-      .map((c) => ({
-        ...c,
-        revenue: salesByStyle[c.styleNumber]?.revenue || 0,
-        units: salesByStyle[c.styleNumber]?.units || 0,
-      }));
+    // First, group costs by styleNumber + season
+    const grouped = new Map<string, {
+      styleNumber: string;
+      styleName: string;
+      season: string;
+      factories: Set<string>;
+      countries: Set<string>;
+      teams: Set<string>;
+      developers: Set<string>;
+      fob: number;
+      landed: number;
+      suggestedWholesale: number;
+      suggestedMsrp: number;
+      count: number;
+    }>();
+
+    costs.forEach((c) => {
+      // Apply filters
+      if (filterSeason && c.season !== filterSeason) return;
+      if (filterStyleNumber && !c.styleNumber.toLowerCase().includes(filterStyleNumber.toLowerCase())) return;
+      if (filterFactory && c.factory !== filterFactory) return;
+      if (filterCountry && c.countryOfOrigin !== filterCountry) return;
+      if (filterTeam && c.designTeam !== filterTeam) return;
+      if (filterDeveloper && c.developer !== filterDeveloper) return;
+
+      const key = `${c.styleNumber}-${c.season}`;
+      const existing = grouped.get(key);
+
+      if (existing) {
+        existing.count++;
+        if (c.factory) existing.factories.add(c.factory);
+        if (c.countryOfOrigin) existing.countries.add(c.countryOfOrigin);
+        if (c.designTeam) existing.teams.add(c.designTeam);
+        if (c.developer) existing.developers.add(c.developer);
+        // Keep first non-zero values for pricing
+        if (!existing.fob && c.fob) existing.fob = c.fob;
+        if (!existing.landed && c.landed) existing.landed = c.landed;
+        if (!existing.suggestedWholesale && c.suggestedWholesale) existing.suggestedWholesale = c.suggestedWholesale;
+        if (!existing.suggestedMsrp && c.suggestedMsrp) existing.suggestedMsrp = c.suggestedMsrp;
+      } else {
+        grouped.set(key, {
+          styleNumber: c.styleNumber,
+          styleName: c.styleName || '',
+          season: c.season,
+          factories: new Set(c.factory ? [c.factory] : []),
+          countries: new Set(c.countryOfOrigin ? [c.countryOfOrigin] : []),
+          teams: new Set(c.designTeam ? [c.designTeam] : []),
+          developers: new Set(c.developer ? [c.developer] : []),
+          fob: c.fob || 0,
+          landed: c.landed || 0,
+          suggestedWholesale: c.suggestedWholesale || 0,
+          suggestedMsrp: c.suggestedMsrp || 0,
+          count: 1,
+        });
+      }
+    });
+
+    // Convert to array with aggregated values
+    return Array.from(grouped.values()).map((g) => {
+      const salesData = salesByStyle[g.styleNumber] || { revenue: 0, units: 0 };
+      const margin = calculateMargin(g.suggestedWholesale, g.landed);
+
+      return {
+        styleNumber: g.styleNumber,
+        styleName: g.styleName,
+        season: g.season,
+        factory: g.factories.size === 1 ? Array.from(g.factories)[0] : g.factories.size > 1 ? 'Multiple' : '',
+        countryOfOrigin: g.countries.size === 1 ? Array.from(g.countries)[0] : g.countries.size > 1 ? 'Multiple' : '',
+        designTeam: g.teams.size === 1 ? Array.from(g.teams)[0] : g.teams.size > 1 ? 'Multiple' : '',
+        developer: g.developers.size === 1 ? Array.from(g.developers)[0] : g.developers.size > 1 ? 'Multiple' : '',
+        fob: g.fob,
+        landed: g.landed,
+        suggestedWholesale: g.suggestedWholesale,
+        suggestedMsrp: g.suggestedMsrp,
+        margin,
+        revenue: salesData.revenue,
+        units: salesData.units,
+        colorCount: g.count,
+      };
+    });
   }, [costs, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyle]);
 
   // Sort data
@@ -259,7 +330,7 @@ export default function CostsView({
   const summary = useMemo(() => {
     const withFob = filteredCostsWithSales.filter((c) => c.fob > 0);
     const withLanded = filteredCostsWithSales.filter((c) => c.landed > 0);
-    const withMargin = filteredCostsWithSales.filter((c) => c.margin !== null && c.margin > 0);
+    const withMargin = filteredCostsWithSales.filter((c) => c.margin !== null && c.margin !== undefined && isFinite(c.margin));
 
     const avgFob = withFob.length > 0
       ? withFob.reduce((sum, c) => sum + c.fob, 0) / withFob.length
@@ -271,22 +342,22 @@ export default function CostsView({
 
     const avgMargin = withMargin.length > 0
       ? withMargin.reduce((sum, c) => sum + (c.margin || 0), 0) / withMargin.length
-      : 0;
+      : null;
 
-    const uniqueStyles = new Set(filteredCostsWithSales.map((c) => c.styleNumber)).size;
-    const uniqueFactories = new Set(filteredCostsWithSales.map((c) => c.factory).filter(Boolean)).size;
-    const uniqueCountries = new Set(filteredCostsWithSales.map((c) => c.countryOfOrigin).filter(Boolean)).size;
+    const uniqueStyles = filteredCostsWithSales.length; // Already grouped by style+season
+    const uniqueFactories = new Set(filteredCostsWithSales.map((c) => c.factory).filter(f => f && f !== 'Multiple')).size;
+    const uniqueCountries = new Set(filteredCostsWithSales.map((c) => c.countryOfOrigin).filter(f => f && f !== 'Multiple')).size;
 
     // Total revenue and units
     const totalRevenue = filteredCostsWithSales.reduce((sum, c) => sum + c.revenue, 0);
     const totalUnits = filteredCostsWithSales.reduce((sum, c) => sum + c.units, 0);
 
-    // Margin distribution
+    // Margin distribution (only for valid margins)
     const marginBuckets = {
       excellent: withMargin.filter((c) => (c.margin || 0) >= 0.50).length,
       good: withMargin.filter((c) => (c.margin || 0) >= 0.45 && (c.margin || 0) < 0.50).length,
       fair: withMargin.filter((c) => (c.margin || 0) >= 0.40 && (c.margin || 0) < 0.45).length,
-      poor: withMargin.filter((c) => (c.margin || 0) < 0.40).length,
+      poor: withMargin.filter((c) => (c.margin || 0) > 0 && (c.margin || 0) < 0.40).length,
     };
 
     return {
@@ -305,22 +376,27 @@ export default function CostsView({
 
   // Group by Factory
   const byFactory = useMemo(() => {
-    const grouped = new Map<string, { count: number; avgFob: number; avgLanded: number; avgMargin: number }>();
+    const grouped = new Map<string, { count: number; fobSum: number; fobCount: number; landedSum: number; landedCount: number; marginSum: number; marginCount: number }>();
 
     filteredCostsWithSales.forEach((c) => {
       const key = c.factory || 'Unknown';
       const existing = grouped.get(key);
+      const hasValidMargin = c.margin !== null && c.margin !== undefined && isFinite(c.margin);
+
       if (existing) {
         existing.count++;
-        existing.avgFob += c.fob || 0;
-        existing.avgLanded += c.landed || 0;
-        existing.avgMargin += c.margin || 0;
+        if (c.fob > 0) { existing.fobSum += c.fob; existing.fobCount++; }
+        if (c.landed > 0) { existing.landedSum += c.landed; existing.landedCount++; }
+        if (hasValidMargin) { existing.marginSum += c.margin!; existing.marginCount++; }
       } else {
         grouped.set(key, {
           count: 1,
-          avgFob: c.fob || 0,
-          avgLanded: c.landed || 0,
-          avgMargin: c.margin || 0,
+          fobSum: c.fob > 0 ? c.fob : 0,
+          fobCount: c.fob > 0 ? 1 : 0,
+          landedSum: c.landed > 0 ? c.landed : 0,
+          landedCount: c.landed > 0 ? 1 : 0,
+          marginSum: hasValidMargin ? c.margin! : 0,
+          marginCount: hasValidMargin ? 1 : 0,
         });
       }
     });
@@ -329,31 +405,36 @@ export default function CostsView({
       .map(([factory, data]) => ({
         factory,
         count: data.count,
-        avgFob: data.avgFob / data.count,
-        avgLanded: data.avgLanded / data.count,
-        avgMargin: data.avgMargin / data.count,
+        avgFob: data.fobCount > 0 ? data.fobSum / data.fobCount : 0,
+        avgLanded: data.landedCount > 0 ? data.landedSum / data.landedCount : 0,
+        avgMargin: data.marginCount > 0 ? data.marginSum / data.marginCount : null,
       }))
       .sort((a, b) => b.count - a.count);
   }, [filteredCostsWithSales]);
 
   // Group by Country
   const byCountry = useMemo(() => {
-    const grouped = new Map<string, { count: number; avgFob: number; avgLanded: number; avgMargin: number }>();
+    const grouped = new Map<string, { count: number; fobSum: number; fobCount: number; landedSum: number; landedCount: number; marginSum: number; marginCount: number }>();
 
     filteredCostsWithSales.forEach((c) => {
       const key = c.countryOfOrigin || 'Unknown';
       const existing = grouped.get(key);
+      const hasValidMargin = c.margin !== null && c.margin !== undefined && isFinite(c.margin);
+
       if (existing) {
         existing.count++;
-        existing.avgFob += c.fob || 0;
-        existing.avgLanded += c.landed || 0;
-        existing.avgMargin += c.margin || 0;
+        if (c.fob > 0) { existing.fobSum += c.fob; existing.fobCount++; }
+        if (c.landed > 0) { existing.landedSum += c.landed; existing.landedCount++; }
+        if (hasValidMargin) { existing.marginSum += c.margin!; existing.marginCount++; }
       } else {
         grouped.set(key, {
           count: 1,
-          avgFob: c.fob || 0,
-          avgLanded: c.landed || 0,
-          avgMargin: c.margin || 0,
+          fobSum: c.fob > 0 ? c.fob : 0,
+          fobCount: c.fob > 0 ? 1 : 0,
+          landedSum: c.landed > 0 ? c.landed : 0,
+          landedCount: c.landed > 0 ? 1 : 0,
+          marginSum: hasValidMargin ? c.margin! : 0,
+          marginCount: hasValidMargin ? 1 : 0,
         });
       }
     });
@@ -362,31 +443,36 @@ export default function CostsView({
       .map(([country, data]) => ({
         country,
         count: data.count,
-        avgFob: data.avgFob / data.count,
-        avgLanded: data.avgLanded / data.count,
-        avgMargin: data.avgMargin / data.count,
+        avgFob: data.fobCount > 0 ? data.fobSum / data.fobCount : 0,
+        avgLanded: data.landedCount > 0 ? data.landedSum / data.landedCount : 0,
+        avgMargin: data.marginCount > 0 ? data.marginSum / data.marginCount : null,
       }))
       .sort((a, b) => b.count - a.count);
   }, [filteredCostsWithSales]);
 
   // Group by Design Team
   const byTeam = useMemo(() => {
-    const grouped = new Map<string, { count: number; avgFob: number; avgLanded: number; avgMargin: number }>();
+    const grouped = new Map<string, { count: number; fobSum: number; fobCount: number; landedSum: number; landedCount: number; marginSum: number; marginCount: number }>();
 
     filteredCostsWithSales.forEach((c) => {
       const key = c.designTeam || 'Unknown';
       const existing = grouped.get(key);
+      const hasValidMargin = c.margin !== null && c.margin !== undefined && isFinite(c.margin);
+
       if (existing) {
         existing.count++;
-        existing.avgFob += c.fob || 0;
-        existing.avgLanded += c.landed || 0;
-        existing.avgMargin += c.margin || 0;
+        if (c.fob > 0) { existing.fobSum += c.fob; existing.fobCount++; }
+        if (c.landed > 0) { existing.landedSum += c.landed; existing.landedCount++; }
+        if (hasValidMargin) { existing.marginSum += c.margin!; existing.marginCount++; }
       } else {
         grouped.set(key, {
           count: 1,
-          avgFob: c.fob || 0,
-          avgLanded: c.landed || 0,
-          avgMargin: c.margin || 0,
+          fobSum: c.fob > 0 ? c.fob : 0,
+          fobCount: c.fob > 0 ? 1 : 0,
+          landedSum: c.landed > 0 ? c.landed : 0,
+          landedCount: c.landed > 0 ? 1 : 0,
+          marginSum: hasValidMargin ? c.margin! : 0,
+          marginCount: hasValidMargin ? 1 : 0,
         });
       }
     });
@@ -395,9 +481,9 @@ export default function CostsView({
       .map(([team, data]) => ({
         team,
         count: data.count,
-        avgFob: data.avgFob / data.count,
-        avgLanded: data.avgLanded / data.count,
-        avgMargin: data.avgMargin / data.count,
+        avgFob: data.fobCount > 0 ? data.fobSum / data.fobCount : 0,
+        avgLanded: data.landedCount > 0 ? data.landedSum / data.landedCount : 0,
+        avgMargin: data.marginCount > 0 ? data.marginSum / data.marginCount : null,
       }))
       .sort((a, b) => b.count - a.count);
   }, [filteredCostsWithSales]);
