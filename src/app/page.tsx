@@ -290,6 +290,85 @@ export default function Home() {
     setShowImportModal(false);
   };
 
+  // Handle multi-season import (pricing or costs that span multiple seasons)
+  const handleMultiSeasonImport = async (data: {
+    pricing?: Record<string, unknown>[];
+    costs?: Record<string, unknown>[];
+  }) => {
+    console.log('Importing multi-season data:', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs');
+
+    // For pricing: replace all pricing with new data
+    if (data.pricing && data.pricing.length > 0) {
+      const newPricing = data.pricing as unknown as PricingRecord[];
+      setPricing(newPricing);
+
+      // Persist to database
+      try {
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < data.pricing.length; i += BATCH_SIZE) {
+          const batch = data.pricing.slice(i, i + BATCH_SIZE);
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'pricing',
+              data: batch,
+              fileName: 'multi_season_pricing_import',
+              replaceExisting: i === 0,
+            }),
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Could not persist pricing to database:', dbErr);
+      }
+
+      // Update cache
+      setCachedData({
+        products,
+        sales,
+        pricing: newPricing,
+        costs,
+      });
+    }
+
+    // For costs: replace all costs with new data
+    if (data.costs && data.costs.length > 0) {
+      const newCosts = data.costs as unknown as CostRecord[];
+      setCosts(newCosts);
+
+      // Persist to database
+      try {
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < data.costs.length; i += BATCH_SIZE) {
+          const batch = data.costs.slice(i, i + BATCH_SIZE);
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'costs',
+              data: batch,
+              fileName: 'multi_season_costs_import',
+              replaceExisting: i === 0,
+            }),
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Could not persist costs to database:', dbErr);
+      }
+
+      // Update cache
+      setCachedData({
+        products,
+        sales,
+        pricing,
+        costs: newCosts,
+      });
+    }
+
+    // Close the modal
+    setShowImportModal(false);
+  };
+
   // Handle import from Season Import Modal
   const handleSeasonImport = async (data: {
     products: Record<string, unknown>[];
@@ -597,6 +676,7 @@ export default function Home() {
           existingSeasons={seasons}
           onImport={handleSeasonImport}
           onImportSalesOnly={handleSalesOnlyImport}
+          onImportMultiSeason={handleMultiSeasonImport}
           onClose={() => setShowImportModal(false)}
         />
       )}

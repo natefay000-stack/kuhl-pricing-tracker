@@ -10,25 +10,6 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
-interface ImportResult {
-  success: boolean;
-  season: string;
-  stats: {
-    lineListCount: number;
-    pricingCount: number;
-    landedCostMatches: number;
-    productsCount: number;
-    costsCount: number;
-    salesCount: number;
-  };
-  data: {
-    products: Record<string, unknown>[];
-    pricing: Record<string, unknown>[];
-    costs: Record<string, unknown>[];
-    sales: Record<string, unknown>[];
-  };
-}
-
 interface SeasonImportModalProps {
   existingSeasons: string[];
   onImport: (data: {
@@ -41,38 +22,46 @@ interface SeasonImportModalProps {
   onImportSalesOnly: (data: {
     sales: Record<string, unknown>[];
   }) => void;
+  onImportMultiSeason: (data: {
+    pricing?: Record<string, unknown>[];
+    costs?: Record<string, unknown>[];
+  }) => void;
   onClose: () => void;
 }
 
-const SEASON_OPTIONS = [
+// Future seasons that require explicit line list upload
+const FUTURE_SEASONS = [
+  { value: '28FA', label: 'Fall 2028 (28FA)' },
+  { value: '28SP', label: 'Spring 2028 (28SP)' },
   { value: '27FA', label: 'Fall 2027 (27FA)' },
   { value: '27SP', label: 'Spring 2027 (27SP)' },
-  { value: '26FA', label: 'Fall 2026 (26FA)' },
-  { value: '26SP', label: 'Spring 2026 (26SP)' },
-  { value: '25FA', label: 'Fall 2025 (25FA)' },
-  { value: '25SP', label: 'Spring 2025 (25SP)' },
 ];
 
 type FileType = 'lineList' | 'pricing' | 'landed' | 'sales';
 
-const FILE_TYPE_INFO: Record<FileType, { label: string; description: string }> = {
-  lineList: { label: 'Line List', description: 'Products & base pricing' },
-  pricing: { label: 'Pricing', description: 'Price by season file' },
-  landed: { label: 'Landed Costs', description: 'FOB, LDP, duties' },
-  sales: { label: 'Sales', description: 'Sales data (can contain all seasons)' },
+const FILE_TYPE_INFO: Record<FileType, { label: string; description: string; needsSeason: boolean }> = {
+  sales: { label: 'Sales', description: 'All seasons imported automatically', needsSeason: false },
+  landed: { label: 'Landed Costs', description: 'Matches seasons from file', needsSeason: false },
+  pricing: { label: 'Pricing', description: 'Matches seasons from file', needsSeason: false },
+  lineList: { label: 'Line List', description: 'For 27SP/27FA+ seasons only', needsSeason: true },
 };
 
 export default function SeasonImportModal({
   existingSeasons,
   onImport,
   onImportSalesOnly,
+  onImportMultiSeason,
   onClose,
 }: SeasonImportModalProps) {
   const [selectedSeason, setSelectedSeason] = useState('27SP');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileType, setSelectedFileType] = useState<FileType | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<{
+    type: FileType;
+    summary: string;
+    data: Record<string, unknown>;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileSelect = useCallback((fileType: FileType, file: File | null) => {
@@ -92,51 +81,31 @@ export default function SeasonImportModal({
     setError(null);
 
     try {
-      // Special handling for sales - can import all seasons at once
-      if (selectedFileType === 'sales') {
-        const formData = new FormData();
-        formData.append('sales', selectedFile);
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('fileType', selectedFileType);
 
-        const response = await fetch('/api/import-sales', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Import failed');
-        }
-
-        const data = await response.json();
-
-        // Show confirmation with season breakdown
-        const seasonList = Object.entries(data.stats.seasonBreakdown)
-          .sort(([a], [b]) => b.localeCompare(a))
-          .map(([season, count]) => `${season}: ${(count as number).toLocaleString()}`)
-          .join(', ');
-
-        if (confirm(`Import ${data.stats.totalSales.toLocaleString()} sales records?\n\nBy season: ${seasonList}`)) {
-          onImportSalesOnly({ sales: data.data.sales });
-        }
-      } else {
-        // Other file types - use season-specific import
-        const formData = new FormData();
-        formData.append(selectedFileType, selectedFile);
+      // Only send season for line list
+      if (selectedFileType === 'lineList') {
         formData.append('season', selectedSeason);
-
-        const response = await fetch('/api/import-season', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Import failed');
-        }
-
-        const data = await response.json();
-        setResult(data);
       }
+
+      const response = await fetch('/api/import-file', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Import failed');
+      }
+
+      const data = await response.json();
+      setResult({
+        type: selectedFileType,
+        summary: data.summary,
+        data: data,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process file');
     } finally {
@@ -145,26 +114,32 @@ export default function SeasonImportModal({
   };
 
   const handleConfirmImport = () => {
-    if (result && result.data) {
-      onImport({
-        products: result.data.products,
-        pricing: result.data.pricing || [],
-        costs: result.data.costs,
-        sales: result.data.sales || [],
-        season: selectedSeason,
-      });
+    if (!result) return;
+
+    switch (result.type) {
+      case 'sales':
+        onImportSalesOnly({ sales: result.data.sales as Record<string, unknown>[] });
+        break;
+      case 'lineList':
+        onImport({
+          products: result.data.products as Record<string, unknown>[],
+          pricing: [],
+          costs: result.data.costs as Record<string, unknown>[] || [],
+          sales: [],
+          season: selectedSeason,
+        });
+        break;
+      case 'pricing':
+      case 'landed':
+        onImportMultiSeason({
+          pricing: result.type === 'pricing' ? result.data.pricing as Record<string, unknown>[] : undefined,
+          costs: result.type === 'landed' ? result.data.costs as Record<string, unknown>[] : undefined,
+        });
+        break;
     }
   };
 
-  const getResultSummary = () => {
-    if (!result) return '';
-    const parts = [];
-    if (result.stats.productsCount > 0) parts.push(`${result.stats.productsCount.toLocaleString()} products`);
-    if (result.stats.pricingCount > 0) parts.push(`${result.stats.pricingCount.toLocaleString()} pricing records`);
-    if (result.stats.costsCount > 0) parts.push(`${result.stats.costsCount.toLocaleString()} cost records`);
-    if (result.stats.salesCount > 0) parts.push(`${result.stats.salesCount.toLocaleString()} sales records`);
-    return parts.join(', ');
-  };
+  const showSeasonSelector = selectedFileType === 'lineList';
 
   return (
     <div
@@ -189,34 +164,6 @@ export default function SeasonImportModal({
         </div>
 
         <div className="p-6">
-          {/* Season Selector */}
-          <div className="mb-6">
-            <label className="block text-sm font-bold text-gray-700 uppercase tracking-wide mb-2">
-              Season
-            </label>
-            <div className="relative">
-              <select
-                value={selectedSeason}
-                onChange={(e) => {
-                  setSelectedSeason(e.target.value);
-                  setResult(null);
-                }}
-                className="w-full px-4 py-2 text-lg font-medium bg-white border-2 border-gray-300 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
-              >
-                {SEASON_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                    {existingSeasons.includes(opt.value) ? ' (has data)' : ''}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Sales files can contain multiple seasons - they'll be imported together
-            </p>
-          </div>
-
           {/* File Type Selection */}
           <div className="mb-6">
             <label className="block text-sm font-bold text-gray-700 uppercase tracking-wide mb-2">
@@ -251,7 +198,7 @@ export default function SeasonImportModal({
                         <p className={`font-bold text-sm ${isSelected ? 'text-cyan-900' : 'text-gray-900'}`}>
                           {info.label}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">{info.description}</p>
+                        <p className="text-xs text-gray-500">{info.description}</p>
                         {isSelected && selectedFile && (
                           <p className="text-xs text-cyan-700 mt-1 truncate font-medium">
                             {selectedFile.name}
@@ -267,6 +214,37 @@ export default function SeasonImportModal({
               })}
             </div>
           </div>
+
+          {/* Season Selector - Only for Line List */}
+          {showSeasonSelector && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <label className="block text-sm font-bold text-amber-800 mb-2">
+                Select Season for Line List
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedSeason}
+                  onChange={(e) => {
+                    setSelectedSeason(e.target.value);
+                    setResult(null);
+                  }}
+                  className="w-full px-4 py-2 font-medium bg-white border-2 border-amber-300 rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                >
+                  {FUTURE_SEASONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                      {existingSeasons.includes(opt.value) ? ' (has data)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-600 pointer-events-none" />
+              </div>
+              <p className="text-xs text-amber-700 mt-2">
+                Line lists are only needed for future seasons. Historical seasons (26FA and earlier)
+                get products automatically from sales data.
+              </p>
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -285,7 +263,7 @@ export default function SeasonImportModal({
                 <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-emerald-800">Ready to import</p>
-                  <p className="text-xs text-emerald-700 mt-0.5">{getResultSummary()}</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">{result.summary}</p>
                 </div>
               </div>
             </div>
