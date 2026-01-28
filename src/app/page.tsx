@@ -240,6 +240,56 @@ export default function Home() {
     setSelectedStyleNumber(styleNumber);
   };
 
+  // Handle sales-only import (all seasons at once)
+  const handleSalesOnlyImport = async (data: {
+    sales: Record<string, unknown>[];
+  }) => {
+    console.log('Importing sales-only data:', data.sales.length, 'records');
+
+    // Replace all sales with new data
+    const newSales = data.sales as unknown as SalesRecord[];
+    setSales(newSales);
+
+    // Update cache
+    setCachedData({
+      products,
+      sales: newSales,
+      pricing,
+      costs,
+    });
+
+    // Persist to database (full refresh - no season filter)
+    try {
+      const BATCH_SIZE = 1000;
+      const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
+      console.log(`Importing ${data.sales.length} sales records in ${totalBatches} batches`);
+
+      for (let i = 0; i < data.sales.length; i += BATCH_SIZE) {
+        const batch = data.sales.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
+
+        await fetch('/api/data/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'sales',
+            // No season - will delete all sales on first batch
+            data: batch,
+            fileName: `full_sales_import_batch_${batchNum}`,
+            replaceExisting: i === 0, // Only replace on first batch
+          }),
+        });
+      }
+      console.log('Sales data persisted to database');
+    } catch (dbErr) {
+      console.warn('Could not persist to database:', dbErr);
+    }
+
+    // Close the modal
+    setShowImportModal(false);
+  };
+
   // Handle import from Season Import Modal
   const handleSeasonImport = async (data: {
     products: Record<string, unknown>[];
@@ -546,6 +596,7 @@ export default function Home() {
         <SeasonImportModal
           existingSeasons={seasons}
           onImport={handleSeasonImport}
+          onImportSalesOnly={handleSalesOnlyImport}
           onClose={() => setShowImportModal(false)}
         />
       )}

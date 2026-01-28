@@ -28,20 +28,28 @@ export async function POST(request: NextRequest) {
 
     let count = 0;
 
-    // Delete existing data for this season if replaceExisting
-    if (replaceExisting && season) {
+    // Delete existing data if replaceExisting
+    // For sales: if no season specified, delete ALL sales (full refresh)
+    // For other types: only delete if season is specified
+    if (replaceExisting) {
       switch (type) {
         case 'products':
-          await prisma.product.deleteMany({ where: { season } });
+          if (season) await prisma.product.deleteMany({ where: { season } });
           break;
         case 'sales':
-          await prisma.sale.deleteMany({ where: { season } });
+          if (season) {
+            await prisma.sale.deleteMany({ where: { season } });
+          } else {
+            // Full sales refresh - delete all sales
+            console.log('Full sales refresh: deleting all existing sales...');
+            await prisma.sale.deleteMany({});
+          }
           break;
         case 'pricing':
-          await prisma.pricing.deleteMany({ where: { season } });
+          if (season) await prisma.pricing.deleteMany({ where: { season } });
           break;
         case 'costs':
-          await prisma.cost.deleteMany({ where: { season } });
+          if (season) await prisma.cost.deleteMany({ where: { season } });
           break;
       }
     }
