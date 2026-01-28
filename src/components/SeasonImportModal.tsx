@@ -261,27 +261,35 @@ export default function SeasonImportModal({
   };
 
   const handlePreview = async () => {
-    if (!lineListFile) {
-      setError('Please select a Line List file');
+    if (!lineListFile && !pricingFile && !landedFile && !salesFile) {
+      setError('Please select at least one file to import');
       return;
     }
 
     setIsProcessing(true);
-    setProcessingStatus('Processing Line List...');
+    const fileTypes = [];
+    if (lineListFile) fileTypes.push('Line List');
+    if (pricingFile) fileTypes.push('Pricing');
+    if (landedFile) fileTypes.push('Landed Costs');
+    if (salesFile) fileTypes.push('Sales');
+    setProcessingStatus(`Processing ${fileTypes.join(', ')}...`);
     setError(null);
 
     try {
       const formData = new FormData();
-      formData.append('lineList', lineListFile);
       formData.append('season', selectedSeason);
 
+      if (lineListFile) {
+        formData.append('lineList', lineListFile);
+      }
       if (pricingFile) {
         formData.append('pricing', pricingFile);
-        setProcessingStatus('Processing Line List and Pricing...');
       }
-
       if (landedFile) {
         formData.append('landed', landedFile);
+      }
+      if (salesFile) {
+        formData.append('sales', salesFile);
       }
 
       const response = await fetch('/api/import-season', {
@@ -577,10 +585,9 @@ export default function SeasonImportModal({
           {importMode === 'linelist' && (
             <div>
               <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <h3 className="font-bold text-emerald-800 mb-1">Step 3: Import Line List (Current Seasons)</h3>
+                <h3 className="font-bold text-emerald-800 mb-1">Step 3: Import Season Data</h3>
                 <p className="text-sm text-emerald-700">
-                  For current seasons (27SP, 27FA), import the official line list with full product details,
-                  optionally with pricing and landed cost overrides.
+                  Import any combination of data files for a season. Select the files you want to import.
                 </p>
               </div>
 
@@ -609,155 +616,147 @@ export default function SeasonImportModal({
                 </div>
               </div>
 
-              {/* File Upload Zones */}
-              <div className="space-y-4">
-                {/* 1. Line List (Required) */}
+              {/* File Upload Zones - All equal, pick any */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Line List */}
                 <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-gray-900">Line List</span>
-                      <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-red-100 text-red-700 rounded">
-                        Required
-                      </span>
-                    </div>
-                    <span className="text-sm text-gray-500">Style info + base pricing</span>
+                  <div className="px-4 py-2 bg-gray-100 border-b border-gray-200">
+                    <span className="font-bold text-gray-900">Line List</span>
+                    <p className="text-xs text-gray-500">Products & base pricing</p>
                   </div>
                   <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleFileDrop(e, 'lineList')}
-                    className={`p-4 text-center transition-colors ${
+                    className={`p-3 text-center transition-colors ${
                       lineListFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                     }`}
                   >
                     {lineListFile ? (
-                      <div className="flex items-center justify-center gap-3">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        <div className="text-left">
-                          <p className="font-medium text-gray-900 text-sm">{lineListFile.name}</p>
-                          <p className="text-xs text-gray-500">{(lineListFile.size / 1024).toFixed(1)} KB</p>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-gray-900 truncate flex-1">{lineListFile.name}</span>
                         <button
                           onClick={() => { setLineListFile(null); setResult(null); }}
-                          className="ml-4 text-xs text-red-600 hover:text-red-700"
+                          className="text-xs text-red-600 hover:text-red-700"
                         >
-                          Remove
+                          ×
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-4">
-                        <FileSpreadsheet className="w-8 h-8 text-gray-400" />
-                        <div className="text-left">
-                          <p className="text-gray-600 text-sm">Drag & drop or select Line List file</p>
-                        </div>
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 cursor-pointer transition-colors">
-                          <Upload className="w-4 h-4" />
-                          Select
-                          <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'lineList')} className="hidden" />
-                        </label>
-                      </div>
+                      <label className="flex items-center justify-center gap-2 cursor-pointer py-2">
+                        <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm text-gray-500">Select file</span>
+                        <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'lineList')} className="hidden" />
+                      </label>
                     )}
                   </div>
                 </div>
 
-                {/* 2. Pricing (Optional) */}
+                {/* Pricing */}
                 <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-gray-900">Pricing</span>
-                      <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
-                        Optional
-                      </span>
-                    </div>
-                    <span className="text-sm text-gray-500">Overrides Line List pricing</span>
+                  <div className="px-4 py-2 bg-gray-100 border-b border-gray-200">
+                    <span className="font-bold text-gray-900">Pricing</span>
+                    <p className="text-xs text-gray-500">Price by season</p>
                   </div>
                   <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleFileDrop(e, 'pricing')}
-                    className={`p-4 text-center transition-colors ${
+                    className={`p-3 text-center transition-colors ${
                       pricingFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                     }`}
                   >
                     {pricingFile ? (
-                      <div className="flex items-center justify-center gap-3">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        <div className="text-left">
-                          <p className="font-medium text-gray-900 text-sm">{pricingFile.name}</p>
-                          <p className="text-xs text-gray-500">{(pricingFile.size / 1024).toFixed(1)} KB</p>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-gray-900 truncate flex-1">{pricingFile.name}</span>
                         <button
                           onClick={() => { setPricingFile(null); setResult(null); }}
-                          className="ml-4 text-xs text-red-600 hover:text-red-700"
+                          className="text-xs text-red-600 hover:text-red-700"
                         >
-                          Remove
+                          ×
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-4">
-                        <FileSpreadsheet className="w-8 h-8 text-gray-300" />
-                        <div className="text-left">
-                          <p className="text-gray-500 text-sm">pricebyseason.xlsx (source of truth)</p>
-                        </div>
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
-                          <Upload className="w-4 h-4" />
-                          Select
-                          <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'pricing')} className="hidden" />
-                        </label>
-                      </div>
+                      <label className="flex items-center justify-center gap-2 cursor-pointer py-2">
+                        <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm text-gray-500">Select file</span>
+                        <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'pricing')} className="hidden" />
+                      </label>
                     )}
                   </div>
                 </div>
 
-                {/* 3. Landed Costs (Optional) */}
+                {/* Landed Costs */}
                 <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-gray-900">Landed Costs</span>
-                      <span className="ml-2 text-xs font-medium px-2 py-0.5 bg-gray-200 text-gray-600 rounded">
-                        Optional
-                      </span>
-                    </div>
-                    <span className="text-sm text-gray-500">Overrides Line List costs</span>
+                  <div className="px-4 py-2 bg-gray-100 border-b border-gray-200">
+                    <span className="font-bold text-gray-900">Landed Costs</span>
+                    <p className="text-xs text-gray-500">FOB, LDP, duties</p>
                   </div>
                   <div
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleFileDrop(e, 'landed')}
-                    className={`p-4 text-center transition-colors ${
+                    className={`p-3 text-center transition-colors ${
                       landedFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
                     }`}
                   >
                     {landedFile ? (
-                      <div className="flex items-center justify-center gap-3">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        <div className="text-left">
-                          <p className="font-medium text-gray-900 text-sm">{landedFile.name}</p>
-                          <p className="text-xs text-gray-500">{(landedFile.size / 1024).toFixed(1)} KB</p>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-gray-900 truncate flex-1">{landedFile.name}</span>
                         <button
                           onClick={() => { setLandedFile(null); setResult(null); }}
-                          className="ml-4 text-xs text-red-600 hover:text-red-700"
+                          className="text-xs text-red-600 hover:text-red-700"
                         >
-                          Remove
+                          ×
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center gap-4">
-                        <FileSpreadsheet className="w-8 h-8 text-gray-300" />
-                        <div className="text-left">
-                          <p className="text-gray-500 text-sm">Landed Request Sheet (FOB, LDP, duties)</p>
-                        </div>
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 cursor-pointer transition-colors">
-                          <Upload className="w-4 h-4" />
-                          Select
-                          <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'landed')} className="hidden" />
-                        </label>
+                      <label className="flex items-center justify-center gap-2 cursor-pointer py-2">
+                        <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm text-gray-500">Select file</span>
+                        <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'landed')} className="hidden" />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sales */}
+                <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-100 border-b border-gray-200">
+                    <span className="font-bold text-gray-900">Sales</span>
+                    <p className="text-xs text-gray-500">Sales data for this season</p>
+                  </div>
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleFileDrop(e, 'sales')}
+                    className={`p-3 text-center transition-colors ${
+                      salesFile ? 'bg-emerald-50' : 'bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    {salesFile ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span className="text-sm text-gray-900 truncate flex-1">{salesFile.name}</span>
+                        <button
+                          onClick={() => { setSalesFile(null); setResult(null); }}
+                          className="text-xs text-red-600 hover:text-red-700"
+                        >
+                          ×
+                        </button>
                       </div>
+                    ) : (
+                      <label className="flex items-center justify-center gap-2 cursor-pointer py-2">
+                        <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm text-gray-500">Select file</span>
+                        <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileSelect(e, 'sales')} className="hidden" />
+                      </label>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Preview Button */}
-              {lineListFile && !result && (
+              {/* Preview Button - enabled when at least one file is selected */}
+              {(lineListFile || pricingFile || landedFile || salesFile) && !result && (
                 <div className="mt-6 text-center">
                   <button
                     onClick={handlePreview}

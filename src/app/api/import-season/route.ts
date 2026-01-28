@@ -22,13 +22,6 @@ export async function POST(request: NextRequest) {
     const salesFile = formData.get('sales') as File | null;
     const season = formData.get('season') as string;
 
-    if (!lineListFile) {
-      return NextResponse.json(
-        { error: 'Line List file is required' },
-        { status: 400 }
-      );
-    }
-
     if (!season) {
       return NextResponse.json(
         { error: 'Season is required' },
@@ -36,15 +29,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // At least one file must be provided
+    if (!lineListFile && !pricingFile && !landedFile && !salesFile) {
+      return NextResponse.json(
+        { error: 'At least one data file is required' },
+        { status: 400 }
+      );
+    }
+
     console.log('Processing import for season:', season);
-    console.log('Line List file:', lineListFile.name, lineListFile.size);
+    console.log('Files provided:', {
+      lineList: lineListFile?.name || 'none',
+      pricing: pricingFile?.name || 'none',
+      landed: landedFile?.name || 'none',
+      sales: salesFile?.name || 'none',
+    });
 
-    // Parse Line List
-    const lineListBuffer = await lineListFile.arrayBuffer();
-    const lineListData = parseLineListXLSX(lineListBuffer);
-    console.log('Parsed Line List:', lineListData.length, 'items');
+    // Parse Line List if provided
+    let lineListData: ReturnType<typeof parseLineListXLSX> = [];
+    if (lineListFile) {
+      console.log('Line List file:', lineListFile.name, lineListFile.size);
+      const lineListBuffer = await lineListFile.arrayBuffer();
+      lineListData = parseLineListXLSX(lineListBuffer);
+      console.log('Parsed Line List:', lineListData.length, 'items');
+    }
 
-    // Parse Pricing Sheet if provided (source of truth for pricing)
+    // Parse Pricing Sheet if provided
     let pricingData: ReturnType<typeof parsePricingXLSX> = [];
     if (pricingFile) {
       console.log('Pricing file:', pricingFile.name, pricingFile.size);
@@ -71,17 +81,15 @@ export async function POST(request: NextRequest) {
       console.log('Parsed Sales Data:', salesData.length, 'items');
     }
 
-    // Apply pricing overrides to line list data (pricing file is source of truth)
+    // Apply pricing overrides to line list data if both are provided
     let pricingOverrideCount = 0;
-    if (pricingData.length > 0) {
-      // Create a map for fast lookup by style+color
+    if (pricingData.length > 0 && lineListData.length > 0) {
       const pricingMap = new Map<string, typeof pricingData[0]>();
       for (const p of pricingData) {
         const key = `${p.styleNumber}-${p.colorCode}`.toLowerCase();
         pricingMap.set(key, p);
       }
 
-      // Apply overrides
       for (const item of lineListData) {
         const key = `${item.styleNumber}-${item.colorCode}`.toLowerCase();
         const priceOverride = pricingMap.get(key);
@@ -94,75 +102,32 @@ export async function POST(request: NextRequest) {
       console.log('Applied pricing overrides:', pricingOverrideCount);
     }
 
-    // Merge data (applies landed cost overrides)
-    const mergedResult = mergeSeasonData(lineListData, landedData, season);
-    console.log('Merged result:', {
-      products: mergedResult.products.length,
-      landedMatches: mergedResult.stats.landedCostMatches,
-    });
+    // Merge line list with landed costs if line list is provided
+    let productsAppData: Record<string, unknown>[] = [];
+    let costsAppData: Record<string, unknown>[] = [];
+    let previewData: Array<{
+      styleNumber: string;
+      styleName: string;
+      colorCode: string;
+      msrp: number;
+      wholesale: number;
+      landed: number;
+      margin: number;
+      costSource: 'line_list' | 'landed_sheet';
+    }> = [];
 
-    // Convert to app formats
-    const appData = convertToAppFormats(mergedResult, season);
+    if (lineListData.length > 0) {
+      const mergedResult = mergeSeasonData(lineListData, landedData, season);
+      console.log('Merged result:', {
+        products: mergedResult.products.length,
+        landedMatches: mergedResult.stats.landedCostMatches,
+      });
 
-    // Convert pricing data to app format for separate storage
-    const pricingAppData = pricingData.map((p, index) => ({
-      id: `price-${season}-${index}`,
-      styleNumber: p.styleNumber,
-      styleDesc: p.styleDesc,
-      colorCode: p.colorCode,
-      colorDesc: p.colorDesc,
-      season: p.season || season,
-      seasonType: 'Main',
-      seasonDesc: p.seasonDesc || '',
-      price: p.price,
-      msrp: p.msrp,
-      cost: p.cost,
-    }));
+      const appData = convertToAppFormats(mergedResult, season);
+      productsAppData = appData.products;
+      costsAppData = appData.costs;
 
-    // Convert sales data to app format
-    const salesAppData = salesData.map((s, index) => ({
-      id: `sale-${season}-${index}`,
-      styleNumber: s.styleNumber,
-      styleDesc: s.styleDesc,
-      colorCode: s.colorCode,
-      colorDesc: s.colorDesc,
-      season: s.season || season,
-      seasonType: 'Main',
-      customer: s.customer,
-      customerType: s.customerType,
-      unitsBooked: s.unitsBooked,
-      unitsOpen: 0,
-      revenue: s.revenue,
-      shipped: 0,
-      cost: 0,
-      wholesalePrice: 0,
-      msrp: 0,
-      netUnitPrice: s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0,
-      divisionDesc: s.divisionDesc,
-      categoryDesc: s.categoryDesc,
-      gender: '',
-      salesRep: '',
-      orderType: '',
-    }));
-
-    return NextResponse.json({
-      success: true,
-      season,
-      stats: {
-        lineListCount: mergedResult.stats.lineListCount,
-        pricingCount: pricingOverrideCount,
-        landedCostMatches: mergedResult.stats.landedCostMatches,
-        productsCount: appData.products.length,
-        costsCount: appData.costs.length,
-        salesCount: salesAppData.length,
-      },
-      data: {
-        products: appData.products,
-        pricing: pricingAppData,
-        costs: appData.costs,
-        sales: salesAppData,
-      },
-      preview: mergedResult.products.slice(0, 10).map(p => ({
+      previewData = mergedResult.products.slice(0, 10).map(p => ({
         styleNumber: p.styleNumber,
         styleName: p.styleName,
         colorCode: p.colorCode,
@@ -171,7 +136,96 @@ export async function POST(request: NextRequest) {
         landed: p.landed,
         margin: p.margin,
         costSource: p.costSource,
-      })),
+      }));
+    } else if (landedData.length > 0) {
+      // Landed costs only - filter by season and convert
+      const seasonLandedData = landedData.filter(c => c.season === season);
+      costsAppData = seasonLandedData.map((c, index) => ({
+        id: `cost-${season}-${index}`,
+        styleNumber: c.styleNumber,
+        styleName: c.styleName,
+        season: season,
+        seasonType: 'Main',
+        factory: c.factory,
+        countryOfOrigin: c.countryOfOrigin,
+        fob: c.fob,
+        landed: c.landed,
+        dutyCost: c.dutyCost,
+        tariffCost: c.tariffCost,
+        freightCost: c.freightCost,
+        overheadCost: c.overheadCost,
+        suggestedMsrp: c.suggestedMsrp,
+        suggestedWholesale: c.suggestedWholesale,
+        margin: c.margin,
+        designTeam: c.designTeam,
+        developer: c.developer,
+      }));
+      console.log('Landed costs for season:', costsAppData.length);
+    }
+
+    // Convert pricing data to app format for separate storage
+    const pricingAppData = pricingData
+      .filter(p => p.season === season || !p.season)
+      .map((p, index) => ({
+        id: `price-${season}-${index}`,
+        styleNumber: p.styleNumber,
+        styleDesc: p.styleDesc,
+        colorCode: p.colorCode,
+        colorDesc: p.colorDesc,
+        season: p.season || season,
+        seasonType: 'Main',
+        seasonDesc: p.seasonDesc || '',
+        price: p.price,
+        msrp: p.msrp,
+        cost: p.cost,
+      }));
+
+    // Convert sales data to app format - filter by season
+    const salesAppData = salesData
+      .filter(s => s.season === season)
+      .map((s, index) => ({
+        id: `sale-${season}-${index}`,
+        styleNumber: s.styleNumber,
+        styleDesc: s.styleDesc,
+        colorCode: s.colorCode,
+        colorDesc: s.colorDesc,
+        season: s.season || season,
+        seasonType: 'Main',
+        customer: s.customer,
+        customerType: s.customerType,
+        unitsBooked: s.unitsBooked,
+        unitsOpen: 0,
+        revenue: s.revenue,
+        shipped: 0,
+        cost: 0,
+        wholesalePrice: 0,
+        msrp: 0,
+        netUnitPrice: s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0,
+        divisionDesc: s.divisionDesc,
+        categoryDesc: s.categoryDesc,
+        gender: '',
+        salesRep: '',
+        orderType: '',
+      }));
+
+    return NextResponse.json({
+      success: true,
+      season,
+      stats: {
+        lineListCount: lineListData.length,
+        pricingCount: pricingAppData.length,
+        landedCostMatches: costsAppData.length,
+        productsCount: productsAppData.length,
+        costsCount: costsAppData.length,
+        salesCount: salesAppData.length,
+      },
+      data: {
+        products: productsAppData,
+        pricing: pricingAppData,
+        costs: costsAppData,
+        sales: salesAppData,
+      },
+      preview: previewData,
     });
   } catch (error) {
     console.error('Import error:', error);
