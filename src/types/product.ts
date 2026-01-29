@@ -117,18 +117,21 @@ export interface CostRecord {
   createdAt?: string;
 }
 
-// Sales data record
+// Sales data record (aggregated by style+season)
 export interface SalesRecord {
   id: string;
   styleNumber: string;
   styleDesc: string;
-  color: string;
+  color?: string;
+  colorCode?: string;
   colorDesc: string;
-  styleColor: string;
-  customer: string;
-  customerType: string; // WH, WD, BB, PS, EC, KI
+  styleColor?: string;
+  customer?: string;
+  customerType: string; // WH, WD, BB, PS, EC, KI (or comma-separated if multiple)
   unitsBooked: number;
+  unitsOpen?: number;
   revenue: number;
+  shipped?: number;
   cost: number;
   wholesalePrice?: number;
   msrp?: number;
@@ -139,8 +142,10 @@ export interface SalesRecord {
   rawSeason?: string;       // Original season value
   divisionDesc: string;
   categoryDesc: string;
+  gender?: string;
   salesRep?: string;
   orderType?: string;
+  customerCount?: number;   // Number of unique customers (for aggregated data)
   createdAt?: string;
 }
 
