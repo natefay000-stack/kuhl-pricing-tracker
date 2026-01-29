@@ -14,7 +14,7 @@ import StyleMasterView from '@/components/views/StyleMasterView';
 import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
-import SeasonImportModal from '@/components/SeasonImportModal';
+import SmartImportModal from '@/components/SmartImportModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 
@@ -670,9 +670,9 @@ export default function Home() {
         />
       )}
 
-      {/* Season Import Modal */}
+      {/* Smart Import Modal */}
       {showImportModal && (
-        <SeasonImportModal
+        <SmartImportModal
           existingSeasons={seasons}
           onImport={handleSeasonImport}
           onImportSalesOnly={handleSalesOnlyImport}
