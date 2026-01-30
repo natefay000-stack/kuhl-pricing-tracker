@@ -109,32 +109,19 @@ export default function CostsView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
-  // Calculate sales by style for the selected/filtered season
-  const salesByStyle = useMemo(() => {
-    const effectiveSeason = filterSeason || selectedSeason;
-    if (!effectiveSeason) {
-      // If no season selected, aggregate all sales
-      return sales.reduce((acc, r) => {
-        if (!acc[r.styleNumber]) {
-          acc[r.styleNumber] = { revenue: 0, units: 0 };
-        }
-        acc[r.styleNumber].revenue += r.revenue || 0;
-        acc[r.styleNumber].units += r.unitsBooked || 0;
-        return acc;
-      }, {} as Record<string, { revenue: number; units: number }>);
-    }
-    // Filter to selected season only
-    return sales
-      .filter(r => r.season === effectiveSeason)
-      .reduce((acc, r) => {
-        if (!acc[r.styleNumber]) {
-          acc[r.styleNumber] = { revenue: 0, units: 0 };
-        }
-        acc[r.styleNumber].revenue += r.revenue || 0;
-        acc[r.styleNumber].units += r.unitsBooked || 0;
-        return acc;
-      }, {} as Record<string, { revenue: number; units: number }>);
-  }, [sales, filterSeason, selectedSeason]);
+  // Calculate sales by style+season (keyed by "styleNumber-season")
+  // This ensures each season's costs show only that season's sales
+  const salesByStyleSeason = useMemo(() => {
+    return sales.reduce((acc, r) => {
+      const key = `${r.styleNumber}-${r.season}`;
+      if (!acc[key]) {
+        acc[key] = { revenue: 0, units: 0 };
+      }
+      acc[key].revenue += r.revenue || 0;
+      acc[key].units += r.unitsBooked || 0;
+      return acc;
+    }, {} as Record<string, { revenue: number; units: number }>);
+  }, [sales]);
 
   // View mode
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -231,7 +218,9 @@ export default function CostsView({
 
     // Convert to array with aggregated values
     return Array.from(grouped.values()).map((g) => {
-      const salesData = salesByStyle[g.styleNumber] || { revenue: 0, units: 0 };
+      // Look up sales by style+season to ensure we only show sales for THIS season
+      const salesKey = `${g.styleNumber}-${g.season}`;
+      const salesData = salesByStyleSeason[salesKey] || { revenue: 0, units: 0 };
       const margin = calculateMargin(g.suggestedWholesale, g.landed);
 
       return {
@@ -252,7 +241,7 @@ export default function CostsView({
         colorCount: g.count,
       };
     });
-  }, [costs, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyle]);
+  }, [costs, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason]);
 
   // Sort data
   const sortedData = useMemo(() => {
