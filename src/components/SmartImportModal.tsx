@@ -47,6 +47,7 @@ interface SmartImportModalProps {
     sales: Record<string, unknown>[];
   }) => void;
   onImportMultiSeason: (data: {
+    products?: Record<string, unknown>[];
     pricing?: Record<string, unknown>[];
     costs?: Record<string, unknown>[];
   }) => void;
@@ -167,9 +168,8 @@ export default function SmartImportModal({
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('fileType', selectedType);
-      if (selectedType === 'lineList') {
-        formData.append('season', selectedSeason);
-      }
+      // Season is now read from the file for Line List imports
+      // Only send season if user explicitly wants to override
 
       setImportProgress(30);
 
@@ -192,12 +192,11 @@ export default function SmartImportModal({
       if (selectedType === 'sales') {
         onImportSalesOnly({ sales: data.sales });
       } else if (selectedType === 'lineList') {
-        onImport({
+        // Line List now imports with seasons from the file
+        // Each product has its own season field
+        onImportMultiSeason({
           products: data.products || [],
-          pricing: [],
           costs: data.costs || [],
-          sales: [],
-          season: selectedSeason,
         });
       } else if (selectedType === 'costs') {
         onImportMultiSeason({ costs: data.costs });
@@ -231,7 +230,8 @@ export default function SmartImportModal({
     }
   };
 
-  const needsSeason = selectedType === 'lineList';
+  // Line List no longer needs season selection - it's read from the file
+  const needsSeason = false;
 
   return (
     <div

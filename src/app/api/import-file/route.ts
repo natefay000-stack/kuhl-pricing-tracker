@@ -168,22 +168,32 @@ export async function POST(request: NextRequest) {
       }
 
       case 'lineList': {
-        if (!season) {
-          return NextResponse.json({ error: 'Season required for line list import' }, { status: 400 });
-        }
-
         const lineListData = parseLineListXLSX(buffer);
-        console.log('Parsed line list:', lineListData.length, 'records for season', season);
+        console.log('Parsed line list:', lineListData.length, 'records');
 
+        // Count records by season (from the file's Season column)
+        const seasonCounts: Record<string, number> = {};
+        for (const item of lineListData) {
+          const s = item.season || 'Unknown';
+          seasonCounts[s] = (seasonCounts[s] || 0) + 1;
+        }
+        console.log('Seasons in file:', seasonCounts);
+
+        // If user provided a season override, use it; otherwise use seasons from file
         // Merge with empty landed data (no cost overrides at this point)
-        const mergedResult = mergeSeasonData(lineListData, [], season);
-        const appData = convertToAppFormats(mergedResult, season);
+        const mergedResult = mergeSeasonData(lineListData, [], season || '');
+        const appData = convertToAppFormats(mergedResult, season || undefined); // season can be undefined
+
+        const seasonSummary = Object.entries(seasonCounts)
+          .sort(([a], [b]) => b.localeCompare(a))
+          .map(([s, count]) => `${s}: ${count.toLocaleString()}`)
+          .join(', ');
 
         return NextResponse.json({
           success: true,
           fileType: 'lineList',
-          season,
-          summary: `${appData.products.length.toLocaleString()} products for ${season}`,
+          seasonBreakdown: seasonCounts,
+          summary: `${appData.products.length.toLocaleString()} products across ${Object.keys(seasonCounts).length} seasons (${seasonSummary})`,
           products: appData.products,
           costs: appData.costs,
         });

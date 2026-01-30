@@ -171,7 +171,8 @@ export function parseLineListXLSX(buffer: ArrayBuffer): LineListItem[] {
       return styleNumber && styleNumber.length > 0;
     })
     .map((row) => {
-      const rawSeason = parseString(row['Season']);
+      // Read season from file - check both "Season" and "Seas" column names
+      const rawSeason = parseString(row['Season'] || row['Seas']);
       const season = normalizeSeasonCode(rawSeason);
       const status = parseString(row['Status']);
 
@@ -432,58 +433,66 @@ export function mergeSeasonData(
 }
 
 // Convert merged data to the Product and CostRecord formats used by the app
+// If targetSeason is provided, it's used as a fallback; otherwise use the product's own season
 export function convertToAppFormats(
   mergedData: SeasonImportResult,
-  targetSeason: string
+  targetSeason?: string
 ): {
   products: Record<string, unknown>[];
   costs: Record<string, unknown>[];
 } {
-  const products = mergedData.products.map((p, index) => ({
-    id: `prod-${targetSeason}-${index}`,
-    styleNumber: p.styleNumber,
-    styleDesc: p.styleName,
-    color: p.colorCode,
-    colorDesc: p.colorDescription,
-    styleColor: p.styleColor || `${p.styleNumber}-${p.colorCode}`,
-    season: targetSeason,
-    seasonType: 'Main',
-    rawSeason: targetSeason,
-    divisionDesc: p.division,
-    categoryDesc: p.category,
-    category: p.category,
-    productLine: p.productLine,
-    labelDesc: p.label,
-    price: p.usWholesale,
-    msrp: p.usMsrp,
-    cost: p.landed,
-    currency: 'USD',
-    cadPrice: p.cadWholesale,
-    cadMsrp: p.cadMsrp,
-    carryOver: p.carryOver,
-    countryOfOrigin: p.countryOfOrigin,
-    factoryName: p.factory,
-    designerName: p.designer,
-    techDesignerName: p.developer,
-  }));
+  const products = mergedData.products.map((p, index) => {
+    // Use the product's season from the file, fall back to targetSeason if not set
+    const season = p.season || targetSeason || '';
+    return {
+      id: `prod-${season}-${index}`,
+      styleNumber: p.styleNumber,
+      styleDesc: p.styleName,
+      color: p.colorCode,
+      colorDesc: p.colorDescription,
+      styleColor: p.styleColor || `${p.styleNumber}-${p.colorCode}`,
+      season,
+      seasonType: 'Main',
+      rawSeason: season,
+      divisionDesc: p.division,
+      categoryDesc: p.category,
+      category: p.category,
+      productLine: p.productLine,
+      labelDesc: p.label,
+      price: p.usWholesale,
+      msrp: p.usMsrp,
+      cost: p.landed,
+      currency: 'USD',
+      cadPrice: p.cadWholesale,
+      cadMsrp: p.cadMsrp,
+      carryOver: p.carryOver,
+      countryOfOrigin: p.countryOfOrigin,
+      factoryName: p.factory,
+      designerName: p.designer,
+      techDesignerName: p.developer,
+    };
+  });
 
-  const costs = mergedData.products.map((p, index) => ({
-    id: `cost-${targetSeason}-${index}`,
-    styleNumber: p.styleNumber,
-    styleName: p.styleName,
-    season: targetSeason,
-    seasonType: 'Main',
-    rawSeason: targetSeason,
-    factory: p.factory,
-    countryOfOrigin: p.countryOfOrigin,
-    fob: p.fob,
-    landed: p.landed,
-    suggestedMsrp: p.usMsrp,
-    suggestedWholesale: p.usWholesale,
-    margin: p.margin,
-    designTeam: p.division,
-    developer: p.developer,
-  }));
+  const costs = mergedData.products.map((p, index) => {
+    const season = p.season || targetSeason || '';
+    return {
+      id: `cost-${season}-${index}`,
+      styleNumber: p.styleNumber,
+      styleName: p.styleName,
+      season,
+      seasonType: 'Main',
+      rawSeason: season,
+      factory: p.factory,
+      countryOfOrigin: p.countryOfOrigin,
+      fob: p.fob,
+      landed: p.landed,
+      suggestedMsrp: p.usMsrp,
+      suggestedWholesale: p.usWholesale,
+      margin: p.margin,
+      designTeam: p.division,
+      developer: p.developer,
+    };
+  });
 
   return { products, costs };
 }

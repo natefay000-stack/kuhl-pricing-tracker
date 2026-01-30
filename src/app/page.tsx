@@ -308,12 +308,47 @@ export default function Home() {
     setShowImportModal(false);
   };
 
-  // Handle multi-season import (pricing or costs that span multiple seasons)
+  // Handle multi-season import (products, pricing, or costs that span multiple seasons)
   const handleMultiSeasonImport = async (data: {
+    products?: Record<string, unknown>[];
     pricing?: Record<string, unknown>[];
     costs?: Record<string, unknown>[];
   }) => {
-    console.log('Importing multi-season data:', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs');
+    console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs');
+
+    // For products: replace all products with new data (Line List import)
+    if (data.products && data.products.length > 0) {
+      const newProducts = data.products as unknown as Product[];
+      setProducts(newProducts);
+
+      // Persist to database
+      try {
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < data.products.length; i += BATCH_SIZE) {
+          const batch = data.products.slice(i, i + BATCH_SIZE);
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'products',
+              data: batch,
+              fileName: 'line_list_import',
+              replaceExisting: i === 0, // Replace all on first batch
+            }),
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Could not persist products to database:', dbErr);
+      }
+
+      // Update cache
+      setCachedData({
+        products: newProducts,
+        sales,
+        pricing,
+        costs,
+      });
+    }
 
     // For pricing: replace all pricing with new data
     if (data.pricing && data.pricing.length > 0) {
