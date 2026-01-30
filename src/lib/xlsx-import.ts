@@ -58,6 +58,7 @@ export interface LandedCostItem {
   margin: number;
   designTeam: string;
   developer: string;
+  dateRequested: number; // Excel serial date - higher = more recent
 }
 
 export interface ImportedSalesItem {
@@ -228,7 +229,7 @@ export function parseLandedSheetXLSX(buffer: ArrayBuffer): LandedCostItem[] {
   // Start from row 11 (0-indexed row 10) where data begins
   const rows = XLSX.utils.sheet_to_json(sheet, { range: 10, defval: '' }) as Record<string, unknown>[];
 
-  return rows
+  const allCosts = rows
     .filter(row => {
       const styleNumber = parseString(row['Style #'] || row['Style']);
       return styleNumber && styleNumber.length > 0;
@@ -254,8 +255,26 @@ export function parseLandedSheetXLSX(buffer: ArrayBuffer): LandedCostItem[] {
         margin: parseNumber(row['Margin']),
         designTeam: parseString(row['Design Team']),
         developer: parseString(row['Developer/ Designer'] || row['Developer']),
+        dateRequested: parseNumber(row['Date Requested']), // Excel serial date
       };
     });
+
+  // Deduplicate by style+season, keeping the most recent (highest dateRequested)
+  const costMap = new Map<string, LandedCostItem>();
+  for (const cost of allCosts) {
+    const key = `${cost.styleNumber}-${cost.season}`;
+    const existing = costMap.get(key);
+
+    // Keep if no existing entry, or if this one is more recent
+    if (!existing || cost.dateRequested > existing.dateRequested) {
+      costMap.set(key, cost);
+    }
+  }
+
+  const deduped = Array.from(costMap.values());
+  console.log(`Landed costs: ${allCosts.length} total rows -> ${deduped.length} unique style+season (kept most recent)`);
+
+  return deduped;
 }
 
 export interface ImportedPricingItem {
