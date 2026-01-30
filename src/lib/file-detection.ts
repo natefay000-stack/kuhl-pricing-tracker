@@ -63,6 +63,15 @@ export function detectFileType(headers: string[]): DetectionResult {
       signature.some(s => h.toLowerCase() === s.toLowerCase())
     );
 
+  // Check for pricing-specific and line-list-specific columns to disambiguate
+  const headerLower = normalizedHeaders.map(h => h.toLowerCase());
+  const hasPricingSpecific = headerLower.some(h =>
+    h === 'sea desc' || h === 'season desc' || h === 'clr_desc'
+  );
+  const hasLineListSpecific = headerLower.some(h =>
+    h === 'category' || h === 'cat desc' || h === 'division' || h === 'division desc'
+  );
+
   // Determine type based on match counts and thresholds
   // Sales detection is most specific (3+ matches required)
   if (salesMatches >= 3) {
@@ -84,6 +93,17 @@ export function detectFileType(headers: string[]): DetectionResult {
     };
   }
 
+  // Pricing detection - check BEFORE line list if it has pricing-specific columns
+  // Pricing files have Sea Desc/Season columns with Color variations, but no Category/Division
+  if (pricingMatches >= 3 && hasPricingSpecific && !hasLineListSpecific) {
+    return {
+      type: 'pricing',
+      confidence: pricingMatches >= 5 ? 'high' : pricingMatches >= 4 ? 'medium' : 'low',
+      matchedColumns: getMatchedColumns(PRICING_COLUMNS),
+      allColumns: normalizedHeaders,
+    };
+  }
+
   // Line list detection (3+ matches required)
   if (lineListMatches >= 3) {
     return {
@@ -94,7 +114,7 @@ export function detectFileType(headers: string[]): DetectionResult {
     };
   }
 
-  // Pricing detection (2+ matches, but only if nothing else matched)
+  // Pricing detection fallback (2+ matches, if nothing else matched)
   if (pricingMatches >= 2) {
     return {
       type: 'pricing',

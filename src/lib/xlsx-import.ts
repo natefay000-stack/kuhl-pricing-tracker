@@ -72,6 +72,8 @@ export interface ImportedSalesItem {
   revenue: number;
   divisionDesc: string;
   categoryDesc: string;
+  wholesalePrice: number;
+  msrp: number;
 }
 
 export interface SeasonImportResult {
@@ -334,6 +336,8 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
         revenue: parseNumber(row['$ Current Booked Net']),
         divisionDesc: parseString(row['Division']),
         categoryDesc: parseString(row['Category Description']),
+        wholesalePrice: parseNumber(row['Wholesale Price']),
+        msrp: parseNumber(row['MSRP (Style)']) || parseNumber(row['MSRP (Order)']),
       };
     });
 }

@@ -49,12 +49,30 @@ function getCachedData(): CachedData | null {
 
 function setCachedData(data: Omit<CachedData, 'timestamp'>) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      ...data,
-      timestamp: Date.now(),
-    }));
+    // Clear old cache first to free up space
+    localStorage.removeItem(CACHE_KEY);
+
+    // Try to cache all data
+    const fullData = { ...data, timestamp: Date.now() };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(fullData));
   } catch (e) {
-    console.warn('Cache write failed:', e);
+    // If quota exceeded, try caching without sales (largest dataset)
+    console.warn('Full cache failed, trying without sales:', e);
+    try {
+      localStorage.removeItem(CACHE_KEY);
+      const reducedData = {
+        products: data.products,
+        sales: [], // Skip sales to save space
+        pricing: data.pricing,
+        costs: data.costs,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(reducedData));
+      console.log('Cached without sales data');
+    } catch (e2) {
+      console.warn('Cache completely failed, will load from server:', e2);
+      localStorage.removeItem(CACHE_KEY);
+    }
   }
 }
 
@@ -609,6 +627,7 @@ export default function Home() {
               products={products}
               pricing={pricing}
               costs={costs}
+              sales={sales}
               selectedDivision={selectedDivision}
               selectedCategory={selectedCategory}
               onStyleClick={handleStyleClick}

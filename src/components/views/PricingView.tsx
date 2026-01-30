@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Product, PricingRecord, CostRecord } from '@/types/product';
+import { Product, PricingRecord, CostRecord, SalesRecord } from '@/types/product';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,10 +16,13 @@ interface PricingViewProps {
   products: Product[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  sales: SalesRecord[];
   selectedDivision: string;
   selectedCategory: string;
   onStyleClick: (styleNumber: string) => void;
 }
+
+type PriceSource = 'pricing' | 'products' | 'sales';
 
 interface StylePricing {
   styleNumber: string;
@@ -35,6 +38,8 @@ interface StylePricing {
   margin: number | null;
   category: string;
   division: string;
+  fromSource: PriceSource | null;
+  toSource: PriceSource | null;
 }
 
 function formatCurrency(value: number | null): string {
@@ -58,20 +63,44 @@ function formatNumber(value: number): string {
   return value.toLocaleString();
 }
 
+function SourceIndicator({ source }: { source: PriceSource | null }) {
+  if (!source) return null;
+
+  switch (source) {
+    case 'pricing':
+      return (
+        <span className="inline-block w-2 h-2 rounded-full bg-cyan-500 ml-1" title="From pricebyseason" />
+      );
+    case 'products':
+      return (
+        <span className="inline-block w-2 h-2 rounded-full border-2 border-gray-400 ml-1" title="From Line List" />
+      );
+    case 'sales':
+      return (
+        <span className="inline-block w-2 h-2 rotate-45 bg-amber-500 ml-1" title="From Sales" />
+      );
+    default:
+      return null;
+  }
+}
+
 export default function PricingView({
   products,
   pricing,
   costs,
+  sales,
   selectedDivision,
   selectedCategory,
   onStyleClick,
 }: PricingViewProps) {
-  // Available seasons from pricing data
+  // Available seasons from ALL data sources
   const availableSeasons = useMemo(() => {
     const seasons = new Set<string>();
-    pricing.forEach(p => p.season && seasons.add(p.season));
+    (pricing || []).forEach(p => p.season && seasons.add(p.season));
+    (products || []).forEach(p => p.season && seasons.add(p.season));
+    (sales || []).forEach(s => s.season && seasons.add(s.season));
     return Array.from(seasons).sort();
-  }, [pricing]);
+  }, [pricing, products, sales]);
 
   // Default to last two seasons for comparison
   const [fromSeason, setFromSeason] = useState<string>(() => {
@@ -81,52 +110,120 @@ export default function PricingView({
     return availableSeasons.length >= 1 ? availableSeasons[availableSeasons.length - 1] : '';
   });
 
-  // Build style pricing comparison
+  // Build style pricing comparison - aggregate from ALL sources
   const stylePricingData = useMemo(() => {
-    // Build lookup maps
-    const fromPricing = new Map<string, PricingRecord>();
-    const toPricing = new Map<string, PricingRecord>();
+    // Helper to get pricing data for a style+season with source tracking
+    // Priority: pricing table > products table > sales table
+    interface PriceData {
+      price: number | null;
+      msrp: number | null;
+      source: PriceSource | null;
+      styleDesc: string;
+      category: string;
+      division: string;
+    }
 
-    pricing.forEach(p => {
-      if (p.season === fromSeason) {
-        fromPricing.set(p.styleNumber, p);
+    const getPriceForStyleSeason = (styleNumber: string, season: string): PriceData => {
+      // 1. Check pricing table first (highest priority)
+      const pricingRecord = (pricing || []).find(p => p.styleNumber === styleNumber && p.season === season);
+      if (pricingRecord && (pricingRecord.price > 0 || pricingRecord.msrp > 0)) {
+        return {
+          price: pricingRecord.price > 0 ? pricingRecord.price : null,
+          msrp: pricingRecord.msrp > 0 ? pricingRecord.msrp : null,
+          source: 'pricing',
+          styleDesc: pricingRecord.styleDesc || '',
+          category: '',
+          division: '',
+        };
       }
-      if (p.season === toSeason) {
-        toPricing.set(p.styleNumber, p);
+
+      // 2. Check products table (from Line List imports)
+      const productRecord = (products || []).find(p => p.styleNumber === styleNumber && p.season === season);
+      if (productRecord && (productRecord.price > 0 || productRecord.msrp > 0)) {
+        return {
+          price: productRecord.price > 0 ? productRecord.price : null,
+          msrp: productRecord.msrp > 0 ? productRecord.msrp : null,
+          source: 'products',
+          styleDesc: productRecord.styleDesc || '',
+          category: productRecord.categoryDesc || '',
+          division: productRecord.divisionDesc || '',
+        };
       }
-    });
+
+      // 3. Check sales table (extract from sales records)
+      const salesRecords = (sales || []).filter(s => s.styleNumber === styleNumber && s.season === season);
+      if (salesRecords.length > 0) {
+        // Get the first record with pricing info
+        const withPricing = salesRecords.find(s => (s.wholesalePrice && s.wholesalePrice > 0) || (s.msrp && s.msrp > 0));
+        if (withPricing) {
+          return {
+            price: withPricing.wholesalePrice && withPricing.wholesalePrice > 0 ? withPricing.wholesalePrice : null,
+            msrp: withPricing.msrp && withPricing.msrp > 0 ? withPricing.msrp : null,
+            source: 'sales',
+            styleDesc: withPricing.styleDesc || '',
+            category: withPricing.categoryDesc || '',
+            division: withPricing.divisionDesc || '',
+          };
+        }
+      }
+
+      return { price: null, msrp: null, source: null, styleDesc: '', category: '', division: '' };
+    };
 
     // Build cost lookup for margin calculation
     const costLookup = new Map<string, number>();
-    costs.forEach(c => {
+    (costs || []).forEach(c => {
       if (c.season === toSeason && c.landed > 0) {
         costLookup.set(c.styleNumber, c.landed);
       }
     });
 
-    // Product info lookup
-    const productInfo = new Map<string, Product>();
-    products.forEach(p => {
-      productInfo.set(p.styleNumber, p);
+    // Get all unique style numbers from ALL sources
+    const allStyles = new Set<string>();
+    (pricing || []).forEach(p => {
+      if (p.season === fromSeason || p.season === toSeason) allStyles.add(p.styleNumber);
+    });
+    (products || []).forEach(p => {
+      if (p.season === fromSeason || p.season === toSeason) allStyles.add(p.styleNumber);
+    });
+    (sales || []).forEach(s => {
+      if (s.season === fromSeason || s.season === toSeason) allStyles.add(s.styleNumber);
     });
 
-    // Get all unique style numbers
-    const allStyles = new Set<string>();
-    fromPricing.forEach((_, key) => allStyles.add(key));
-    toPricing.forEach((_, key) => allStyles.add(key));
+    // Build product info lookup for category/division
+    const productInfo = new Map<string, { category: string; division: string; styleDesc: string }>();
+    (products || []).forEach(p => {
+      if (!productInfo.has(p.styleNumber)) {
+        productInfo.set(p.styleNumber, {
+          category: p.categoryDesc || '',
+          division: p.divisionDesc || '',
+          styleDesc: p.styleDesc || '',
+        });
+      }
+    });
+    // Also add from sales if not in products
+    (sales || []).forEach(s => {
+      if (!productInfo.has(s.styleNumber)) {
+        productInfo.set(s.styleNumber, {
+          category: s.categoryDesc || '',
+          division: s.divisionDesc || '',
+          styleDesc: s.styleDesc || '',
+        });
+      }
+    });
 
     // Build comparison data
     const data: StylePricing[] = [];
     allStyles.forEach(styleNumber => {
-      const from = fromPricing.get(styleNumber);
-      const to = toPricing.get(styleNumber);
-      const product = productInfo.get(styleNumber);
+      const fromData = getPriceForStyleSeason(styleNumber, fromSeason);
+      const toData = getPriceForStyleSeason(styleNumber, toSeason);
+      const info = productInfo.get(styleNumber);
       const cost = costLookup.get(styleNumber);
 
-      const fromPrice = from?.price ?? null;
-      const toPrice = to?.price ?? null;
-      const fromMsrp = from?.msrp ?? null;
-      const toMsrp = to?.msrp ?? null;
+      const fromPrice = fromData.price;
+      const toPrice = toData.price;
+      const fromMsrp = fromData.msrp;
+      const toMsrp = toData.msrp;
 
       let priceDelta: number | null = null;
       let pricePercentChange: number | null = null;
@@ -151,7 +248,7 @@ export default function PricingView({
 
       data.push({
         styleNumber,
-        styleDesc: to?.styleDesc || from?.styleDesc || product?.styleDesc || '',
+        styleDesc: toData.styleDesc || fromData.styleDesc || info?.styleDesc || '',
         fromPrice,
         toPrice,
         fromMsrp,
@@ -161,8 +258,10 @@ export default function PricingView({
         msrpDelta,
         msrpPercentChange,
         margin,
-        category: product?.categoryDesc || '',
-        division: product?.divisionDesc || '',
+        category: toData.category || fromData.category || info?.category || '',
+        division: toData.division || fromData.division || info?.division || '',
+        fromSource: fromData.source,
+        toSource: toData.source,
       });
     });
 
@@ -172,7 +271,7 @@ export default function PricingView({
       if (selectedCategory && d.category !== selectedCategory) return false;
       return true;
     });
-  }, [pricing, costs, products, fromSeason, toSeason, selectedDivision, selectedCategory]);
+  }, [pricing, costs, products, sales, fromSeason, toSeason, selectedDivision, selectedCategory]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -514,10 +613,16 @@ export default function PricingView({
                     {style.styleDesc}
                   </td>
                   <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
-                    {formatCurrency(style.fromPrice)}
+                    <span className="inline-flex items-center">
+                      {formatCurrency(style.fromPrice)}
+                      <SourceIndicator source={style.fromSource} />
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.toPrice)}
+                    <span className="inline-flex items-center">
+                      {formatCurrency(style.toPrice)}
+                      <SourceIndicator source={style.toSource} />
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-center border-l-2 border-gray-400">
                     {style.priceDelta !== null && style.priceDelta !== 0 ? (
@@ -535,10 +640,16 @@ export default function PricingView({
                     )}
                   </td>
                   <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
-                    {formatCurrency(style.fromMsrp)}
+                    <span className="inline-flex items-center">
+                      {formatCurrency(style.fromMsrp)}
+                      <SourceIndicator source={style.fromSource} />
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.toMsrp)}
+                    <span className="inline-flex items-center">
+                      {formatCurrency(style.toMsrp)}
+                      <SourceIndicator source={style.toSource} />
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-center border-l-2 border-gray-400">
                     {style.msrpDelta !== null && style.msrpDelta !== 0 ? (
@@ -580,11 +691,27 @@ export default function PricingView({
             </tbody>
           </table>
         </div>
-        {sortedData.length > 50 && (
-          <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 text-center text-base text-gray-600 font-medium">
-            Showing 50 of {formatNumber(sortedData.length)} styles
+        <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 flex items-center justify-between">
+          <div className="flex gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-cyan-500" />
+              <span className="text-gray-600">Pricing Table</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full border-2 border-gray-400" />
+              <span className="text-gray-600">Line List</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rotate-45 bg-amber-500" />
+              <span className="text-gray-600">Sales Data</span>
+            </div>
           </div>
-        )}
+          {sortedData.length > 50 && (
+            <span className="text-base text-gray-600 font-medium">
+              Showing 50 of {formatNumber(sortedData.length)} styles
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

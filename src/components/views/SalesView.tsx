@@ -57,6 +57,21 @@ function getGenderFromDivision(divisionDesc: string): string {
   return "Unknown";
 }
 
+// Get the previous season code (e.g., 26FA → 25FA, 26SP → 25SP)
+function getPreviousSeason(season: string): string | null {
+  if (!season || season.length !== 4) return null;
+  const yearNum = parseInt(season.slice(0, 2), 10);
+  const type = season.slice(2); // SP or FA
+  if (isNaN(yearNum)) return null;
+  return `${(yearNum - 1).toString().padStart(2, '0')}${type}`;
+}
+
+// Calculate percentage change
+function calcChange(current: number, previous: number): number | null {
+  if (previous === 0) return current > 0 ? 100 : null;
+  return ((current - previous) / previous) * 100;
+}
+
 export default function SalesView({
   sales,
   products,
@@ -163,7 +178,7 @@ export default function SalesView({
 
   const hasLocalFilters = filterSeason || filterCategory || filterStyleNumber || filterCustomer || filterCustomerType || filterSalesRep;
 
-  // Summary stats
+  // Summary stats with period-over-period comparison
   const summary = useMemo(() => {
     const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
     const totalUnits = filteredSales.reduce((sum, s) => sum + (s.unitsBooked || 0), 0);
@@ -171,8 +186,53 @@ export default function SalesView({
     const uniqueStyles = new Set(filteredSales.map((s) => s.styleNumber).filter(Boolean)).size;
     const avgOrder = uniqueCustomers > 0 ? totalRevenue / uniqueCustomers : 0;
 
-    return { totalRevenue, totalUnits, uniqueCustomers, uniqueStyles, avgOrder };
-  }, [filteredSales]);
+    // Calculate previous period stats for comparison
+    const prevSeason = filterSeason ? getPreviousSeason(filterSeason) : null;
+    let prevRevenue = 0, prevUnits = 0, prevCustomers = 0, prevStyles = 0, prevAvgOrder = 0;
+    let comparisonLabel = '';
+
+    if (prevSeason) {
+      // Get sales from previous season with same filters (except season)
+      const prevSales = sales.filter((s) => {
+        if (s.season !== prevSeason) return false;
+        if (filterCategory && normalizeCategory(s.categoryDesc) !== filterCategory) return false;
+        if (filterCustomerType && s.customerType !== filterCustomerType) return false;
+        if (filterCustomer && s.customer !== filterCustomer) return false;
+        if (filterSalesRep && s.salesRep !== filterSalesRep) return false;
+        if (filterStyleNumber && !s.styleNumber?.toLowerCase().includes(filterStyleNumber.toLowerCase())) return false;
+        if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+        // Also apply chart filters
+        if (activeFilters.channel && s.customerType !== activeFilters.channel) return false;
+        if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return false;
+        if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return false;
+        if (activeFilters.customer && s.customer !== activeFilters.customer) return false;
+        return true;
+      });
+
+      prevRevenue = prevSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
+      prevUnits = prevSales.reduce((sum, s) => sum + (s.unitsBooked || 0), 0);
+      const prevCustomerSet = new Set(prevSales.map((s) => s.customer).filter(Boolean));
+      prevCustomers = prevCustomerSet.size;
+      prevStyles = new Set(prevSales.map((s) => s.styleNumber).filter(Boolean)).size;
+      prevAvgOrder = prevCustomers > 0 ? prevRevenue / prevCustomers : 0;
+      comparisonLabel = `vs ${prevSeason}`;
+    }
+
+    return {
+      totalRevenue,
+      totalUnits,
+      uniqueCustomers,
+      uniqueStyles,
+      avgOrder,
+      // Changes (null if no comparison available)
+      revenueChange: prevSeason ? calcChange(totalRevenue, prevRevenue) : null,
+      unitsChange: prevSeason ? calcChange(totalUnits, prevUnits) : null,
+      customersChange: prevSeason ? calcChange(uniqueCustomers, prevCustomers) : null,
+      stylesChange: prevSeason ? calcChange(uniqueStyles, prevStyles) : null,
+      avgOrderChange: prevSeason ? calcChange(avgOrder, prevAvgOrder) : null,
+      comparisonLabel,
+    };
+  }, [filteredSales, filterSeason, filterCategory, filterCustomerType, filterCustomer, filterSalesRep, filterStyleNumber, selectedDivision, activeFilters, sales]);
 
   // By Channel (for chart) - use base filtered, not active filters
   const byChannel = useMemo(() => {
@@ -556,7 +616,12 @@ export default function SalesView({
 
       {/* Summary Stats */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 mb-5">Summary</h3>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold text-gray-800">Summary</h3>
+          {summary.comparisonLabel && (
+            <span className="text-sm text-gray-500 font-medium">{summary.comparisonLabel}</span>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-cyan-50 rounded-lg p-5 border-2 border-cyan-200">
             <div className="flex items-start justify-between mb-3">
@@ -564,6 +629,11 @@ export default function SalesView({
               <Banknote className="w-6 h-6 text-cyan-600" />
             </div>
             <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.totalRevenue)}</div>
+            {summary.revenueChange !== null && (
+              <div className={`text-sm font-semibold mt-2 ${summary.revenueChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {summary.revenueChange >= 0 ? '+' : ''}{summary.revenueChange.toFixed(1)}%
+              </div>
+            )}
           </div>
 
           <div className="bg-violet-50 rounded-lg p-5 border-2 border-violet-200">
@@ -572,6 +642,11 @@ export default function SalesView({
               <ShoppingCart className="w-6 h-6 text-violet-600" />
             </div>
             <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.totalUnits)}</div>
+            {summary.unitsChange !== null && (
+              <div className={`text-sm font-semibold mt-2 ${summary.unitsChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {summary.unitsChange >= 0 ? '+' : ''}{summary.unitsChange.toFixed(1)}%
+              </div>
+            )}
           </div>
 
           <div className="bg-blue-50 rounded-lg p-5 border-2 border-blue-200">
@@ -580,6 +655,11 @@ export default function SalesView({
               <Users className="w-6 h-6 text-blue-600" />
             </div>
             <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.uniqueCustomers)}</div>
+            {summary.customersChange !== null && (
+              <div className={`text-sm font-semibold mt-2 ${summary.customersChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {summary.customersChange >= 0 ? '+' : ''}{summary.customersChange.toFixed(1)}%
+              </div>
+            )}
           </div>
 
           <div className="bg-emerald-50 rounded-lg p-5 border-2 border-emerald-200">
@@ -588,6 +668,11 @@ export default function SalesView({
               <Package className="w-6 h-6 text-emerald-600" />
             </div>
             <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.uniqueStyles)}</div>
+            {summary.stylesChange !== null && (
+              <div className={`text-sm font-semibold mt-2 ${summary.stylesChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {summary.stylesChange >= 0 ? '+' : ''}{summary.stylesChange.toFixed(1)}%
+              </div>
+            )}
           </div>
 
           <div className="bg-amber-50 rounded-lg p-5 border-2 border-amber-200">
@@ -596,6 +681,11 @@ export default function SalesView({
               <Receipt className="w-6 h-6 text-amber-600" />
             </div>
             <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.avgOrder)}</div>
+            {summary.avgOrderChange !== null && (
+              <div className={`text-sm font-semibold mt-2 ${summary.avgOrderChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {summary.avgOrderChange >= 0 ? '+' : ''}{summary.avgOrderChange.toFixed(1)}%
+              </div>
+            )}
           </div>
         </div>
       </div>

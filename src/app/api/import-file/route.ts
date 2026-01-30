@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
           revenue: s.revenue,
           shipped: 0,
           cost: 0,
-          wholesalePrice: 0,
-          msrp: 0,
+          wholesalePrice: s.wholesalePrice || 0,
+          msrp: s.msrp || 0,
           netUnitPrice: s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0,
           divisionDesc: s.divisionDesc,
           categoryDesc: normalizeCategory(s.categoryDesc),
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      case 'costs':
       case 'landed': {
         const landedData = parseLandedSheetXLSX(buffer);
         console.log('Parsed landed costs:', landedData.length, 'records');

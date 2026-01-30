@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { ArrowUpDown, TrendingUp, TrendingDown, Minus, Search, X } from 'lucide-react';
+import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
 
@@ -117,28 +118,72 @@ export default function SeasonView({
     return Array.from(all).sort();
   }, [sales]);
 
-  // Get unique styles from products, filtered
+  // Get unique styles from ALL sources (products, sales, pricing, costs)
   const filteredStyles = useMemo(() => {
-    const styleMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string }>();
+    const styleMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string; divisionDesc: string; categoryDesc: string }>();
 
+    // 1st: Add styles from products (Line List) - has most metadata
     products.forEach((p) => {
-      if (selectedDivision && p.divisionDesc !== selectedDivision) return;
-      if (selectedCategory && p.categoryDesc !== selectedCategory) return;
-      if (selectedDesigner && p.designerName !== selectedDesigner) return;
-      if (styleNumberFilter && !p.styleNumber.toLowerCase().includes(styleNumberFilter.toLowerCase())) return;
-      if (styleNameFilter && !p.styleDesc?.toLowerCase().includes(styleNameFilter.toLowerCase())) return;
-
       if (!styleMap.has(p.styleNumber)) {
         styleMap.set(p.styleNumber, {
           styleNumber: p.styleNumber,
-          styleDesc: p.styleDesc,
+          styleDesc: p.styleDesc || '',
           designerName: p.designerName || '',
+          divisionDesc: p.divisionDesc || '',
+          categoryDesc: p.categoryDesc || '',
         });
       }
     });
 
-    return Array.from(styleMap.values());
-  }, [products, selectedDivision, selectedCategory, selectedDesigner, styleNumberFilter, styleNameFilter]);
+    // 2nd: Add styles from pricing that might not be in products
+    pricing.forEach((p) => {
+      if (!styleMap.has(p.styleNumber)) {
+        styleMap.set(p.styleNumber, {
+          styleNumber: p.styleNumber,
+          styleDesc: p.styleDesc || '',
+          designerName: '',
+          divisionDesc: '',
+          categoryDesc: '',
+        });
+      }
+    });
+
+    // 3rd: Add styles from sales that might not be in products or pricing
+    sales.forEach((s) => {
+      if (!styleMap.has(s.styleNumber)) {
+        styleMap.set(s.styleNumber, {
+          styleNumber: s.styleNumber,
+          styleDesc: s.styleDesc || '',
+          designerName: '',
+          divisionDesc: s.divisionDesc || '',
+          categoryDesc: s.categoryDesc || '',
+        });
+      }
+    });
+
+    // 4th: Add styles from costs that might not exist elsewhere
+    costs.forEach((c) => {
+      if (!styleMap.has(c.styleNumber)) {
+        styleMap.set(c.styleNumber, {
+          styleNumber: c.styleNumber,
+          styleDesc: c.styleName || '',
+          designerName: '',
+          divisionDesc: '',
+          categoryDesc: '',
+        });
+      }
+    });
+
+    // Now apply filters
+    return Array.from(styleMap.values()).filter((style) => {
+      if (selectedDivision && style.divisionDesc !== selectedDivision) return false;
+      if (selectedCategory && style.categoryDesc !== selectedCategory) return false;
+      if (selectedDesigner && style.designerName !== selectedDesigner) return false;
+      if (styleNumberFilter && !style.styleNumber.toLowerCase().includes(styleNumberFilter.toLowerCase())) return false;
+      if (styleNameFilter && !style.styleDesc?.toLowerCase().includes(styleNameFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [products, sales, pricing, costs, selectedDivision, selectedCategory, selectedDesigner, styleNumberFilter, styleNameFilter]);
 
   // Build lookup maps for quick access using WATERFALL LOGIC
   // Pricing: 1st pricebyseason → 2nd Line List → 3rd Sales (calculated)
@@ -164,11 +209,14 @@ export default function SeasonView({
       }
     });
 
-    // PRICING WATERFALL: pricebyseason → Line List → Sales
-    type PricingSource = 'pricebyseason' | 'linelist' | 'sales' | 'none';
+    // PRICING WATERFALL FOR MSRP & WHOLESALE ONLY:
+    // 1st: pricebyseason (Pricing table)
+    // 2nd: Sales table
+    // 3rd: Line List (Products table)
+    type PricingSource = 'pricebyseason' | 'sales' | 'linelist' | 'none';
     const pricingByStyleSeason = new Map<string, { msrp: number; wholesale: number; source: PricingSource }>();
 
-    // 1st Priority: pricebyseason file
+    // 1st Priority: pricebyseason file (Pricing table)
     pricing.forEach((p) => {
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(p.season)) return;
       const key = `${p.styleNumber}-${p.season}`;
@@ -177,7 +225,20 @@ export default function SeasonView({
       }
     });
 
-    // 2nd Priority: Line List (only if not already set)
+    // 2nd Priority: Sales table (only if not already set from pricing)
+    sales.forEach((s) => {
+      if (selectedSeasons.length > 0 && !selectedSeasons.includes(s.season)) return;
+      const key = `${s.styleNumber}-${s.season}`;
+      if (!pricingByStyleSeason.has(key) && ((s.msrp && s.msrp > 0) || (s.wholesalePrice && s.wholesalePrice > 0))) {
+        pricingByStyleSeason.set(key, {
+          msrp: s.msrp || 0,
+          wholesale: s.wholesalePrice || 0,
+          source: 'sales'
+        });
+      }
+    });
+
+    // 3rd Priority: Line List / Products table (only if not already set)
     products.forEach((p) => {
       if (!p.season) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(p.season)) return;
@@ -187,7 +248,7 @@ export default function SeasonView({
       }
     });
 
-    // 3rd Priority: Calculate from sales (only for wholesale, only if not already set)
+    // Fallback: Calculate implied wholesale from revenue/units if still no pricing
     salesByStyleSeason.forEach((salesData, key) => {
       if (!pricingByStyleSeason.has(key) && salesData.units > 0) {
         const impliedWholesale = salesData.revenue / salesData.units;
@@ -322,33 +383,21 @@ export default function SeasonView({
     });
   }, [filteredStyles, seasons, metric, dataLookups]);
 
-  // Filter to show styles with data in selected seasons
+  // Filter to show only styles with data for the CURRENT METRIC in displayed seasons
   const relevantPivotData = useMemo(() => {
-    // Determine which seasons to check
-    let seasonsToCheck: string[] = [];
+    // Determine which seasons to display
+    const seasonsToDisplay = selectedSeasons.length > 0
+      ? sortSeasons(selectedSeasons)
+      : seasons;
 
-    if (selectedSeasons.length > 0) {
-      // If specific seasons are selected, check those seasons
-      seasonsToCheck = [...selectedSeasons];
-    } else {
-      // If no season selected, check the last two seasons
-      if (seasons.length > 0) {
-        seasonsToCheck.push(seasons[seasons.length - 1]);
-      }
-      if (seasons.length > 1) {
-        seasonsToCheck.push(seasons[seasons.length - 2]);
-      }
-    }
-
-    // Filter styles that have ANY data (sales, pricing, or cost) in at least one of the relevant seasons
+    // Filter styles that have at least one non-null value for the current metric
     return pivotData.filter((row) => {
-      return seasonsToCheck.some((season) => {
-        // Check if style has any data in this season
-        const hasData = dataLookups.stylesWithDataBySeason.get(season)?.has(row.styleNumber);
-        return hasData;
+      return seasonsToDisplay.some((season) => {
+        const value = row.seasonData[season];
+        return value !== null && value !== undefined;
       });
     });
-  }, [pivotData, seasons, selectedSeasons, dataLookups]);
+  }, [pivotData, seasons, selectedSeasons]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -454,6 +503,26 @@ export default function SeasonView({
             Compare performance across seasons
           </p>
         </div>
+        {/* Current Season Context */}
+        {(() => {
+          const currentSeason = getCurrentShippingSeason();
+          const status = getSeasonStatus(currentSeason);
+          const badge = getSeasonStatusBadge(status);
+          return (
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Current Shipping Season</div>
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <span className="text-2xl font-mono font-bold text-gray-900">{currentSeason}</span>
+                <span className={`text-sm px-2 py-1 rounded ${badge.color}`}>
+                  {badge.icon} {badge.label}
+                </span>
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Filters */}
@@ -624,17 +693,17 @@ export default function SeasonView({
           ))}
         </div>
 
-        {/* Source Legend */}
+        {/* Source Legend - Priority: pricebyseason > Sales > Line List */}
         <div className="flex items-center gap-4 text-sm text-gray-500">
-          <span className="font-semibold">Source:</span>
+          <span className="font-semibold">MSRP/Price Source:</span>
           <span className="flex items-center gap-1">
             <span className="text-emerald-500">●</span> pricebyseason
           </span>
           <span className="flex items-center gap-1">
-            <span className="text-blue-500">○</span> Line List
+            <span className="text-amber-500">◇</span> Sales
           </span>
           <span className="flex items-center gap-1">
-            <span className="text-amber-500">◇</span> Sales
+            <span className="text-blue-500">○</span> Line List
           </span>
           <span className="flex items-center gap-1">
             <span className="text-purple-500">■</span> Landed Sheet
@@ -660,18 +729,29 @@ export default function SeasonView({
                 <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide sticky left-[100px] bg-gray-100 z-10 min-w-[200px] border-r border-gray-200">
                   Description
                 </th>
-                {displaySeasons.map((season) => (
-                  <th
-                    key={season}
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 min-w-[110px] border-l border-gray-200 bg-gray-100"
-                    onClick={() => handleSort(season)}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="font-mono">{season}</span>
-                      <ArrowUpDown className="w-4 h-4" />
-                    </div>
-                  </th>
-                ))}
+                {displaySeasons.map((season) => {
+                  const status = getSeasonStatus(season);
+                  const badge = getSeasonStatusBadge(status);
+                  const currentSeason = getCurrentShippingSeason();
+                  const isCurrent = season === currentSeason;
+                  return (
+                    <th
+                      key={season}
+                      className={`px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 min-w-[120px] border-l border-gray-200 ${isCurrent ? 'bg-cyan-50' : 'bg-gray-100'}`}
+                      onClick={() => handleSort(season)}
+                    >
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono">{season}</span>
+                          <ArrowUpDown className="w-4 h-4" />
+                        </div>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${badge.color}`}>
+                          {badge.icon} {badge.label}
+                        </span>
+                      </div>
+                    </th>
+                  );
+                })}
                 {displaySeasons.length > 1 && (
                   <th
                     className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 w-28 border-l-2 border-gray-400 bg-gray-100"
@@ -806,7 +886,14 @@ export default function SeasonView({
 
         {/* Footer */}
         <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between text-base text-gray-700">
-          <span className="font-semibold">Showing {Math.min(sortedData.length, 100)} of {sortedData.length} styles</span>
+          <span className="font-semibold">
+            Showing {Math.min(sortedData.length, 100)} of {relevantPivotData.length} styles with {metricButtons.find(m => m.id === metric)?.label} data
+            {filteredStyles.length > relevantPivotData.length && (
+              <span className="text-gray-500 font-normal ml-1">
+                ({filteredStyles.length - relevantPivotData.length} hidden)
+              </span>
+            )}
+          </span>
           <span className="font-semibold">
             Sorted by: {sortColumn || seasons[seasons.length - 1]} {sortDir === 'desc' ? '↓' : '↑'}
           </span>
