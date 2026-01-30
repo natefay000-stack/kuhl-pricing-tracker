@@ -12,6 +12,12 @@ import {
   ChevronUp,
   ChevronDown,
   Settings,
+  Store,
+  Globe,
+  Users,
+  ShoppingCart,
+  Filter,
+  X,
 } from 'lucide-react';
 
 interface MarginsViewProps {
@@ -39,6 +45,22 @@ interface StyleMargin {
   vsTarget: number;
 }
 
+interface StyleChannelMargin {
+  styleNumber: string;
+  styleDesc: string;
+  categoryDesc: string;
+  divisionDesc: string;
+  landedCost: number;
+  wholesalePrice: number;
+  baselineMargin: number;
+  totalRevenue: number;
+  totalUnits: number;
+  avgNetPrice: number;
+  weightedMargin: number;
+  marginDelta: number;
+  channelMix: Record<string, { revenue: number; units: number; pct: number; margin: number; avgNetPrice: number }>;
+}
+
 interface CategoryMargin {
   category: string;
   revenue: number;
@@ -56,6 +78,17 @@ interface ChannelMargin {
   margin: number;
 }
 
+interface ChannelPerformance {
+  channel: string;
+  channelName: string;
+  revenue: number;
+  units: number;
+  avgNetPrice: number;
+  avgLanded: number;
+  trueMargin: number;
+  revenuePct: number;
+}
+
 interface GenderMargin {
   gender: string;
   revenue: number;
@@ -64,7 +97,16 @@ interface GenderMargin {
   margin: number;
 }
 
-type SortField = 'styleNumber' | 'styleDesc' | 'revenue' | 'cogs' | 'gross' | 'margin' | 'vsTarget';
+interface CustomerBreakdown {
+  customer: string;
+  customerType: string;
+  revenue: number;
+  units: number;
+  avgNetPrice: number;
+  margin: number;
+}
+
+type SortField = 'styleNumber' | 'styleDesc' | 'revenue' | 'cogs' | 'gross' | 'margin' | 'vsTarget' | 'weightedMargin' | 'marginDelta' | 'baselineMargin';
 type SortDirection = 'asc' | 'desc';
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -74,6 +116,24 @@ const CHANNEL_LABELS: Record<string, string> = {
   'PS': 'Pro Sales',
   'EC': 'E-commerce',
   'KI': 'KÜHL Internal',
+  'DTC': 'DTC Stores',
+};
+
+// Primary channels for analysis
+const PRIMARY_CHANNELS = ['EC', 'DTC', 'PS', 'WH'];
+
+const CHANNEL_ICONS: Record<string, React.ReactNode> = {
+  'EC': <Globe className="w-5 h-5" />,
+  'DTC': <Store className="w-5 h-5" />,
+  'PS': <Users className="w-5 h-5" />,
+  'WH': <ShoppingCart className="w-5 h-5" />,
+};
+
+const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }> = {
+  'EC': { bg: 'bg-purple-600', text: 'text-purple-700', light: 'bg-purple-100' },
+  'DTC': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100' },
+  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100' },
+  'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100' },
 };
 
 const TARGET_MARGIN = 48; // Default target margin percentage
@@ -122,6 +182,16 @@ function getMarginBarColor(tier: 'excellent' | 'target' | 'watch' | 'problem'): 
   }
 }
 
+// Map customer types to primary channels
+function mapToChannel(customerType: string): string {
+  if (!customerType) return 'WH';
+  const upper = customerType.toUpperCase();
+  if (upper === 'EC') return 'EC';
+  if (upper === 'KI' || upper.includes('DTC') || upper.includes('STORE')) return 'DTC';
+  if (upper === 'PS') return 'PS';
+  return 'WH'; // WH, WD, BB all map to Wholesale
+}
+
 export default function MarginsView({
   products,
   sales,
@@ -131,11 +201,15 @@ export default function MarginsView({
   selectedCategory,
   onStyleClick,
 }: MarginsViewProps) {
-  const [sortField, setSortField] = useState<SortField>('margin');
+  const [sortField, setSortField] = useState<SortField>('weightedMargin');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const [selectedCustomerType, setSelectedCustomerType] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
+  const [expandedStyle, setExpandedStyle] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'channel' | 'traditional'>('channel');
 
   // Build cost lookup from costs data
   const costLookup = useMemo(() => {
@@ -157,13 +231,231 @@ export default function MarginsView({
     return lookup;
   }, [costs, products]);
 
-  // Filter sales by season first
+  // Filter sales by season and additional filters
   const filteredSales = useMemo(() => {
     return sales.filter(s => {
       if (selectedSeason && s.season !== selectedSeason) return false;
+      if (selectedCustomerType && mapToChannel(s.customerType) !== selectedCustomerType) return false;
+      if (selectedCustomer && s.customer !== selectedCustomer) return false;
       return true;
     });
-  }, [sales, selectedSeason]);
+  }, [sales, selectedSeason, selectedCustomerType, selectedCustomer]);
+
+  // Get unique customers for filter dropdown
+  const uniqueCustomers = useMemo(() => {
+    const customers = new Set<string>();
+    filteredSales.forEach(s => {
+      if (s.customer) customers.add(s.customer);
+    });
+    return Array.from(customers).sort();
+  }, [filteredSales]);
+
+  // Channel Performance Analysis - True Margin by Channel
+  const channelPerformance = useMemo(() => {
+    const byChannel = new Map<string, { revenue: number; units: number; totalCost: number; stylesWithCost: number }>();
+
+    filteredSales.forEach(record => {
+      // Apply division/category filters
+      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+
+      const channel = mapToChannel(record.customerType);
+      const landedCost = costLookup.get(record.styleNumber) || 0;
+      const units = record.unitsBooked || 0;
+
+      if (!byChannel.has(channel)) {
+        byChannel.set(channel, { revenue: 0, units: 0, totalCost: 0, stylesWithCost: 0 });
+      }
+
+      const entry = byChannel.get(channel)!;
+      entry.revenue += record.revenue || 0;
+      entry.units += units;
+      entry.totalCost += units * landedCost;
+      if (landedCost > 0) entry.stylesWithCost++;
+    });
+
+    const totalRevenue = Array.from(byChannel.values()).reduce((sum, c) => sum + c.revenue, 0);
+
+    const results: ChannelPerformance[] = PRIMARY_CHANNELS.map(channel => {
+      const data = byChannel.get(channel) || { revenue: 0, units: 0, totalCost: 0, stylesWithCost: 0 };
+      const avgNetPrice = data.units > 0 ? data.revenue / data.units : 0;
+      const avgLanded = data.units > 0 ? data.totalCost / data.units : 0;
+      // True Margin = (Net Unit Price - Landed Cost) / Net Unit Price × 100
+      const trueMargin = avgNetPrice > 0 ? ((avgNetPrice - avgLanded) / avgNetPrice) * 100 : 0;
+
+      return {
+        channel,
+        channelName: CHANNEL_LABELS[channel] || channel,
+        revenue: data.revenue,
+        units: data.units,
+        avgNetPrice,
+        avgLanded,
+        trueMargin,
+        revenuePct: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
+      };
+    });
+
+    // Add blended total
+    const totalUnits = results.reduce((sum, c) => sum + c.units, 0);
+    const totalCost = results.reduce((sum, c) => sum + (c.avgLanded * c.units), 0);
+    const blendedAvgNetPrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
+    const blendedAvgLanded = totalUnits > 0 ? totalCost / totalUnits : 0;
+    const blendedMargin = blendedAvgNetPrice > 0 ? ((blendedAvgNetPrice - blendedAvgLanded) / blendedAvgNetPrice) * 100 : 0;
+
+    return {
+      channels: results,
+      blended: {
+        revenue: totalRevenue,
+        units: totalUnits,
+        avgNetPrice: blendedAvgNetPrice,
+        avgLanded: blendedAvgLanded,
+        trueMargin: blendedMargin,
+      },
+    };
+  }, [filteredSales, costLookup, selectedDivision, selectedCategory]);
+
+  // Style-Level Margin Analysis with Channel Mix
+  const styleChannelMargins = useMemo(() => {
+    const byStyle = new Map<string, {
+      styleNumber: string;
+      styleDesc: string;
+      categoryDesc: string;
+      divisionDesc: string;
+      landedCost: number;
+      wholesalePrice: number;
+      channels: Map<string, { revenue: number; units: number }>;
+    }>();
+
+    filteredSales.forEach(record => {
+      // Apply division/category filters
+      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+
+      const channel = mapToChannel(record.customerType);
+      const landedCost = costLookup.get(record.styleNumber) || 0;
+
+      if (!byStyle.has(record.styleNumber)) {
+        // Get wholesale price from products or sales record
+        const product = products.find(p => p.styleNumber === record.styleNumber);
+        const wholesalePrice = product?.price || record.wholesalePrice || 0;
+
+        byStyle.set(record.styleNumber, {
+          styleNumber: record.styleNumber,
+          styleDesc: record.styleDesc || '',
+          categoryDesc: normalizeCategory(record.categoryDesc) || '',
+          divisionDesc: record.divisionDesc || '',
+          landedCost,
+          wholesalePrice,
+          channels: new Map(),
+        });
+      }
+
+      const style = byStyle.get(record.styleNumber)!;
+      if (!style.channels.has(channel)) {
+        style.channels.set(channel, { revenue: 0, units: 0 });
+      }
+
+      const channelData = style.channels.get(channel)!;
+      channelData.revenue += record.revenue || 0;
+      channelData.units += record.unitsBooked || 0;
+    });
+
+    // Calculate margins for each style
+    const results: StyleChannelMargin[] = Array.from(byStyle.values()).map(style => {
+      const totalRevenue = Array.from(style.channels.values()).reduce((sum, c) => sum + c.revenue, 0);
+      const totalUnits = Array.from(style.channels.values()).reduce((sum, c) => sum + c.units, 0);
+      const avgNetPrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
+
+      // Baseline margin: using wholesale price
+      const baselineMargin = style.wholesalePrice > 0 && style.landedCost > 0
+        ? ((style.wholesalePrice - style.landedCost) / style.wholesalePrice) * 100
+        : 0;
+
+      // Weighted margin: using actual avg net price (channel-mix weighted)
+      const weightedMargin = avgNetPrice > 0 && style.landedCost > 0
+        ? ((avgNetPrice - style.landedCost) / avgNetPrice) * 100
+        : 0;
+
+      // Channel mix breakdown
+      const channelMix: Record<string, { revenue: number; units: number; pct: number; margin: number; avgNetPrice: number }> = {};
+      PRIMARY_CHANNELS.forEach(ch => {
+        const data = style.channels.get(ch) || { revenue: 0, units: 0 };
+        const chAvgNetPrice = data.units > 0 ? data.revenue / data.units : 0;
+        const chMargin = chAvgNetPrice > 0 && style.landedCost > 0
+          ? ((chAvgNetPrice - style.landedCost) / chAvgNetPrice) * 100
+          : 0;
+
+        channelMix[ch] = {
+          revenue: data.revenue,
+          units: data.units,
+          pct: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
+          margin: chMargin,
+          avgNetPrice: chAvgNetPrice,
+        };
+      });
+
+      return {
+        styleNumber: style.styleNumber,
+        styleDesc: style.styleDesc,
+        categoryDesc: style.categoryDesc,
+        divisionDesc: style.divisionDesc,
+        landedCost: style.landedCost,
+        wholesalePrice: style.wholesalePrice,
+        baselineMargin,
+        totalRevenue,
+        totalUnits,
+        avgNetPrice,
+        weightedMargin,
+        marginDelta: weightedMargin - baselineMargin,
+        channelMix,
+      };
+    });
+
+    return results.filter(s => s.totalRevenue > 0);
+  }, [filteredSales, costLookup, products, selectedDivision, selectedCategory]);
+
+  // Customer breakdown for drill-down
+  const customerBreakdown = useMemo(() => {
+    const byCustomer = new Map<string, { customer: string; customerType: string; revenue: number; units: number; totalCost: number }>();
+
+    filteredSales.forEach(record => {
+      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+
+      const customer = record.customer || 'Unknown';
+      const landedCost = costLookup.get(record.styleNumber) || 0;
+      const units = record.unitsBooked || 0;
+
+      if (!byCustomer.has(customer)) {
+        byCustomer.set(customer, {
+          customer,
+          customerType: record.customerType || '',
+          revenue: 0,
+          units: 0,
+          totalCost: 0,
+        });
+      }
+
+      const entry = byCustomer.get(customer)!;
+      entry.revenue += record.revenue || 0;
+      entry.units += units;
+      entry.totalCost += units * landedCost;
+    });
+
+    return Array.from(byCustomer.values())
+      .map(c => ({
+        customer: c.customer,
+        customerType: c.customerType,
+        revenue: c.revenue,
+        units: c.units,
+        avgNetPrice: c.units > 0 ? c.revenue / c.units : 0,
+        margin: c.units > 0 && c.totalCost > 0
+          ? (((c.revenue / c.units) - (c.totalCost / c.units)) / (c.revenue / c.units)) * 100
+          : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 20);
+  }, [filteredSales, costLookup, selectedDivision, selectedCategory]);
 
   // Calculate margins by style
   const styleMargins = useMemo(() => {
@@ -218,11 +510,23 @@ export default function MarginsView({
     });
   }, [styleMargins, selectedDivision, selectedCategory, selectedCategoryFilter, selectedTier]);
 
-  // Sort styles
+  // Filter style channel margins
+  const filteredStyleChannelMargins = useMemo(() => {
+    return styleChannelMargins.filter(s => {
+      if (selectedCategoryFilter && s.categoryDesc !== selectedCategoryFilter) return false;
+      if (selectedTier) {
+        const tier = getMarginTier(s.weightedMargin);
+        if (tier !== selectedTier) return false;
+      }
+      return true;
+    });
+  }, [styleChannelMargins, selectedCategoryFilter, selectedTier]);
+
+  // Sort styles (traditional view)
   const sortedStyles = useMemo(() => {
     const sorted = [...filteredStyleMargins].sort((a, b) => {
-      let aVal: number | string = a[sortField];
-      let bVal: number | string = b[sortField];
+      let aVal: number | string = a[sortField as keyof StyleMargin] as number | string;
+      let bVal: number | string = b[sortField as keyof StyleMargin] as number | string;
 
       if (typeof aVal === 'string') {
         aVal = aVal.toLowerCase();
@@ -236,6 +540,28 @@ export default function MarginsView({
     });
     return sorted;
   }, [filteredStyleMargins, sortField, sortDirection]);
+
+  // Sort style channel margins
+  const sortedStyleChannelMargins = useMemo(() => {
+    const sorted = [...filteredStyleChannelMargins].sort((a, b) => {
+      const field = sortField as keyof StyleChannelMargin;
+      let aVal = a[field];
+      let bVal = b[field];
+
+      if (typeof aVal === 'string') {
+        return sortDirection === 'asc'
+          ? (aVal as string).toLowerCase().localeCompare((bVal as string).toLowerCase())
+          : (bVal as string).toLowerCase().localeCompare((aVal as string).toLowerCase());
+      }
+
+      if (typeof aVal === 'number') {
+        return sortDirection === 'asc' ? aVal - (bVal as number) : (bVal as number) - aVal;
+      }
+
+      return 0;
+    });
+    return sorted;
+  }, [filteredStyleChannelMargins, sortField, sortDirection]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -386,7 +712,15 @@ export default function MarginsView({
     setSelectedTier(null);
     setSelectedChannel(null);
     setSelectedCategoryFilter(null);
+    setSelectedCustomerType(null);
+    setSelectedCustomer(null);
   };
+
+  const toggleStyleExpand = (styleNumber: string) => {
+    setExpandedStyle(expandedStyle === styleNumber ? null : styleNumber);
+  };
+
+  const hasActiveFilters = selectedTier || selectedCategoryFilter || selectedCustomerType || selectedCustomer;
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
@@ -399,100 +733,615 @@ export default function MarginsView({
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-4xl font-display font-bold text-gray-900">
-          Margins View: {selectedSeason || 'All Seasons'}
-        </h2>
-        <p className="text-base text-gray-500 mt-2">
-          Profitability analysis across categories, channels, and styles
-        </p>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
-                {formatCurrency(stats.totalRevenue)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Revenue
-              </p>
-            </div>
-          </div>
+      {/* Header with View Toggle */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-4xl font-display font-bold text-gray-900">
+            Margin Analysis: {selectedSeason || 'All Seasons'}
+          </h2>
+          <p className="text-base text-gray-500 mt-2">
+            True margin analysis using actual sales prices by channel
+          </p>
         </div>
-
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-              <Package className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
-                {formatCurrency(stats.totalCogs)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                COGS
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
-                {formatCurrency(stats.totalGross)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Gross $
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Percent className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className={`text-2xl font-bold font-mono ${stats.overallMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-red-600'}`}>
-                {formatPercent(stats.overallMargin)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Margin %
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
-                {formatPercent(stats.markup)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Markup %
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setViewMode('channel')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              viewMode === 'channel'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Channel Analysis
+          </button>
+          <button
+            onClick={() => setViewMode('traditional')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              viewMode === 'traditional'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Traditional View
+          </button>
         </div>
       </div>
 
-      {/* Margin Health Bar */}
+      {/* Channel Summary Cards */}
+      {viewMode === 'channel' && (
+        <>
+          <div className="grid grid-cols-5 gap-4">
+            {/* Channel Cards */}
+            {channelPerformance.channels.map(channel => {
+              const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
+              const isSelected = selectedCustomerType === channel.channel;
+
+              return (
+                <button
+                  key={channel.channel}
+                  onClick={() => setSelectedCustomerType(isSelected ? null : channel.channel)}
+                  className={`bg-white rounded-xl border-2 p-5 shadow-sm transition-all text-left ${
+                    isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-lg ${colors.light} flex items-center justify-center ${colors.text}`}>
+                      {CHANNEL_ICONS[channel.channel] || <DollarSign className="w-5 h-5" />}
+                    </div>
+                    <div className="text-sm font-bold text-gray-600 uppercase tracking-wide">
+                      {channel.channel}
+                    </div>
+                  </div>
+                  <p className={`text-3xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {formatPercent(channel.trueMargin)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatCurrency(channel.revenue)} · {channel.revenuePct.toFixed(0)}% mix
+                  </p>
+                </button>
+              );
+            })}
+
+            {/* Blended Card */}
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-5 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Percent className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-sm font-bold text-gray-300 uppercase tracking-wide">
+                  BLENDED
+                </div>
+              </div>
+              <p className={`text-3xl font-bold font-mono ${channelPerformance.blended.trueMargin >= TARGET_MARGIN ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {formatPercent(channelPerformance.blended.trueMargin)}
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                {formatCurrency(channelPerformance.blended.revenue)} total
+              </p>
+            </div>
+          </div>
+
+          {/* Filters Row */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-500">Active filters:</span>
+              {selectedCustomerType && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-cyan-100 text-cyan-700 rounded-full text-sm font-medium">
+                  {CHANNEL_LABELS[selectedCustomerType] || selectedCustomerType}
+                  <button onClick={() => setSelectedCustomerType(null)} className="hover:text-cyan-900">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedCustomer && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                  {selectedCustomer}
+                  <button onClick={() => setSelectedCustomer(null)} className="hover:text-purple-900">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedTier && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                  {selectedTier}
+                  <button onClick={() => setSelectedTier(null)} className="hover:text-amber-900">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedCategoryFilter && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                  {selectedCategoryFilter}
+                  <button onClick={() => setSelectedCategoryFilter(null)} className="hover:text-green-900">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={clearFilters}
+                className="text-sm text-red-600 hover:text-red-700 font-medium ml-2"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {/* Channel Performance Table */}
+          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">Channel Performance</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-gray-200 bg-gray-50">
+                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Landed</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">True Margin</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Rev Mix</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {channelPerformance.channels.map((channel, index) => {
+                    const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
+                    return (
+                      <tr
+                        key={channel.channel}
+                        onClick={() => setSelectedCustomerType(selectedCustomerType === channel.channel ? null : channel.channel)}
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                          selectedCustomerType === channel.channel ? 'bg-cyan-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded ${colors.light} flex items-center justify-center ${colors.text}`}>
+                              {CHANNEL_ICONS[channel.channel]}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-gray-900">{channel.channelName}</span>
+                              <span className="text-xs text-gray-500 ml-2">({channel.channel})</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
+                          {formatCurrency(channel.revenue)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-600">
+                          {formatNumber(channel.units)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-900">
+                          ${channel.avgNetPrice.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-600">
+                          ${channel.avgLanded.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-mono font-bold px-2 py-1 rounded ${getMarginColor(channel.trueMargin)}`}>
+                            {formatPercent(channel.trueMargin)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${colors.bg}`}
+                                style={{ width: `${Math.min(channel.revenuePct, 100)}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-sm text-gray-600 w-12 text-right">
+                              {channel.revenuePct.toFixed(0)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Blended Total Row */}
+                  <tr className="bg-gray-100 font-semibold">
+                    <td className="px-4 py-3">
+                      <span className="font-bold text-gray-900">BLENDED TOTAL</span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                      {formatCurrency(channelPerformance.blended.revenue)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                      {formatNumber(channelPerformance.blended.units)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                      ${channelPerformance.blended.avgNetPrice.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
+                      ${channelPerformance.blended.avgLanded.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`font-mono font-bold px-3 py-1 rounded ${getMarginColor(channelPerformance.blended.trueMargin)}`}>
+                        {formatPercent(channelPerformance.blended.trueMargin)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                      100%
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Customer Breakdown */}
+          {customerBreakdown.length > 0 && (
+            <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+              <div className="px-6 py-4 border-b-2 border-gray-200">
+                <h3 className="text-xl font-bold text-gray-900">Top Customers by Revenue</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-gray-200 bg-gray-50">
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Type</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customerBreakdown.slice(0, 10).map((customer, index) => (
+                      <tr
+                        key={customer.customer}
+                        onClick={() => setSelectedCustomer(selectedCustomer === customer.customer ? null : customer.customer)}
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                          selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900">{customer.customer}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-600">
+                            {customer.customerType}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrency(customer.revenue)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-600">{formatNumber(customer.units)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-gray-900">${customer.avgNetPrice.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-mono font-semibold px-2 py-1 rounded ${getMarginColor(customer.margin)}`}>
+                            {formatPercent(customer.margin)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Style-Level Margin Analysis */}
+          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Style-Level Margin Analysis</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Baseline (wholesale) vs Weighted (actual sales mix) margin comparison
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="flex items-center gap-1">
+                  <span className="text-emerald-600">🟢</span> Above baseline
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="text-red-600">🔴</span> Below baseline
+                </span>
+                <span className="text-gray-500">
+                  {formatNumber(sortedStyleChannelMargins.length)} styles
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-gray-300 text-left bg-gray-50">
+                    <th
+                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900"
+                      onClick={() => handleSort('styleNumber')}
+                    >
+                      Style <SortIcon field="styleNumber" />
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide">
+                      Description
+                    </th>
+                    <th
+                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      onClick={() => handleSort('revenue' as SortField)}
+                    >
+                      Revenue
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center" colSpan={4}>
+                      Channel Mix
+                    </th>
+                    <th
+                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      onClick={() => handleSort('baselineMargin')}
+                    >
+                      Baseline <SortIcon field="baselineMargin" />
+                    </th>
+                    <th
+                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      onClick={() => handleSort('weightedMargin')}
+                    >
+                      Weighted <SortIcon field="weightedMargin" />
+                    </th>
+                    <th
+                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l-2 border-gray-300"
+                      onClick={() => handleSort('marginDelta')}
+                    >
+                      Δ <SortIcon field="marginDelta" />
+                    </th>
+                    <th className="px-4 py-3 w-10"></th>
+                  </tr>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-xs">
+                    <th colSpan={3}></th>
+                    {PRIMARY_CHANNELS.map(ch => {
+                      const colors = CHANNEL_COLORS[ch];
+                      return (
+                        <th key={ch} className={`px-2 py-1 text-center font-semibold ${colors.text}`}>
+                          {ch}
+                        </th>
+                      );
+                    })}
+                    <th colSpan={4}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedStyleChannelMargins.slice(0, 50).map((style, index) => {
+                    const isExpanded = expandedStyle === style.styleNumber;
+                    const deltaIndicator = style.marginDelta >= 2 ? '🟢' : style.marginDelta <= -2 ? '🔴' : '';
+
+                    return (
+                      <>
+                        <tr
+                          key={style.styleNumber}
+                          onClick={() => toggleStyleExpand(style.styleNumber)}
+                          className={`border-b border-gray-200 cursor-pointer transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          } ${isExpanded ? 'bg-cyan-50' : 'hover:bg-cyan-50'}`}
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-base font-bold text-gray-900">
+                              {style.styleNumber}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700 max-w-[180px] truncate">
+                            {style.styleDesc}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
+                            {formatCurrency(style.totalRevenue)}
+                          </td>
+                          {/* Channel Mix Mini Bars */}
+                          {PRIMARY_CHANNELS.map(ch => {
+                            const mix = style.channelMix[ch];
+                            const colors = CHANNEL_COLORS[ch];
+                            return (
+                              <td key={ch} className="px-2 py-3 text-center">
+                                {mix && mix.pct > 0 ? (
+                                  <div className="flex flex-col items-center">
+                                    <div className="w-8 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full ${colors.bg}`}
+                                        style={{ width: `${Math.min(mix.pct, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs font-mono text-gray-500 mt-0.5">
+                                      {mix.pct.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-300">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-3 text-right">
+                            <span className="font-mono text-sm text-gray-600">
+                              {formatPercent(style.baselineMargin)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`font-mono font-bold px-2 py-1 rounded ${getMarginColor(style.weightedMargin)}`}>
+                              {formatPercent(style.weightedMargin)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right border-l-2 border-gray-300">
+                            <span
+                              className={`font-mono font-bold flex items-center justify-end gap-1 ${
+                                style.marginDelta >= 0 ? 'text-emerald-700' : 'text-red-700'
+                              }`}
+                            >
+                              {deltaIndicator && <span>{deltaIndicator}</span>}
+                              {style.marginDelta >= 0 ? '+' : ''}{style.marginDelta.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          </td>
+                        </tr>
+                        {/* Expanded Detail Row */}
+                        {isExpanded && (
+                          <tr className="bg-gray-100 border-b border-gray-300">
+                            <td colSpan={11} className="px-6 py-4">
+                              <div className="grid grid-cols-4 gap-4">
+                                {PRIMARY_CHANNELS.map(ch => {
+                                  const mix = style.channelMix[ch];
+                                  const colors = CHANNEL_COLORS[ch];
+                                  if (!mix || mix.revenue === 0) return null;
+
+                                  return (
+                                    <div key={ch} className={`${colors.light} rounded-lg p-4`}>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div className={`${colors.text}`}>
+                                          {CHANNEL_ICONS[ch]}
+                                        </div>
+                                        <span className={`font-bold ${colors.text}`}>
+                                          {CHANNEL_LABELS[ch]}
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1 text-sm">
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Revenue:</span>
+                                          <span className="font-mono font-medium">{formatCurrency(mix.revenue)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Units:</span>
+                                          <span className="font-mono">{formatNumber(mix.units)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Avg Net Price:</span>
+                                          <span className="font-mono">${mix.avgNetPrice.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Channel Margin:</span>
+                                          <span className={`font-mono font-bold ${mix.margin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {formatPercent(mix.margin)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-gray-600">Mix %:</span>
+                                          <span className="font-mono font-medium">{mix.pct.toFixed(1)}%</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="mt-4 pt-4 border-t border-gray-300 flex items-center gap-6 text-sm">
+                                <div>
+                                  <span className="text-gray-600">Landed Cost:</span>
+                                  <span className="font-mono font-medium ml-2">${style.landedCost.toFixed(2)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Wholesale Price:</span>
+                                  <span className="font-mono font-medium ml-2">${style.wholesalePrice.toFixed(2)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-600">Avg Net Price (All Channels):</span>
+                                  <span className="font-mono font-medium ml-2">${style.avgNetPrice.toFixed(2)}</span>
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onStyleClick(style.styleNumber); }}
+                                  className="ml-auto text-cyan-600 hover:text-cyan-700 font-semibold"
+                                >
+                                  View Full Details →
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {sortedStyleChannelMargins.length > 50 && (
+              <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 text-center text-base text-gray-600 font-medium">
+                Showing 50 of {formatNumber(sortedStyleChannelMargins.length)} styles
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Traditional View Stats */}
+      {viewMode === 'traditional' && (
+        <div className="grid grid-cols-5 gap-4">
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-mono text-gray-900">
+                  {formatCurrency(stats.totalRevenue)}
+                </p>
+                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                  Revenue
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                <Package className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-mono text-gray-900">
+                  {formatCurrency(stats.totalCogs)}
+                </p>
+                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                  COGS
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-mono text-gray-900">
+                  {formatCurrency(stats.totalGross)}
+                </p>
+                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                  Gross $
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                <Percent className="w-5 h-5 text-purple-600" />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold font-mono ${stats.overallMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatPercent(stats.overallMargin)}
+                </p>
+                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                  Margin %
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold font-mono text-gray-900">
+                  {formatPercent(stats.markup)}
+                </p>
+                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                  Markup %
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Margin Health Bar - Traditional View Only */}
+      {viewMode === 'traditional' && (
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
         <div className="px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
           <h3 className="text-xl font-bold text-gray-900">Margin Health</h3>
@@ -583,8 +1432,10 @@ export default function MarginsView({
           </div>
         </div>
       </div>
+      )}
 
       {/* Two Column Row: By Category and By Channel */}
+      {viewMode === 'traditional' && (
       <div className="grid grid-cols-2 gap-6">
         {/* By Category */}
         <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
@@ -663,8 +1514,10 @@ export default function MarginsView({
           </div>
         </div>
       </div>
+      )}
 
       {/* Two Column Row: By Gender and Top/Bottom Styles */}
+      {viewMode === 'traditional' && (
       <div className="grid grid-cols-2 gap-6">
         {/* By Gender + Bottom Styles */}
         <div className="space-y-6">
@@ -790,8 +1643,10 @@ export default function MarginsView({
           </div>
         </div>
       </div>
+      )}
 
       {/* Margin By Style Table */}
+      {viewMode === 'traditional' && (
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
         <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
           <h3 className="text-xl font-bold text-gray-900">Margin by Style</h3>
@@ -914,6 +1769,7 @@ export default function MarginsView({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
