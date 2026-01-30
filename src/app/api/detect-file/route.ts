@@ -61,9 +61,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
 
     // For LDP Requests sheet, data starts at row 11
     const isLDPSheet = sheetName === 'LDP Requests';
+
+    // PERFORMANCE FIX: Only parse first 20 rows for detection (not entire file!)
+    // Get the sheet range to calculate total rows without parsing everything
+    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+    const totalRows = range.e.r - range.s.r; // Approximate row count
+
+    // Parse only first 20 rows for detection
     const rows = XLSX.utils.sheet_to_json(sheet, {
       defval: '',
-      range: isLDPSheet ? 10 : undefined,
+      range: isLDPSheet ? { s: { r: 10, c: 0 }, e: { r: 30, c: range.e.c } } : { s: { r: 0, c: 0 }, e: { r: 20, c: range.e.c } },
     }) as Record<string, unknown>[];
 
     if (rows.length === 0) {
@@ -91,10 +98,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
     // Extract season from filename
     const detectedSeason = extractSeasonFromFilename(file.name);
 
-    // Get preview rows (first 5)
+    // Get preview rows (first 5) and use approximate total count
     const previewRows = rows.slice(0, 5);
+    const recordCount = Math.max(totalRows - (isLDPSheet ? 10 : 0), rows.length);
 
-    console.log(`Detected: ${detection.type} (${detection.confidence}), Season: ${detectedSeason}, Records: ${rows.length}`);
+    console.log(`Detected: ${detection.type} (${detection.confidence}), Season: ${detectedSeason}, Records: ~${recordCount}`);
 
     return NextResponse.json({
       success: true,
@@ -104,7 +112,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
       confidence: detection.confidence,
       matchedColumns: detection.matchedColumns,
       allColumns: detection.allColumns,
-      recordCount: rows.length,
+      recordCount,
       detectedSeason,
       previewRows,
     });
