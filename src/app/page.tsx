@@ -316,13 +316,39 @@ export default function Home() {
   }) => {
     console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs');
 
-    // For products: replace all products with new data (Line List import)
+    // For products: clean slate per season - delete existing products for each season in file, then add new
     if (data.products && data.products.length > 0) {
       const newProducts = data.products as unknown as Product[];
-      setProducts(newProducts);
 
-      // Persist to database
+      // Find all seasons in the imported data
+      const seasonsInFile = new Set<string>();
+      newProducts.forEach(p => p.season && seasonsInFile.add(p.season));
+      console.log('Seasons in imported Line List:', Array.from(seasonsInFile));
+
+      // Keep products from seasons NOT in the file, replace those that ARE in the file
+      const productsToKeep = products.filter(p => !seasonsInFile.has(p.season));
+      const finalProducts = [...productsToKeep, ...newProducts];
+      setProducts(finalProducts);
+
+      // Persist to database - delete then insert for each season
       try {
+        // First, delete existing products for each season in the file
+        for (const season of Array.from(seasonsInFile)) {
+          console.log(`Deleting existing products for season: ${season}`);
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'products',
+              season,
+              data: [], // Empty data with replaceExisting will just delete
+              fileName: `line_list_clear_${season}`,
+              replaceExisting: true,
+            }),
+          });
+        }
+
+        // Then insert all new products in batches
         const BATCH_SIZE = 1000;
         for (let i = 0; i < data.products.length; i += BATCH_SIZE) {
           const batch = data.products.slice(i, i + BATCH_SIZE);
@@ -333,17 +359,18 @@ export default function Home() {
               type: 'products',
               data: batch,
               fileName: 'line_list_import',
-              replaceExisting: i === 0, // Replace all on first batch
+              replaceExisting: false, // Already deleted, just insert
             }),
           });
         }
+        console.log('Line List import complete');
       } catch (dbErr) {
         console.warn('Could not persist products to database:', dbErr);
       }
 
       // Update cache
       setCachedData({
-        products: newProducts,
+        products: finalProducts,
         sales,
         pricing,
         costs,
