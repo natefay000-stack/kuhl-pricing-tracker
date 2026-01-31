@@ -335,6 +335,11 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
 
+  // Log column headers for debugging
+  if (rows.length > 0) {
+    console.log('Sales file columns:', Object.keys(rows[0]));
+  }
+
   return rows
     .filter(row => {
       const styleNumber = parseString(row['Style']);
@@ -344,13 +349,23 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
       const rawSeason = parseString(row['Season']);
       const season = normalizeSeasonCode(rawSeason);
 
+      // Try multiple column name variations for customer name
+      const customer = parseString(
+        row['Customer Name'] ||
+        row['Customer'] ||
+        row['Cust Name'] ||
+        row['Cust'] ||
+        row['Account Name'] ||
+        row['Account']
+      );
+
       return {
         styleNumber: parseString(row['Style']),
         styleDesc: parseString(row['Style Description']),
         colorCode: parseString(row['Color']),
         colorDesc: parseString(row['Color Desc. From Clr Mst']),
         season,
-        customer: parseString(row['Customer Name']),
+        customer,
         customerType: parseString(row['Customer Type']),
         unitsBooked: parseNumber(row['Units Current Booked']),
         revenue: parseNumber(row['$ Current Booked Net']),
