@@ -25,6 +25,39 @@ interface AggregatedSale {
   customerTypes: string[];
 }
 
+// Channel aggregation for charts
+interface ChannelAggregation {
+  channel: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+// Category aggregation
+interface CategoryAggregation {
+  category: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+// Gender aggregation
+interface GenderAggregation {
+  gender: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+// Customer aggregation
+interface CustomerAggregation {
+  customer: string;
+  customerType: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
 // GET - Load all data from database
 export async function GET() {
   try {
@@ -65,13 +98,24 @@ export async function GET() {
 
     // Aggregate sales by style+season to reduce 246K records to ~5K
     const salesAggMap = new Map<string, AggregatedSale>();
+
+    // Also build channel, category, gender, and customer aggregations from raw data
+    const channelAggMap = new Map<string, ChannelAggregation>();
+    const categoryAggMap = new Map<string, CategoryAggregation>();
+    const genderAggMap = new Map<string, GenderAggregation>();
+    const customerAggMap = new Map<string, CustomerAggregation>();
+
     for (const s of salesRaw) {
-      const key = `${s.styleNumber}-${s.season}`;
-      const existing = salesAggMap.get(key);
+      const revenue = s.revenue || 0;
+      const units = s.unitsBooked || 0;
+
+      // Style+Season aggregation (for table)
+      const styleKey = `${s.styleNumber}-${s.season}`;
+      const existing = salesAggMap.get(styleKey);
       if (existing) {
-        existing.unitsBooked += s.unitsBooked || 0;
+        existing.unitsBooked += units;
         existing.unitsOpen += s.unitsOpen || 0;
-        existing.revenue += s.revenue || 0;
+        existing.revenue += revenue;
         existing.shipped += s.shipped || 0;
         existing.cost += s.cost || 0;
         existing.customerCount++;
@@ -86,7 +130,7 @@ export async function GET() {
         if (!existing.wholesalePrice && s.wholesalePrice) existing.wholesalePrice = s.wholesalePrice;
         if (!existing.msrp && s.msrp) existing.msrp = s.msrp;
       } else {
-        salesAggMap.set(key, {
+        salesAggMap.set(styleKey, {
           styleNumber: s.styleNumber,
           styleDesc: s.styleDesc || '',
           season: s.season,
@@ -94,9 +138,9 @@ export async function GET() {
           divisionDesc: s.divisionDesc || '',
           categoryDesc: s.categoryDesc || '',
           gender: s.gender || '',
-          unitsBooked: s.unitsBooked || 0,
+          unitsBooked: units,
           unitsOpen: s.unitsOpen || 0,
-          revenue: s.revenue || 0,
+          revenue: revenue,
           shipped: s.shipped || 0,
           cost: s.cost || 0,
           wholesalePrice: s.wholesalePrice || 0,
@@ -105,8 +149,88 @@ export async function GET() {
           customerTypes: s.customerType ? [s.customerType] : [],
         });
       }
+
+      // Channel aggregation (by season + customerType)
+      if (s.customerType) {
+        const channelKey = `${s.season}-${s.customerType}`;
+        const channelExisting = channelAggMap.get(channelKey);
+        if (channelExisting) {
+          channelExisting.revenue += revenue;
+          channelExisting.units += units;
+        } else {
+          channelAggMap.set(channelKey, {
+            channel: s.customerType,
+            season: s.season,
+            revenue: revenue,
+            units: units,
+          });
+        }
+      }
+
+      // Category aggregation (by season + category)
+      const category = s.categoryDesc || 'Other';
+      const categoryKey = `${s.season}-${category}`;
+      const categoryExisting = categoryAggMap.get(categoryKey);
+      if (categoryExisting) {
+        categoryExisting.revenue += revenue;
+        categoryExisting.units += units;
+      } else {
+        categoryAggMap.set(categoryKey, {
+          category: category,
+          season: s.season,
+          revenue: revenue,
+          units: units,
+        });
+      }
+
+      // Gender aggregation (derive from divisionDesc)
+      const divisionLower = (s.divisionDesc || '').toLowerCase();
+      let gender = 'Unknown';
+      if (divisionLower.includes("men's") && !divisionLower.includes("women's")) {
+        gender = "Men's";
+      } else if (divisionLower.includes("women's") || divisionLower.includes("woman")) {
+        gender = "Women's";
+      } else if (divisionLower.includes("unisex") || divisionLower.includes("accessories")) {
+        gender = "Unisex";
+      }
+      const genderKey = `${s.season}-${gender}`;
+      const genderExisting = genderAggMap.get(genderKey);
+      if (genderExisting) {
+        genderExisting.revenue += revenue;
+        genderExisting.units += units;
+      } else {
+        genderAggMap.set(genderKey, {
+          gender: gender,
+          season: s.season,
+          revenue: revenue,
+          units: units,
+        });
+      }
+
+      // Customer aggregation (by season + customer)
+      if (s.customer) {
+        const customerKey = `${s.season}-${s.customer}`;
+        const customerExisting = customerAggMap.get(customerKey);
+        if (customerExisting) {
+          customerExisting.revenue += revenue;
+          customerExisting.units += units;
+        } else {
+          customerAggMap.set(customerKey, {
+            customer: s.customer,
+            customerType: s.customerType || '',
+            season: s.season,
+            revenue: revenue,
+            units: units,
+          });
+        }
+      }
     }
+
     const sales = Array.from(salesAggMap.values());
+    const salesByChannel = Array.from(channelAggMap.values());
+    const salesByCategory = Array.from(categoryAggMap.values());
+    const salesByGender = Array.from(genderAggMap.values());
+    const salesByCustomer = Array.from(customerAggMap.values());
 
     // Transform to match expected format
     const transformedProducts = products.map((p) => ({
@@ -216,6 +340,13 @@ export async function GET() {
         sales: transformedSales,
         pricing: transformedPricing,
         costs: transformedCosts,
+      },
+      // Pre-computed aggregations for Sales View charts (from raw data, not style-aggregated)
+      salesAggregations: {
+        byChannel: salesByChannel,
+        byCategory: salesByCategory,
+        byGender: salesByGender,
+        byCustomer: salesByCustomer,
       },
     });
   } catch (error) {

@@ -42,23 +42,28 @@ async function importSalesFile(filename: string, isFirst: boolean): Promise<numb
 
   console.log('  📊 Parsed', rows.length, 'rows');
 
-  // Transform to sales format
+  // Transform to sales format - column names from actual Excel headers
   const sales = rows.map((row) => ({
     styleNumber: parseString(row['Style']),
     styleDesc: parseString(row['Style Description']),
-    colorCode: parseString(row['Clr']),
-    colorDesc: parseString(row['Clr_Desc']),
+    colorCode: parseString(row['Color']),
+    colorDesc: parseString(row['Color Desc. From Clr Mst']),
     season: parseString(row['Season']),
-    customer: parseString(row['Customer']),
-    customerType: parseString(row['Cust Type']),
-    salesRep: parseString(row['Sales Rep']),
+    customer: parseString(row['Customer Name']),
+    customerType: parseString(row['Customer Type']),
+    salesRep: parseString(row['Sales Rep 1']),
     divisionDesc: parseString(row['Division']),
     categoryDesc: parseString(row['Category Description']),
+    gender: parseString(row['Gender Descripton']),
     unitsBooked: parseNumber(row['Units Current Booked']),
+    unitsOpen: parseNumber(row['Units Open']),
     revenue: parseNumber(row['$ Current Booked Net']),
+    shipped: parseNumber(row['$ Shipped Net']),
+    cost: parseNumber(row['Cost']),
     wholesalePrice: parseNumber(row['Wholesale Price']),
     msrp: parseNumber(row['MSRP (Style)']) || parseNumber(row['MSRP (Order)']),
     netUnitPrice: parseNumber(row['Net Unit Price']),
+    orderType: parseString(row['Order Type']),
   })).filter(s => s.styleNumber); // Filter out empty rows
 
   console.log('  📤 Importing', sales.length, 'records...');

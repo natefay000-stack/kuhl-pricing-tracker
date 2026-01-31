@@ -22,11 +22,49 @@ import { clearAllData } from '@/lib/db';
 const CACHE_VERSION = 'v1';
 const CACHE_KEY = `kuhl-data-${CACHE_VERSION}`;
 
+// Sales aggregation types (from API)
+interface ChannelAggregation {
+  channel: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface CategoryAggregation {
+  category: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface GenderAggregation {
+  gender: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface CustomerAggregation {
+  customer: string;
+  customerType: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+export interface SalesAggregations {
+  byChannel: ChannelAggregation[];
+  byCategory: CategoryAggregation[];
+  byGender: GenderAggregation[];
+  byCustomer: CustomerAggregation[];
+}
+
 interface CachedData {
   products: Product[];
   sales: SalesRecord[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  salesAggregations?: SalesAggregations;
   timestamp: number;
 }
 
@@ -89,6 +127,7 @@ export default function Home() {
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [pricing, setPricing] = useState<PricingRecord[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
+  const [salesAggregations, setSalesAggregations] = useState<SalesAggregations | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Checking cache...');
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
@@ -146,6 +185,9 @@ export default function Home() {
           setSales(cached.sales);
           setPricing(cached.pricing);
           setCosts(cached.costs);
+          if (cached.salesAggregations) {
+            setSalesAggregations(cached.salesAggregations);
+          }
 
           setLoadingProgress(100);
           setIsLoading(false);
@@ -162,6 +204,7 @@ export default function Home() {
           sales: [] as SalesRecord[],
           pricing: [] as PricingRecord[],
           costs: [] as CostRecord[],
+          salesAggregations: null as SalesAggregations | null,
         };
 
         try {
@@ -176,6 +219,7 @@ export default function Home() {
                 sales: dbResult.data.sales || [],
                 pricing: dbResult.data.pricing || [],
                 costs: dbResult.data.costs || [],
+                salesAggregations: dbResult.salesAggregations || null,
               };
             }
           }
@@ -206,6 +250,7 @@ export default function Home() {
                   sales: result.data.sales || [],
                   pricing: result.data.pricing || [],
                   costs: result.data.costs || [],
+                  salesAggregations: null, // Excel fallback doesn't have aggregations
                 };
               }
             }
@@ -225,11 +270,20 @@ export default function Home() {
         setSales(data.sales);
         setPricing(data.pricing);
         setCosts(data.costs);
+        if (data.salesAggregations) {
+          setSalesAggregations(data.salesAggregations);
+        }
 
         // Cache for next time
         setLoadingStatus('Caching data...');
         setLoadingProgress(95);
-        setCachedData(data);
+        setCachedData({
+          products: data.products,
+          sales: data.sales,
+          pricing: data.pricing,
+          costs: data.costs,
+          salesAggregations: data.salesAggregations || undefined,
+        });
 
         setLoadingProgress(100);
         setIsLoading(false);
@@ -735,6 +789,7 @@ export default function Home() {
               sales={sales}
               pricing={pricing}
               costs={costs}
+              salesAggregations={salesAggregations}
               selectedSeason={selectedSeason}
               selectedDivision={selectedDivision}
               selectedCategory={selectedCategory}

@@ -17,11 +17,68 @@ import {
   Search,
 } from 'lucide-react';
 
+// Sales aggregation types (from API)
+interface ChannelAggregation {
+  channel: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface CategoryAggregation {
+  category: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface GenderAggregation {
+  gender: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface CustomerAggregation {
+  customer: string;
+  customerType: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+interface SalesAggregations {
+  byChannel: ChannelAggregation[];
+  byCategory: CategoryAggregation[];
+  byGender: GenderAggregation[];
+  byCustomer: CustomerAggregation[];
+}
+
+// Channel constants - FIXED list of 6 channels
+const CHANNEL_LABELS: Record<string, string> = {
+  WH: 'Wholesale',
+  BB: 'Big Box / REI',
+  WD: 'Wholesale Direct',
+  EC: 'E-Commerce',
+  PS: 'Pro Sales',
+  KI: 'KÜHL Internal',
+};
+
+const CHANNEL_COLORS: Record<string, string> = {
+  WH: '#2563eb',  // blue-600
+  BB: '#7c3aed',  // violet-600
+  WD: '#059669',  // emerald-600
+  EC: '#d97706',  // amber-600
+  PS: '#dc2626',  // red-600
+  KI: '#6b7280',  // gray-500
+};
+
 interface SalesViewProps {
   sales: SalesRecord[];
   products: Product[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  salesAggregations: SalesAggregations | null;
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
@@ -77,6 +134,7 @@ export default function SalesView({
   products,
   pricing,
   costs,
+  salesAggregations,
   selectedSeason,
   selectedDivision,
   selectedCategory,
@@ -234,95 +292,157 @@ export default function SalesView({
     };
   }, [filteredSales, filterSeason, filterCategory, filterCustomerType, filterCustomer, filterSalesRep, filterStyleNumber, selectedDivision, activeFilters, sales]);
 
-  // By Channel (for chart) - use base filtered, not active filters
+  // By Channel (for chart) - use PRE-COMPUTED aggregations from API (not style-aggregated sales)
+  // This is critical: the API aggregates by individual customerType from raw sales records
   const byChannel = useMemo(() => {
-    const salesForChart = activeFilters.channel ? baseFilteredSales : filteredSales;
-    const grouped = new Map<string, number>();
+    if (!salesAggregations?.byChannel) {
+      // Fallback if no aggregations available
+      return [];
+    }
 
-    salesForChart.forEach((s) => {
-      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
-      if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
-      if (activeFilters.customer && s.customer !== activeFilters.customer) return;
+    // Filter by season if selected
+    let channelData = salesAggregations.byChannel;
+    if (filterSeason) {
+      channelData = channelData.filter(c => c.season === filterSeason);
+    }
 
-      const key = s.customerType || 'Other';
-      grouped.set(key, (grouped.get(key) || 0) + (s.revenue || 0));
+    // Group by channel code
+    const grouped = new Map<string, { revenue: number; units: number }>();
+    channelData.forEach((c) => {
+      const existing = grouped.get(c.channel);
+      if (existing) {
+        existing.revenue += c.revenue;
+        existing.units += c.units;
+      } else {
+        grouped.set(c.channel, { revenue: c.revenue, units: c.units });
+      }
     });
 
+    // Convert to array with labels and colors
     const result = Array.from(grouped.entries())
-      .map(([key, revenue]) => ({ key, label: CUSTOMER_TYPE_LABELS[key] || key, revenue }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    const maxRevenue = Math.max(...result.map((r) => r.revenue), 1);
-    return result.map((r) => ({ ...r, percent: (r.revenue / maxRevenue) * 100 }));
-  }, [baseFilteredSales, filteredSales, activeFilters]);
-
-  // By Category (for chart)
-  const byCategory = useMemo(() => {
-    const salesForChart = activeFilters.category ? baseFilteredSales : filteredSales;
-    const grouped = new Map<string, number>();
-
-    salesForChart.forEach((s) => {
-      if (activeFilters.channel && s.customerType !== activeFilters.channel) return;
-      if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
-      if (activeFilters.customer && s.customer !== activeFilters.customer) return;
-
-      const key = normalizeCategory(s.categoryDesc) || 'Other';
-      grouped.set(key, (grouped.get(key) || 0) + (s.revenue || 0));
-    });
-
-    const result = Array.from(grouped.entries())
-      .map(([key, revenue]) => ({ key, revenue }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 6);
-
-    const maxRevenue = Math.max(...result.map((r) => r.revenue), 1);
-    return result.map((r) => ({ ...r, percent: (r.revenue / maxRevenue) * 100 }));
-  }, [baseFilteredSales, filteredSales, activeFilters]);
-
-  // By Gender (for chart)
-  const byGender = useMemo(() => {
-    const salesForChart = activeFilters.gender ? baseFilteredSales : filteredSales;
-    const grouped = new Map<string, number>();
-
-    salesForChart.forEach((s) => {
-      if (activeFilters.channel && s.customerType !== activeFilters.channel) return;
-      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
-      if (activeFilters.customer && s.customer !== activeFilters.customer) return;
-
-      const key = getGenderFromDivision(s.divisionDesc);
-      grouped.set(key, (grouped.get(key) || 0) + (s.revenue || 0));
-    });
-
-    const total = Array.from(grouped.values()).reduce((a, b) => a + b, 0);
-
-    return Array.from(grouped.entries())
-      .map(([key, revenue]) => ({
+      .map(([key, data]) => ({
         key,
-        revenue,
-        percent: total > 0 ? (revenue / total) * 100 : 0,
+        label: CHANNEL_LABELS[key] || CUSTOMER_TYPE_LABELS[key] || key,
+        revenue: data.revenue,
+        units: data.units,
+        color: CHANNEL_COLORS[key] || '#6b7280',
       }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [baseFilteredSales, filteredSales, activeFilters]);
 
-  // Top Customers
+    // Calculate percentages based on max revenue (for bar width)
+    const maxRevenue = Math.max(...result.map((r) => r.revenue), 1);
+    const totalRevenue = result.reduce((sum, r) => sum + r.revenue, 0);
+    return result.map((r) => ({
+      ...r,
+      percent: (r.revenue / maxRevenue) * 100,
+      sharePercent: totalRevenue > 0 ? (r.revenue / totalRevenue) * 100 : 0,
+    }));
+  }, [salesAggregations, filterSeason]);
+
+  // By Category (for chart) - use PRE-COMPUTED aggregations from API
+  const byCategory = useMemo(() => {
+    if (!salesAggregations?.byCategory) {
+      return [];
+    }
+
+    // Filter by season if selected
+    let categoryData = salesAggregations.byCategory;
+    if (filterSeason) {
+      categoryData = categoryData.filter(c => c.season === filterSeason);
+    }
+
+    // Group by category
+    const grouped = new Map<string, { revenue: number; units: number }>();
+    categoryData.forEach((c) => {
+      const key = normalizeCategory(c.category) || 'Other';
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.revenue += c.revenue;
+        existing.units += c.units;
+      } else {
+        grouped.set(key, { revenue: c.revenue, units: c.units });
+      }
+    });
+
+    const result = Array.from(grouped.entries())
+      .map(([key, data]) => ({ key, revenue: data.revenue, units: data.units }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8);
+
+    const maxRevenue = Math.max(...result.map((r) => r.revenue), 1);
+    return result.map((r) => ({ ...r, percent: (r.revenue / maxRevenue) * 100 }));
+  }, [salesAggregations, filterSeason]);
+
+  // By Gender (for chart) - use PRE-COMPUTED aggregations from API
+  const byGender = useMemo(() => {
+    if (!salesAggregations?.byGender) {
+      return [];
+    }
+
+    // Filter by season if selected
+    let genderData = salesAggregations.byGender;
+    if (filterSeason) {
+      genderData = genderData.filter(g => g.season === filterSeason);
+    }
+
+    // Group by gender
+    const grouped = new Map<string, { revenue: number; units: number }>();
+    genderData.forEach((g) => {
+      const existing = grouped.get(g.gender);
+      if (existing) {
+        existing.revenue += g.revenue;
+        existing.units += g.units;
+      } else {
+        grouped.set(g.gender, { revenue: g.revenue, units: g.units });
+      }
+    });
+
+    const total = Array.from(grouped.values()).reduce((sum, g) => sum + g.revenue, 0);
+
+    return Array.from(grouped.entries())
+      .map(([key, data]) => ({
+        key,
+        revenue: data.revenue,
+        units: data.units,
+        percent: total > 0 ? (data.revenue / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [salesAggregations, filterSeason]);
+
+  // Top Customers - use PRE-COMPUTED aggregations from API
   const topCustomers = useMemo(() => {
-    const salesForChart = activeFilters.customer ? baseFilteredSales : filteredSales;
-    const grouped = new Map<string, number>();
+    if (!salesAggregations?.byCustomer) {
+      return [];
+    }
 
-    salesForChart.forEach((s) => {
-      if (activeFilters.channel && s.customerType !== activeFilters.channel) return;
-      if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return;
-      if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return;
+    // Filter by season if selected
+    let customerData = salesAggregations.byCustomer;
+    if (filterSeason) {
+      customerData = customerData.filter(c => c.season === filterSeason);
+    }
 
-      const key = s.customer || 'Unknown';
-      grouped.set(key, (grouped.get(key) || 0) + (s.revenue || 0));
+    // Filter by channel if selected
+    if (activeFilters.channel) {
+      customerData = customerData.filter(c => c.customerType === activeFilters.channel);
+    }
+
+    // Group by customer
+    const grouped = new Map<string, { revenue: number; units: number }>();
+    customerData.forEach((c) => {
+      const existing = grouped.get(c.customer);
+      if (existing) {
+        existing.revenue += c.revenue;
+        existing.units += c.units;
+      } else {
+        grouped.set(c.customer, { revenue: c.revenue, units: c.units });
+      }
     });
 
     return Array.from(grouped.entries())
-      .map(([key, revenue]) => ({ customer: key, revenue }))
+      .map(([customer, data]) => ({ customer, revenue: data.revenue, units: data.units }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-  }, [baseFilteredSales, filteredSales, activeFilters]);
+      .slice(0, 10);
+  }, [salesAggregations, filterSeason, activeFilters.channel]);
 
   // Sales by Style (for table)
   const salesByStyle = useMemo(() => {
@@ -692,35 +812,50 @@ export default function SalesView({
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Channel */}
+        {/* By Channel - FIXED: Shows exactly 6 individual channels, not combinations */}
         <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
             <h3 className="text-xl font-bold text-gray-900">By Channel</h3>
           </div>
           <div className="p-6 space-y-4">
-            {byChannel.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setFilter('channel', item.key)}
-                className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                  activeFilters.channel === item.key
-                    ? 'bg-cyan-100 ring-2 ring-cyan-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <span className="w-10 font-mono text-sm font-semibold text-gray-500">{item.key}</span>
-                <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.label}</span>
-                <div className="w-36 h-6 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-cyan-500 rounded-full transition-all"
-                    style={{ width: `${item.percent}%` }}
-                  />
-                </div>
-                <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
-                  {formatCurrency(item.revenue)}
-                </span>
-              </button>
-            ))}
+            {byChannel.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No channel data available</p>
+            ) : (
+              byChannel.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => setFilter('channel', item.key)}
+                  className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
+                    activeFilters.channel === item.key
+                      ? 'bg-gray-100 ring-2 ring-offset-1'
+                      : 'hover:bg-gray-50'
+                  }`}
+                  style={{
+                    ...(activeFilters.channel === item.key && { ['--tw-ring-color' as string]: item.color }),
+                  }}
+                >
+                  <span
+                    className="w-10 font-mono text-sm font-bold px-2 py-1 rounded"
+                    style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                  >
+                    {item.key}
+                  </span>
+                  <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.label}</span>
+                  <div className="w-32 h-6 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${item.percent}%`, backgroundColor: item.color }}
+                    />
+                  </div>
+                  <span className="w-16 text-right font-mono text-sm text-gray-500">
+                    {item.sharePercent?.toFixed(0)}%
+                  </span>
+                  <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
+                    {formatCurrency(item.revenue)}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -826,31 +961,35 @@ export default function SalesView({
           </div>
         </div>
 
-        {/* Top Customers */}
+        {/* Top 10 Customers */}
         <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">Top Customers</h3>
+            <h3 className="text-xl font-bold text-gray-900">Top 10 Customers</h3>
           </div>
-          <div className="p-6 space-y-3">
-            {topCustomers.map((item, index) => (
-              <button
-                key={item.customer}
-                onClick={() => setFilter('customer', item.customer)}
-                className={`w-full flex items-center justify-between p-4 rounded-lg transition-colors ${
-                  activeFilters.customer === item.customer
-                    ? 'bg-amber-100 ring-2 ring-amber-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600">
-                    {index + 1}
-                  </span>
-                  <span className="text-base text-gray-700 truncate max-w-[200px] font-medium">{item.customer}</span>
-                </div>
-                <span className="font-mono text-base font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
-              </button>
-            ))}
+          <div className="p-6 space-y-2 max-h-[400px] overflow-y-auto">
+            {topCustomers.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No customer data available</p>
+            ) : (
+              topCustomers.map((item, index) => (
+                <button
+                  key={item.customer}
+                  onClick={() => setFilter('customer', item.customer)}
+                  className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                    activeFilters.customer === item.customer
+                      ? 'bg-amber-100 ring-2 ring-amber-500'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                      {index + 1}
+                    </span>
+                    <span className="text-sm text-gray-700 truncate max-w-[180px] font-medium">{item.customer}</span>
+                  </div>
+                  <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
