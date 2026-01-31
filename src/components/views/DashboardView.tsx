@@ -91,24 +91,52 @@ export default function DashboardView({
       .slice(0, 6);
   }, [filteredSales]);
 
-  // Sales by customer type (channel)
-  const salesByChannel = useMemo(() => {
+  // Helper to derive gender from divisionDesc
+  const getGenderFromDivision = (divisionDesc: string): string => {
+    if (!divisionDesc) return 'Unknown';
+    const lower = divisionDesc.toLowerCase();
+    if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
+    if (lower.includes("women's") || lower.includes("woman")) return "Women's";
+    if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
+    return "Unknown";
+  };
+
+  // Build gender lookup from products (Line List priority)
+  const productGenderMap = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) => {
+      if (p.styleNumber && p.divisionDesc) {
+        const gender = getGenderFromDivision(p.divisionDesc);
+        if (gender !== 'Unknown') {
+          map.set(p.styleNumber, gender);
+        }
+      }
+    });
+    return map;
+  }, [products]);
+
+  // Sales by gender (Line List priority, fallback to sales divisionDesc)
+  const salesByGender = useMemo(() => {
     const grouped = new Map<string, number>();
     const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
 
     filteredSales.forEach((s) => {
-      const channel = s.customerType || 'Other';
-      grouped.set(channel, (grouped.get(channel) || 0) + (s.revenue || 0));
+      // Priority: Line List first, then sales divisionDesc
+      let gender = productGenderMap.get(s.styleNumber);
+      if (!gender) {
+        gender = getGenderFromDivision(s.divisionDesc);
+      }
+      grouped.set(gender, (grouped.get(gender) || 0) + (s.revenue || 0));
     });
 
     return Array.from(grouped.entries())
-      .map(([channel, revenue]) => ({
-        channel,
+      .map(([gender, revenue]) => ({
+        gender,
         revenue,
         percent: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [filteredSales]);
+  }, [filteredSales, productGenderMap]);
 
   // Cost summary stats
   const costStats = useMemo(() => {
@@ -192,13 +220,12 @@ export default function DashboardView({
       .slice(0, 10);
   }, [filteredSales, costs, selectedSeason]);
 
-  const channelLabels: Record<string, string> = {
-    WH: 'Wholesale',
-    WD: 'Wholesale Direct',
-    BB: 'Big Box/REI',
-    PS: 'Pro Sales',
-    EC: 'E-commerce',
-    KI: 'KÜHL Internal',
+  // Gender colors for chart
+  const genderColors: Record<string, string> = {
+    "Men's": '#2563eb',    // blue-600
+    "Women's": '#9333ea',  // purple-600
+    "Unisex": '#6b7280',   // gray-500
+    "Unknown": '#6b7280',  // gray-500
   };
 
   return (
@@ -214,8 +241,8 @@ export default function DashboardView({
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6 shadow-sm">
+      <div className="grid grid-cols-4 gap-5">
+        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
               <DollarSign className="w-6 h-6 text-emerald-600" />
@@ -231,7 +258,7 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
               <Package className="w-6 h-6 text-blue-600" />
@@ -247,7 +274,7 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
               <TrendingUp className="w-6 h-6 text-purple-600" />
@@ -263,7 +290,7 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
               <Layers className="w-6 h-6 text-amber-600" />
@@ -283,8 +310,8 @@ export default function DashboardView({
       {/* Two Column Row */}
       <div className="grid grid-cols-2 gap-6">
         {/* By Category */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
+        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-300">
             <h3 className="text-xl font-bold text-gray-900">By Category</h3>
           </div>
           <div className="p-6 space-y-4">
@@ -309,25 +336,34 @@ export default function DashboardView({
           </div>
         </div>
 
-        {/* By Channel */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">By Channel</h3>
+        {/* By Gender */}
+        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-300">
+            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
           </div>
           <div className="p-6 space-y-4">
-            {salesByChannel.slice(0, 6).map(({ channel, revenue, percent }) => (
-              <div key={channel} className="flex items-center gap-4">
-                <div className="w-32 text-base text-gray-700 truncate font-medium">
-                  {channelLabels[channel] || channel}
+            {salesByGender.map(({ gender, revenue, percent }) => (
+              <div key={gender} className="flex items-center gap-4">
+                <div
+                  className="w-24 text-base font-medium px-2 py-1 rounded"
+                  style={{
+                    backgroundColor: `${genderColors[gender] || '#6b7280'}20`,
+                    color: genderColors[gender] || '#6b7280'
+                  }}
+                >
+                  {gender}
                 </div>
                 <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-full rounded-full transition-all"
-                    style={{ width: `${percent}%` }}
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${percent}%`, backgroundColor: genderColors[gender] || '#6b7280' }}
                   />
                 </div>
-                <div className="w-16 text-right text-base font-mono font-semibold text-gray-900">
+                <div className="w-16 text-right text-base font-mono text-gray-500">
                   {formatPercent(percent)}
+                </div>
+                <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
+                  {formatCurrency(revenue)}
                 </div>
               </div>
             ))}
@@ -336,8 +372,8 @@ export default function DashboardView({
       </div>
 
       {/* Costs Summary */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-200">
+      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-300">
           <h3 className="text-xl font-bold text-gray-900">
             Cost Analysis {selectedSeason ? `(${selectedSeason})` : '(All Seasons)'}
           </h3>
@@ -427,8 +463,8 @@ export default function DashboardView({
       </div>
 
       {/* Top Styles Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-300 bg-gray-100 flex items-center justify-between">
           <h3 className="text-xl font-bold text-gray-900">Top Styles</h3>
           <span className="text-sm text-gray-500 font-medium">Click row for details</span>
         </div>
