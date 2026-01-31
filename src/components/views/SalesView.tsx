@@ -54,23 +54,13 @@ interface SalesAggregations {
   byCustomer: CustomerAggregation[];
 }
 
-// Channel constants - FIXED list of 6 channels
-const CHANNEL_LABELS: Record<string, string> = {
-  WH: 'Wholesale',
-  BB: 'Big Box / REI',
-  WD: 'Wholesale Direct',
-  EC: 'E-Commerce',
-  PS: 'Pro Sales',
-  KI: 'KÜHL Internal',
-};
-
-const CHANNEL_COLORS: Record<string, string> = {
-  WH: '#2563eb',  // blue-600
-  BB: '#7c3aed',  // violet-600
-  WD: '#059669',  // emerald-600
-  EC: '#d97706',  // amber-600
-  PS: '#dc2626',  // red-600
-  KI: '#6b7280',  // gray-500
+// Gender colors for By Gender chart
+const GENDER_COLORS: Record<string, string> = {
+  "Men's": '#2563eb',    // blue-600
+  "Women's": '#9333ea',  // purple-600
+  "Unisex": '#6b7280',   // gray-500
+  "Display": '#6b7280',  // gray-500
+  "Unknown": '#6b7280',  // gray-500
 };
 
 interface SalesViewProps {
@@ -88,7 +78,6 @@ interface SalesViewProps {
 type SortField = 'styleNumber' | 'styleDesc' | 'gender' | 'categoryDesc' | 'units' | 'revenue' | 'customerCount';
 
 interface ActiveFilters {
-  channel: string;
   category: string;
   gender: string;
   customer: string;
@@ -150,7 +139,6 @@ export default function SalesView({
 
   // Active filters from chart clicks
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({
-    channel: '',
     category: '',
     gender: '',
     customer: '',
@@ -213,7 +201,6 @@ export default function SalesView({
   // Further filtered by active chart filters
   const filteredSales = useMemo(() => {
     return baseFilteredSales.filter((s) => {
-      if (activeFilters.channel && s.customerType !== activeFilters.channel) return false;
       if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return false;
       if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return false;
       if (activeFilters.customer && s.customer !== activeFilters.customer) return false;
@@ -258,7 +245,6 @@ export default function SalesView({
         if (filterStyleNumber && !s.styleNumber?.toLowerCase().includes(filterStyleNumber.toLowerCase())) return false;
         if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
         // Also apply chart filters
-        if (activeFilters.channel && s.customerType !== activeFilters.channel) return false;
         if (activeFilters.category && normalizeCategory(s.categoryDesc) !== activeFilters.category) return false;
         if (activeFilters.gender && getGenderFromDivision(s.divisionDesc) !== activeFilters.gender) return false;
         if (activeFilters.customer && s.customer !== activeFilters.customer) return false;
@@ -292,53 +278,30 @@ export default function SalesView({
 
   // By Channel (for chart) - use PRE-COMPUTED aggregations from API (not style-aggregated sales)
   // This is critical: the API aggregates by individual customerType from raw sales records
-  const byChannel = useMemo(() => {
-    // Debug: Log what we're receiving
-    console.log('salesAggregations?.byChannel:', salesAggregations?.byChannel?.length, 'records');
-
-    if (!salesAggregations?.byChannel || salesAggregations.byChannel.length === 0) {
-      console.warn('No salesAggregations.byChannel available - chart will be empty');
-      return [];
-    }
-
-    // Filter by season if selected
-    let channelData = salesAggregations.byChannel;
-    if (filterSeason) {
-      channelData = channelData.filter(c => c.season === filterSeason);
-    }
-
-    // Group by channel code
-    const grouped = new Map<string, { revenue: number; units: number }>();
-    channelData.forEach((c) => {
-      const existing = grouped.get(c.channel);
-      if (existing) {
-        existing.revenue += c.revenue;
-        existing.units += c.units;
-      } else {
-        grouped.set(c.channel, { revenue: c.revenue, units: c.units });
+  // Build a lookup map: styleNumber -> gender from Line List (products)
+  const productGenderMap = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) => {
+      if (p.styleNumber && p.divisionDesc) {
+        // Derive gender from divisionDesc in Line List
+        const divLower = p.divisionDesc.toLowerCase();
+        let gender = 'Unknown';
+        if (divLower.includes("men's") && !divLower.includes("women's")) {
+          gender = "Men's";
+        } else if (divLower.includes("women's") || divLower.includes("woman")) {
+          gender = "Women's";
+        } else if (divLower.includes("unisex")) {
+          gender = "Unisex";
+        } else if (divLower.includes("display")) {
+          gender = "Display";
+        }
+        if (gender !== 'Unknown') {
+          map.set(p.styleNumber, gender);
+        }
       }
     });
-
-    // Convert to array with labels and colors
-    const result = Array.from(grouped.entries())
-      .map(([key, data]) => ({
-        key,
-        label: CHANNEL_LABELS[key] || CUSTOMER_TYPE_LABELS[key] || key,
-        revenue: data.revenue,
-        units: data.units,
-        color: CHANNEL_COLORS[key] || '#6b7280',
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    // Calculate percentages based on max revenue (for bar width)
-    const maxRevenue = Math.max(...result.map((r) => r.revenue), 1);
-    const totalRevenue = result.reduce((sum, r) => sum + r.revenue, 0);
-    return result.map((r) => ({
-      ...r,
-      percent: (r.revenue / maxRevenue) * 100,
-      sharePercent: totalRevenue > 0 ? (r.revenue / totalRevenue) * 100 : 0,
-    }));
-  }, [salesAggregations, filterSeason]);
+    return map;
+  }, [products]);
 
   // By Category (for chart) - use PRE-COMPUTED aggregations from API
   const byCategory = useMemo(() => {
@@ -374,41 +337,43 @@ export default function SalesView({
     return result.map((r) => ({ ...r, percent: (r.revenue / maxRevenue) * 100 }));
   }, [salesAggregations, filterSeason]);
 
-  // By Gender (for chart) - use PRE-COMPUTED aggregations from API
-  const byGender = useMemo(() => {
-    if (!salesAggregations?.byGender) {
-      return [];
-    }
-
-    // Filter by season if selected
-    let genderData = salesAggregations.byGender;
-    if (filterSeason) {
-      genderData = genderData.filter(g => g.season === filterSeason);
-    }
-
-    // Group by gender
+  // By Gender (for chart) - compute from filteredSales, prioritizing Line List gender
+  const byGenderChart = useMemo(() => {
+    // Aggregate from filteredSales, using productGenderMap for Line List priority
     const grouped = new Map<string, { revenue: number; units: number }>();
-    genderData.forEach((g) => {
-      const existing = grouped.get(g.gender);
+
+    filteredSales.forEach((s) => {
+      // Priority 1: Look up style in Line List (products)
+      let gender = productGenderMap.get(s.styleNumber);
+
+      // Priority 2: Fall back to deriving from sales record's divisionDesc
+      if (!gender) {
+        gender = getGenderFromDivision(s.divisionDesc);
+      }
+
+      const existing = grouped.get(gender);
       if (existing) {
-        existing.revenue += g.revenue;
-        existing.units += g.units;
+        existing.revenue += s.revenue || 0;
+        existing.units += s.unitsBooked || 0;
       } else {
-        grouped.set(g.gender, { revenue: g.revenue, units: g.units });
+        grouped.set(gender, { revenue: s.revenue || 0, units: s.unitsBooked || 0 });
       }
     });
 
     const total = Array.from(grouped.values()).reduce((sum, g) => sum + g.revenue, 0);
+    const maxRevenue = Math.max(...Array.from(grouped.values()).map(g => g.revenue), 1);
 
     return Array.from(grouped.entries())
       .map(([key, data]) => ({
         key,
         revenue: data.revenue,
         units: data.units,
-        percent: total > 0 ? (data.revenue / total) * 100 : 0,
+        percent: (data.revenue / maxRevenue) * 100, // For bar width
+        sharePercent: total > 0 ? (data.revenue / total) * 100 : 0, // For percentage display
+        color: GENDER_COLORS[key] || '#6b7280',
       }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [salesAggregations, filterSeason]);
+  }, [filteredSales, productGenderMap]);
 
   // Top Customers - use PRE-COMPUTED aggregations from API
   const topCustomers = useMemo(() => {
@@ -420,11 +385,6 @@ export default function SalesView({
     let customerData = salesAggregations.byCustomer;
     if (filterSeason) {
       customerData = customerData.filter(c => c.season === filterSeason);
-    }
-
-    // Filter by channel if selected
-    if (activeFilters.channel) {
-      customerData = customerData.filter(c => c.customerType === activeFilters.channel);
     }
 
     // Group by customer
@@ -443,7 +403,7 @@ export default function SalesView({
       .map(([customer, data]) => ({ customer, revenue: data.revenue, units: data.units }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
-  }, [salesAggregations, filterSeason, activeFilters.channel]);
+  }, [salesAggregations, filterSeason]);
 
   // Sales by Style (for table)
   const salesByStyle = useMemo(() => {
@@ -533,11 +493,11 @@ export default function SalesView({
   };
 
   const clearAllFilters = () => {
-    setActiveFilters({ channel: '', category: '', gender: '', customer: '' });
+    setActiveFilters({ category: '', gender: '', customer: '' });
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = activeFilters.channel || activeFilters.category || activeFilters.gender || activeFilters.customer;
+  const hasActiveFilters = activeFilters.category || activeFilters.gender || activeFilters.customer;
 
   // Export CSV
   const exportCSV = () => {
@@ -581,7 +541,7 @@ export default function SalesView({
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-300 p-5 shadow-sm">
         <div className="flex flex-wrap gap-4 items-end">
           {/* Season */}
           <div className="flex flex-col gap-1.5">
@@ -688,14 +648,14 @@ export default function SalesView({
 
       {/* Active Chart Filter Chips */}
       {hasActiveFilters && (
-        <div className="flex items-center gap-3 flex-wrap bg-gray-50 rounded-lg px-5 py-4 border-2 border-gray-200">
-          <span className="text-base font-bold text-gray-600">Chart Filters:</span>
-          {activeFilters.channel && (
+        <div className="flex items-center gap-3 flex-wrap bg-gray-50 rounded-xl px-5 py-4 border border-gray-300">
+          <span className="text-base font-bold text-gray-600">Filters:</span>
+          {activeFilters.gender && (
             <button
-              onClick={() => setFilter('channel', activeFilters.channel)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 bg-cyan-100 text-cyan-700 rounded-full text-base font-semibold hover:bg-cyan-200 transition-colors"
+              onClick={() => setFilter('gender', activeFilters.gender)}
+              className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full text-base font-semibold hover:bg-blue-200 transition-colors"
             >
-              Channel: {CUSTOMER_TYPE_LABELS[activeFilters.channel] || activeFilters.channel}
+              Gender: {activeFilters.gender}
               <X className="w-4 h-4" />
             </button>
           )}
@@ -705,15 +665,6 @@ export default function SalesView({
               className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-base font-semibold hover:bg-emerald-200 transition-colors"
             >
               Category: {activeFilters.category}
-              <X className="w-4 h-4" />
-            </button>
-          )}
-          {activeFilters.gender && (
-            <button
-              onClick={() => setFilter('gender', activeFilters.gender)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-100 text-violet-700 rounded-full text-base font-semibold hover:bg-violet-200 transition-colors"
-            >
-              Gender: {activeFilters.gender}
               <X className="w-4 h-4" />
             </button>
           )}
@@ -736,15 +687,15 @@ export default function SalesView({
       )}
 
       {/* Summary Stats */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-300 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-bold text-gray-800">Summary</h3>
           {summary.comparisonLabel && (
             <span className="text-sm text-gray-500 font-medium">{summary.comparisonLabel}</span>
           )}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-cyan-50 rounded-lg p-5 border-2 border-cyan-200">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
+          <div className="bg-cyan-50 rounded-xl p-5 border border-cyan-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-cyan-700 uppercase tracking-wide">Revenue</span>
               <Banknote className="w-6 h-6 text-cyan-600" />
@@ -757,7 +708,7 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-violet-50 rounded-lg p-5 border-2 border-violet-200">
+          <div className="bg-violet-50 rounded-xl p-5 border border-violet-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-violet-700 uppercase tracking-wide">Units</span>
               <ShoppingCart className="w-6 h-6 text-violet-600" />
@@ -770,7 +721,7 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-blue-50 rounded-lg p-5 border-2 border-blue-200">
+          <div className="bg-blue-50 rounded-xl p-5 border border-blue-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-blue-700 uppercase tracking-wide">Customers</span>
               <Users className="w-6 h-6 text-blue-600" />
@@ -783,7 +734,7 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-emerald-50 rounded-lg p-5 border-2 border-emerald-200">
+          <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Styles</span>
               <Package className="w-6 h-6 text-emerald-600" />
@@ -796,7 +747,7 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-amber-50 rounded-lg p-5 border-2 border-amber-200">
+          <div className="bg-amber-50 rounded-xl p-5 border border-amber-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Avg Order</span>
               <Receipt className="w-6 h-6 text-amber-600" />
@@ -813,36 +764,35 @@ export default function SalesView({
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Channel - FIXED: Shows exactly 6 individual channels, not combinations */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">By Channel</h3>
+        {/* By Gender - Horizontal bar chart */}
+        <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
+            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
           </div>
           <div className="p-6 space-y-4">
-            {byChannel.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No channel data available</p>
+            {byGenderChart.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No gender data available</p>
             ) : (
-              byChannel.map((item) => (
+              byGenderChart.map((item) => (
                 <button
                   key={item.key}
-                  onClick={() => setFilter('channel', item.key)}
+                  onClick={() => setFilter('gender', item.key)}
                   className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                    activeFilters.channel === item.key
+                    activeFilters.gender === item.key
                       ? 'bg-gray-100 ring-2 ring-offset-1'
                       : 'hover:bg-gray-50'
                   }`}
                   style={{
-                    ...(activeFilters.channel === item.key && { ['--tw-ring-color' as string]: item.color }),
+                    ...(activeFilters.gender === item.key && { ['--tw-ring-color' as string]: item.color }),
                   }}
                 >
                   <span
-                    className="w-10 font-mono text-sm font-bold px-2 py-1 rounded"
+                    className="w-20 font-medium text-sm px-2 py-1 rounded"
                     style={{ backgroundColor: `${item.color}20`, color: item.color }}
                   >
                     {item.key}
                   </span>
-                  <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.label}</span>
-                  <div className="w-32 h-6 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${item.percent}%`, backgroundColor: item.color }}
@@ -861,133 +811,34 @@ export default function SalesView({
         </div>
 
         {/* By Category */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
+        <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
             <h3 className="text-xl font-bold text-gray-900">By Category</h3>
           </div>
           <div className="p-6 space-y-4">
-            {byCategory.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setFilter('category', item.key)}
-                className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                  activeFilters.category === item.key
-                    ? 'bg-emerald-100 ring-2 ring-emerald-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.key}</span>
-                <div className="w-36 h-6 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all"
-                    style={{ width: `${item.percent}%` }}
-                  />
-                </div>
-                <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
-                  {formatCurrency(item.revenue)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Gender */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
-          </div>
-          <div className="p-6 flex items-center gap-8">
-            {/* Simple donut representation */}
-            <div className="relative w-40 h-40 flex-shrink-0">
-              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                {(() => {
-                  let cumulative = 0;
-                  return byGender.map((item, index) => {
-                    const start = cumulative;
-                    cumulative += item.percent;
-                    const largeArc = item.percent > 50 ? 1 : 0;
-                    const startAngle = (start / 100) * 360;
-                    const endAngle = (cumulative / 100) * 360;
-                    const x1 = 50 + 40 * Math.cos((startAngle * Math.PI) / 180);
-                    const y1 = 50 + 40 * Math.sin((startAngle * Math.PI) / 180);
-                    const x2 = 50 + 40 * Math.cos((endAngle * Math.PI) / 180);
-                    const y2 = 50 + 40 * Math.sin((endAngle * Math.PI) / 180);
-
-                    if (item.percent === 0) return null;
-
-                    return (
-                      <path
-                        key={item.key}
-                        d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                        fill={genderColors[item.key] || '#6b7280'}
-                        className={`cursor-pointer transition-opacity ${
-                          activeFilters.gender && activeFilters.gender !== item.key ? 'opacity-30' : ''
-                        }`}
-                        onClick={() => setFilter('gender', item.key)}
-                      />
-                    );
-                  });
-                })()}
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 bg-white rounded-full" />
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="flex-1 space-y-3">
-              {byGender.map((item) => (
+            {byCategory.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No category data available</p>
+            ) : (
+              byCategory.map((item) => (
                 <button
                   key={item.key}
-                  onClick={() => setFilter('gender', item.key)}
+                  onClick={() => setFilter('category', item.key)}
                   className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                    activeFilters.gender === item.key
-                      ? 'bg-violet-100 ring-2 ring-violet-500'
+                    activeFilters.category === item.key
+                      ? 'bg-emerald-100 ring-2 ring-emerald-500'
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <span
-                    className="w-4 h-4 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: genderColors[item.key] || '#6b7280' }}
-                  />
-                  <span className="flex-1 text-left text-base text-gray-700 font-medium">{item.key}</span>
-                  <span className="font-mono text-base text-gray-500 font-medium">{item.percent.toFixed(0)}%</span>
-                  <span className="font-mono text-base font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Top 10 Customers */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">Top 10 Customers</h3>
-          </div>
-          <div className="p-6 space-y-2 max-h-[400px] overflow-y-auto">
-            {topCustomers.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No customer data available</p>
-            ) : (
-              topCustomers.map((item, index) => (
-                <button
-                  key={item.customer}
-                  onClick={() => setFilter('customer', item.customer)}
-                  className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                    activeFilters.customer === item.customer
-                      ? 'bg-amber-100 ring-2 ring-amber-500'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm text-gray-700 truncate max-w-[180px] font-medium">{item.customer}</span>
+                  <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.key}</span>
+                  <div className="w-36 h-6 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${item.percent}%` }}
+                    />
                   </div>
-                  <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
+                  <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
+                    {formatCurrency(item.revenue)}
+                  </span>
                 </button>
               ))
             )}
@@ -995,9 +846,41 @@ export default function SalesView({
         </div>
       </div>
 
+      {/* Top 10 Customers - Full width */}
+      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
+          <h3 className="text-xl font-bold text-gray-900">Top 10 Customers</h3>
+        </div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {topCustomers.length === 0 ? (
+            <p className="text-gray-500 text-center py-4 col-span-2">No customer data available</p>
+          ) : (
+            topCustomers.map((item, index) => (
+              <button
+                key={item.customer}
+                onClick={() => setFilter('customer', item.customer)}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+                  activeFilters.customer === item.customer
+                    ? 'bg-amber-100 ring-2 ring-amber-500'
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm text-gray-700 truncate max-w-[200px] font-medium">{item.customer}</span>
+                </div>
+                <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Sales by Style Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300 flex items-center justify-between">
           <h3 className="text-xl font-bold text-gray-900">Sales by Style</h3>
           <button
             onClick={exportCSV}
