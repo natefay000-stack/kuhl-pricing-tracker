@@ -11,10 +11,13 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import { FileType } from '@/lib/file-detection';
 
 type ModalState = 'drop' | 'detecting' | 'confirm' | 'importing' | 'complete';
+type MultiFileState = 'queue' | 'importing' | 'complete';
 
 interface DetectionResult {
   filename: string;
@@ -26,6 +29,19 @@ interface DetectionResult {
   recordCount: number;
   detectedSeason: string | null;
   previewRows: Record<string, unknown>[];
+}
+
+interface MultiFileItem {
+  file: File;
+  filename: string;
+  fileSize: string;
+  season: string | null;
+  seasonSource: 'filename' | 'content' | 'unknown';
+  recordCount: number;
+  status: 'pending' | 'detecting' | 'ready' | 'importing' | 'complete' | 'error';
+  progress: number;
+  error?: string;
+  importedCount?: number;
 }
 
 interface ImportResult {
@@ -51,6 +67,10 @@ interface SmartImportModalProps {
     pricing?: Record<string, unknown>[];
     costs?: Record<string, unknown>[];
   }) => void;
+  onImportSalesReplace: (data: {
+    sales: Record<string, unknown>[];
+    seasons: string[];
+  }) => void;
   onClose: () => void;
 }
 
@@ -61,6 +81,10 @@ const AVAILABLE_SEASONS = [
   { value: '27SP', label: 'Spring 2027' },
   { value: '26FA', label: 'Fall 2026' },
   { value: '26SP', label: 'Spring 2026' },
+  { value: '25FA', label: 'Fall 2025' },
+  { value: '25SP', label: 'Spring 2025' },
+  { value: '24FA', label: 'Fall 2024' },
+  { value: '24SP', label: 'Spring 2024' },
 ];
 
 const FILE_TYPE_LABELS: Record<FileType, string> = {
@@ -71,13 +95,31 @@ const FILE_TYPE_LABELS: Record<FileType, string> = {
   unknown: 'Unknown',
 };
 
+// Extract season from filename pattern: "24SP SALES...", "26FA SALES..."
+function extractSeasonFromFilename(filename: string): string | null {
+  const match = filename.match(/^(\d{2}(?:SP|FA))\s+SALES/i);
+  if (match) {
+    return match[1].toUpperCase();
+  }
+  return null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
 export default function SmartImportModal({
   existingSeasons,
   onImport,
   onImportSalesOnly,
   onImportMultiSeason,
+  onImportSalesReplace,
   onClose,
 }: SmartImportModalProps) {
+  // Single file state
   const [state, setState] = useState<ModalState>('drop');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [detection, setDetection] = useState<DetectionResult | null>(null);
@@ -90,6 +132,12 @@ export default function SmartImportModal({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Multi-file state
+  const [multiFileMode, setMultiFileMode] = useState(false);
+  const [multiFileState, setMultiFileState] = useState<MultiFileState>('queue');
+  const [multiFiles, setMultiFiles] = useState<MultiFileItem[]>([]);
+  const [multiFileTotalRecords, setMultiFileTotalRecords] = useState(0);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -100,20 +148,227 @@ export default function SmartImportModal({
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileSelect(files[0]);
+    const files = Array.from(e.dataTransfer.files);
+
+    // Filter to only Excel files
+    const excelFiles = files.filter(f => f.name.match(/\.(xlsx|xls)$/i));
+
+    if (excelFiles.length === 0) {
+      setError('Please select Excel files (.xlsx or .xls)');
+      return;
+    }
+
+    if (excelFiles.length === 1) {
+      // Single file mode
+      handleFileSelect(excelFiles[0]);
+    } else {
+      // Multi-file mode
+      handleMultiFileSelect(excelFiles);
     }
   }, []);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      handleFileSelect(files[0]);
+      const excelFiles = Array.from(files).filter(f => f.name.match(/\.(xlsx|xls)$/i));
+
+      if (excelFiles.length === 1) {
+        handleFileSelect(excelFiles[0]);
+      } else if (excelFiles.length > 1) {
+        handleMultiFileSelect(excelFiles);
+      }
     }
+  };
+
+  // Multi-file selection handler
+  const handleMultiFileSelect = async (files: File[]) => {
+    setMultiFileMode(true);
+    setError(null);
+
+    // Initialize file items
+    const items: MultiFileItem[] = files.map(file => ({
+      file,
+      filename: file.name,
+      fileSize: formatFileSize(file.size),
+      season: extractSeasonFromFilename(file.name),
+      seasonSource: extractSeasonFromFilename(file.name) ? 'filename' : 'unknown',
+      recordCount: 0,
+      status: 'pending',
+      progress: 0,
+    }));
+
+    setMultiFiles(items);
+
+    // Detect each file
+    for (let i = 0; i < items.length; i++) {
+      setMultiFiles(prev => prev.map((item, idx) =>
+        idx === i ? { ...item, status: 'detecting' } : item
+      ));
+
+      try {
+        const formData = new FormData();
+        formData.append('file', items[i].file);
+
+        const response = await fetch('/api/detect-file', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || 'Detection failed');
+        }
+
+        // Check if it's a sales file
+        if (result.detectedType !== 'sales') {
+          throw new Error(`Expected Sales Data, got ${FILE_TYPE_LABELS[result.detectedType as FileType]}`);
+        }
+
+        // Update with detection results
+        setMultiFiles(prev => prev.map((item, idx) => {
+          if (idx === i) {
+            const detectedSeason = item.season || result.detectedSeason;
+            return {
+              ...item,
+              status: detectedSeason ? 'ready' : 'error',
+              recordCount: result.recordCount || 0,
+              season: detectedSeason,
+              seasonSource: item.season ? 'filename' : (result.detectedSeason ? 'content' : 'unknown'),
+              error: !detectedSeason ? 'Could not detect season' : undefined,
+            };
+          }
+          return item;
+        }));
+      } catch (err) {
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === i ? {
+            ...item,
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Detection failed'
+          } : item
+        ));
+      }
+    }
+  };
+
+  // Validate multi-file queue
+  const validateMultiFiles = (): { valid: boolean; error?: string } => {
+    const readyFiles = multiFiles.filter(f => f.status === 'ready');
+
+    if (readyFiles.length === 0) {
+      return { valid: false, error: 'No valid files to import' };
+    }
+
+    // Check for duplicate seasons
+    const seasons = readyFiles.map(f => f.season);
+    const duplicates = seasons.filter((s, i) => seasons.indexOf(s) !== i);
+
+    if (duplicates.length > 0) {
+      return { valid: false, error: `Duplicate seasons found: ${Array.from(new Set(duplicates)).join(', ')}` };
+    }
+
+    return { valid: true };
+  };
+
+  // Multi-file import handler
+  const handleMultiFileImport = async () => {
+    const validation = validateMultiFiles();
+    if (!validation.valid) {
+      setError(validation.error || 'Validation failed');
+      return;
+    }
+
+    setMultiFileState('importing');
+    setError(null);
+
+    const readyFiles = multiFiles.filter(f => f.status === 'ready');
+    const allSales: Record<string, unknown>[] = [];
+    const allSeasons: string[] = [];
+
+    // Process files sequentially
+    for (let i = 0; i < readyFiles.length; i++) {
+      const fileItem = readyFiles[i];
+      const fileIndex = multiFiles.findIndex(f => f.filename === fileItem.filename);
+
+      // Update status to importing
+      setMultiFiles(prev => prev.map((item, idx) =>
+        idx === fileIndex ? { ...item, status: 'importing', progress: 0 } : item
+      ));
+
+      try {
+        const formData = new FormData();
+        formData.append('file', fileItem.file);
+        formData.append('fileType', 'sales');
+        formData.append('season', fileItem.season || '');
+
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          setMultiFiles(prev => prev.map((item, idx) => {
+            if (idx === fileIndex && item.status === 'importing') {
+              const newProgress = Math.min(item.progress + 10, 90);
+              return { ...item, progress: newProgress };
+            }
+            return item;
+          }));
+        }, 500);
+
+        const response = await fetch('/api/import-file', {
+          method: 'POST',
+          body: formData,
+        });
+
+        clearInterval(progressInterval);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Import failed');
+        }
+
+        const data = await response.json();
+
+        // Add to all sales
+        if (data.sales && data.sales.length > 0) {
+          allSales.push(...data.sales);
+          if (fileItem.season) {
+            allSeasons.push(fileItem.season);
+          }
+        }
+
+        // Update status to complete
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === fileIndex ? {
+            ...item,
+            status: 'complete',
+            progress: 100,
+            importedCount: data.sales?.length || 0,
+          } : item
+        ));
+
+      } catch (err) {
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === fileIndex ? {
+            ...item,
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Import failed',
+          } : item
+        ));
+      }
+    }
+
+    // Call the replace handler with all sales data
+    if (allSales.length > 0) {
+      onImportSalesReplace({
+        sales: allSales,
+        seasons: Array.from(new Set(allSeasons)),
+      });
+    }
+
+    setMultiFileTotalRecords(allSales.length);
+    setMultiFileState('complete');
   };
 
   const handleFileSelect = async (file: File) => {
@@ -225,6 +480,10 @@ export default function SmartImportModal({
     setError(null);
     setImportResult(null);
     setImportProgress(0);
+    setMultiFileMode(false);
+    setMultiFileState('queue');
+    setMultiFiles([]);
+    setMultiFileTotalRecords(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -233,6 +492,236 @@ export default function SmartImportModal({
   // Line List no longer needs season selection - it's read from the file
   const needsSeason = false;
 
+  // Get unique seasons from multi-file queue
+  const multiFileSeasons = Array.from(new Set(multiFiles.filter(f => f.season).map(f => f.season)));
+  const multiFileTotalCount = multiFiles.reduce((sum, f) => sum + f.recordCount, 0);
+  const multiFileReadyCount = multiFiles.filter(f => f.status === 'ready').length;
+  const multiFileCompleteCount = multiFiles.filter(f => f.status === 'complete').length;
+
+  // Multi-file mode UI
+  if (multiFileMode) {
+    return (
+      <div
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <div
+          className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+            <h2 className="text-xl font-bold">
+              {multiFileState === 'complete' ? 'Import Complete' : 'Import Sales Data'}
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {/* Queue State */}
+            {multiFileState === 'queue' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">{multiFiles.length} files</span> detected as Sales Data
+                </p>
+
+                {/* File List */}
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">File</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700 w-24">Season</th>
+                        <th className="px-4 py-2 text-right font-semibold text-gray-700 w-28">Records</th>
+                        <th className="px-4 py-2 text-center font-semibold text-gray-700 w-24">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiFiles.map((item, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <FileSpreadsheet className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+                              <span className="font-medium truncate">{item.filename}</span>
+                              <span className="text-xs text-gray-400">{item.fileSize}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.season ? (
+                              <span className="px-2 py-1 bg-cyan-100 text-cyan-800 text-xs font-semibold rounded">
+                                {item.season}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono">
+                            {item.recordCount > 0 ? item.recordCount.toLocaleString() : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {item.status === 'pending' && (
+                              <span className="text-gray-400">Pending</span>
+                            )}
+                            {item.status === 'detecting' && (
+                              <Loader2 className="w-4 h-4 mx-auto text-cyan-500 animate-spin" />
+                            )}
+                            {item.status === 'ready' && (
+                              <CheckCircle className="w-4 h-4 mx-auto text-green-500" />
+                            )}
+                            {item.status === 'error' && (
+                              <div className="flex items-center justify-center gap-1">
+                                <AlertCircle className="w-4 h-4 text-red-500" />
+                                <span className="text-xs text-red-600">{item.error}</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-50 font-semibold">
+                      <tr className="border-t-2">
+                        <td className="px-4 py-3">TOTAL</td>
+                        <td className="px-4 py-3"></td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {multiFileTotalCount.toLocaleString()} records
+                        </td>
+                        <td className="px-4 py-3"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Replace Mode Warning */}
+                {multiFileReadyCount > 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-amber-800">REPLACE MODE</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          This will delete all existing sales data for these seasons ({multiFileSeasons.join(', ')}) and import fresh.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Display */}
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Importing State */}
+            {multiFileState === 'importing' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 mb-4">Importing...</p>
+
+                {/* Progress List */}
+                <div className="space-y-2">
+                  {multiFiles.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="w-6 flex-shrink-0">
+                        {item.status === 'complete' && (
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                        )}
+                        {item.status === 'importing' && (
+                          <Loader2 className="w-5 h-5 text-cyan-500 animate-spin" />
+                        )}
+                        {item.status === 'ready' && (
+                          <Clock className="w-5 h-5 text-gray-400" />
+                        )}
+                        {item.status === 'error' && (
+                          <AlertCircle className="w-5 h-5 text-red-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{item.season}</span>
+                          <span className="text-xs text-gray-500">
+                            {item.status === 'complete'
+                              ? `${item.importedCount?.toLocaleString()} records`
+                              : item.status === 'importing'
+                              ? `${Math.round(item.progress)}%`
+                              : item.status === 'error'
+                              ? item.error
+                              : 'pending'}
+                          </span>
+                        </div>
+                        {item.status === 'importing' && (
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                            <div
+                              className="bg-cyan-500 h-1.5 rounded-full transition-all duration-300"
+                              style={{ width: `${item.progress}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Complete State */}
+            {multiFileState === 'complete' && (
+              <div className="text-center py-6">
+                <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
+                <p className="text-lg font-medium text-gray-900 mb-2">
+                  Import Successful
+                </p>
+                <p className="text-sm text-gray-600">
+                  Successfully imported {multiFileTotalRecords.toLocaleString()} sales records across {multiFileCompleteCount} seasons
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50">
+            {multiFileState === 'queue' && (
+              <>
+                <button
+                  onClick={handleReset}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleMultiFileImport}
+                  disabled={multiFileReadyCount === 0}
+                  className="px-6 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Import All ({multiFileReadyCount} files)
+                </button>
+              </>
+            )}
+
+            {multiFileState === 'complete' && (
+              <button
+                onClick={onClose}
+                className="px-6 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700 transition-colors"
+              >
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Single file mode UI (existing)
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -273,12 +762,13 @@ export default function SmartImportModal({
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
+                multiple
                 className="hidden"
                 onChange={handleFileInputChange}
               />
               <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-cyan-500' : 'text-gray-400'}`} />
               <p className="text-lg font-medium text-gray-700 mb-2">
-                Drop your Excel file here
+                Drop your Excel file(s) here
               </p>
               <p className="text-sm text-gray-500 mb-4">
                 or click to browse
@@ -287,10 +777,13 @@ export default function SmartImportModal({
                 onClick={() => fileInputRef.current?.click()}
                 className="px-4 py-2 bg-cyan-600 text-white font-medium rounded-lg hover:bg-cyan-700 transition-colors"
               >
-                Select File
+                Select File(s)
               </button>
               <p className="text-xs text-gray-400 mt-4">
                 Supports Line List, Sales, Costs, and Pricing files
+              </p>
+              <p className="text-xs text-cyan-600 mt-1">
+                Drop multiple Sales files for batch import with REPLACE mode
               </p>
             </div>
           )}

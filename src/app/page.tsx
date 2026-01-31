@@ -308,6 +308,77 @@ export default function Home() {
     setShowImportModal(false);
   };
 
+  // Handle sales REPLACE import - delete existing sales for specified seasons, then insert new
+  const handleSalesReplaceImport = async (data: {
+    sales: Record<string, unknown>[];
+    seasons: string[];
+  }) => {
+    console.log('REPLACE import:', data.sales.length, 'sales records for seasons:', data.seasons);
+
+    // Keep sales from seasons NOT being replaced
+    const seasonsSet = new Set(data.seasons);
+    const salesToKeep = sales.filter(s => !seasonsSet.has(s.season));
+    const newSales = data.sales as unknown as SalesRecord[];
+    const finalSales = [...salesToKeep, ...newSales];
+
+    setSales(finalSales);
+
+    // Update cache
+    setCachedData({
+      products,
+      sales: finalSales,
+      pricing,
+      costs,
+    });
+
+    // Persist to database - delete then insert for each season
+    try {
+      // First, delete existing sales for each season
+      for (const season of data.seasons) {
+        console.log(`Deleting existing sales for season: ${season}`);
+        await fetch('/api/data/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'sales',
+            season,
+            data: [], // Empty data with replaceExisting will just delete
+            fileName: `sales_clear_${season}`,
+            replaceExisting: true,
+          }),
+        });
+      }
+
+      // Then insert all new sales in batches
+      const BATCH_SIZE = 5000;
+      const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
+      console.log(`Inserting ${data.sales.length} sales records in ${totalBatches} batches`);
+
+      for (let i = 0; i < data.sales.length; i += BATCH_SIZE) {
+        const batch = data.sales.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        console.log(`Inserting sales batch ${batchNum}/${totalBatches}`);
+
+        await fetch('/api/data/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'sales',
+            data: batch,
+            fileName: `sales_replace_batch_${batchNum}`,
+            replaceExisting: false, // Already deleted, just insert
+          }),
+        });
+      }
+      console.log('Sales REPLACE import complete');
+    } catch (dbErr) {
+      console.warn('Could not persist sales to database:', dbErr);
+    }
+
+    // Close the modal
+    setShowImportModal(false);
+  };
+
   // Handle multi-season import (products, pricing, or costs that span multiple seasons)
   const handleMultiSeasonImport = async (data: {
     products?: Record<string, unknown>[];
@@ -758,6 +829,7 @@ export default function Home() {
           onImport={handleSeasonImport}
           onImportSalesOnly={handleSalesOnlyImport}
           onImportMultiSeason={handleMultiSeasonImport}
+          onImportSalesReplace={handleSalesReplaceImport}
           onClose={() => setShowImportModal(false)}
         />
       )}
