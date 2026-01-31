@@ -106,27 +106,33 @@ interface CustomerBreakdown {
   margin: number;
 }
 
-type SortField = 'styleNumber' | 'styleDesc' | 'revenue' | 'cogs' | 'gross' | 'margin' | 'vsTarget' | 'weightedMargin' | 'marginDelta' | 'baselineMargin';
+type SortField = 'styleNumber' | 'styleDesc' | 'revenue' | 'cogs' | 'gross' | 'margin' | 'vsTarget' | 'weightedMargin' | 'marginDelta' | 'baselineMargin' | 'totalRevenue';
 type SortDirection = 'asc' | 'desc';
 
+// Customer Type mapping - each code is its OWN channel, not grouped
 const CHANNEL_LABELS: Record<string, string> = {
   'WH': 'Wholesale',
-  'WD': 'Wholesale Direct',
-  'BB': 'Big Box/REI',
+  'BB': 'REI',
   'PS': 'Pro Sales',
   'EC': 'E-commerce',
-  'KI': 'KÜHL Internal',
+  'KI': 'KUHL Intl',
   'DTC': 'DTC Stores',
+  'WD': 'Wholesale Direct',
 };
 
-// Primary channels for analysis
-const PRIMARY_CHANNELS = ['EC', 'DTC', 'PS', 'WH'];
+// All 6 primary channels - BB is separate, NOT grouped under WH
+const PRIMARY_CHANNELS = ['EC', 'DTC', 'PS', 'BB', 'KI', 'WH'];
+
+// Top 5 channels to show in cards (plus blended)
+const CARD_CHANNELS = ['EC', 'BB', 'WH', 'PS', 'KI'];
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
   'EC': <Globe className="w-5 h-5" />,
   'DTC': <Store className="w-5 h-5" />,
   'PS': <Users className="w-5 h-5" />,
   'WH': <ShoppingCart className="w-5 h-5" />,
+  'BB': <Package className="w-5 h-5" />,
+  'KI': <Globe className="w-5 h-5" />,
 };
 
 const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }> = {
@@ -134,6 +140,8 @@ const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }
   'DTC': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100' },
   'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100' },
   'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100' },
+  'BB': { bg: 'bg-red-600', text: 'text-red-700', light: 'bg-red-100' },
+  'KI': { bg: 'bg-cyan-600', text: 'text-cyan-700', light: 'bg-cyan-100' },
 };
 
 const TARGET_MARGIN = 48; // Default target margin percentage
@@ -182,14 +190,16 @@ function getMarginBarColor(tier: 'excellent' | 'target' | 'watch' | 'problem'): 
   }
 }
 
-// Map customer types to primary channels
-function mapToChannel(customerType: string): string {
+// Normalize customer type - keep each type separate, just uppercase
+function normalizeCustomerType(customerType: string): string {
   if (!customerType) return 'WH';
-  const upper = customerType.toUpperCase();
-  if (upper === 'EC') return 'EC';
-  if (upper === 'KI' || upper.includes('DTC') || upper.includes('STORE')) return 'DTC';
-  if (upper === 'PS') return 'PS';
-  return 'WH'; // WH, WD, BB all map to Wholesale
+  const upper = customerType.toUpperCase().trim();
+  // Return as-is if it's a known type
+  if (['WH', 'BB', 'PS', 'EC', 'KI', 'DTC', 'WD'].includes(upper)) {
+    return upper;
+  }
+  // Default to WH for unknown types
+  return 'WH';
 }
 
 export default function MarginsView({
@@ -201,7 +211,8 @@ export default function MarginsView({
   selectedCategory,
   onStyleClick,
 }: MarginsViewProps) {
-  const [sortField, setSortField] = useState<SortField>('weightedMargin');
+  // Sort by revenue (highest first) by default
+  const [sortField, setSortField] = useState<SortField>('totalRevenue');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
@@ -210,6 +221,35 @@ export default function MarginsView({
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [expandedStyle, setExpandedStyle] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'channel' | 'traditional'>('channel');
+
+  // Search filter for style-level analysis
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Customer filters
+  const [customerTypeFilters, setCustomerTypeFilters] = useState<string[]>([]);
+  const [showTopN, setShowTopN] = useState<number>(10);
+
+  // Debug: Log unique customer types on first render
+  const customerTypeDebug = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+    const sampleCustomers: string[] = [];
+
+    sales.forEach((s, i) => {
+      const type = s.customerType || 'EMPTY';
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+      if (i < 5 && s.customer) {
+        sampleCustomers.push(`${s.customer} (${type})`);
+      }
+    });
+
+    console.log('=== Customer Type Debug ===');
+    console.log('Unique Customer Types:', Object.keys(typeCounts));
+    console.log('Counts by Type:', typeCounts);
+    console.log('Sample Customers:', sampleCustomers);
+    console.log('Total Sales Records:', sales.length);
+
+    return { typeCounts, sampleCustomers };
+  }, [sales]);
 
   // Build cost lookup from costs data
   const costLookup = useMemo(() => {
@@ -235,7 +275,7 @@ export default function MarginsView({
   const filteredSales = useMemo(() => {
     return sales.filter(s => {
       if (selectedSeason && s.season !== selectedSeason) return false;
-      if (selectedCustomerType && mapToChannel(s.customerType) !== selectedCustomerType) return false;
+      if (selectedCustomerType && normalizeCustomerType(s.customerType) !== selectedCustomerType) return false;
       if (selectedCustomer && s.customer !== selectedCustomer) return false;
       return true;
     });
@@ -259,7 +299,7 @@ export default function MarginsView({
       if (selectedDivision && record.divisionDesc !== selectedDivision) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
-      const channel = mapToChannel(record.customerType);
+      const channel = normalizeCustomerType(record.customerType);
       const landedCost = costLookup.get(record.styleNumber) || 0;
       const units = record.unitsBooked || 0;
 
@@ -331,7 +371,7 @@ export default function MarginsView({
       if (selectedDivision && record.divisionDesc !== selectedDivision) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
-      const channel = mapToChannel(record.customerType);
+      const channel = normalizeCustomerType(record.customerType);
       const landedCost = costLookup.get(record.styleNumber) || 0;
 
       if (!byStyle.has(record.styleNumber)) {
@@ -414,7 +454,7 @@ export default function MarginsView({
     return results.filter(s => s.totalRevenue > 0);
   }, [filteredSales, costLookup, products, selectedDivision, selectedCategory]);
 
-  // Customer breakdown for drill-down
+  // Customer breakdown for drill-down - with filters
   const customerBreakdown = useMemo(() => {
     const byCustomer = new Map<string, { customer: string; customerType: string; revenue: number; units: number; totalCost: number }>();
 
@@ -422,14 +462,21 @@ export default function MarginsView({
       if (selectedDivision && record.divisionDesc !== selectedDivision) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
-      const customer = record.customer || 'Unknown';
+      // Apply customer type filter if set
+      const type = normalizeCustomerType(record.customerType);
+      if (customerTypeFilters.length > 0 && !customerTypeFilters.includes(type)) return;
+
+      // Use customer name, or fallback to "Unknown (Type)"
+      const customer = record.customer && record.customer.trim()
+        ? record.customer.trim()
+        : `Unknown (${type})`;
       const landedCost = costLookup.get(record.styleNumber) || 0;
       const units = record.unitsBooked || 0;
 
       if (!byCustomer.has(customer)) {
         byCustomer.set(customer, {
           customer,
-          customerType: record.customerType || '',
+          customerType: type,
           revenue: 0,
           units: 0,
           totalCost: 0,
@@ -442,7 +489,7 @@ export default function MarginsView({
       entry.totalCost += units * landedCost;
     });
 
-    return Array.from(byCustomer.values())
+    const results = Array.from(byCustomer.values())
       .map(c => ({
         customer: c.customer,
         customerType: c.customerType,
@@ -453,9 +500,11 @@ export default function MarginsView({
           ? (((c.revenue / c.units) - (c.totalCost / c.units)) / (c.revenue / c.units)) * 100
           : 0,
       }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 20);
-  }, [filteredSales, costLookup, selectedDivision, selectedCategory]);
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // Apply showTopN limit (0 = show all)
+    return showTopN > 0 ? results.slice(0, showTopN) : results;
+  }, [filteredSales, costLookup, selectedDivision, selectedCategory, customerTypeFilters, showTopN]);
 
   // Calculate margins by style
   const styleMargins = useMemo(() => {
@@ -510,9 +559,16 @@ export default function MarginsView({
     });
   }, [styleMargins, selectedDivision, selectedCategory, selectedCategoryFilter, selectedTier]);
 
-  // Filter style channel margins
+  // Filter style channel margins with search
   const filteredStyleChannelMargins = useMemo(() => {
     return styleChannelMargins.filter(s => {
+      // Search filter - match style number or description
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesStyle = s.styleNumber.toLowerCase().includes(query);
+        const matchesDesc = s.styleDesc.toLowerCase().includes(query);
+        if (!matchesStyle && !matchesDesc) return false;
+      }
       if (selectedCategoryFilter && s.categoryDesc !== selectedCategoryFilter) return false;
       if (selectedTier) {
         const tier = getMarginTier(s.weightedMargin);
@@ -520,7 +576,7 @@ export default function MarginsView({
       }
       return true;
     });
-  }, [styleChannelMargins, selectedCategoryFilter, selectedTier]);
+  }, [styleChannelMargins, selectedCategoryFilter, selectedTier, searchQuery]);
 
   // Sort styles (traditional view)
   const sortedStyles = useMemo(() => {
@@ -767,12 +823,40 @@ export default function MarginsView({
         </div>
       </div>
 
+      {/* Debug Info - Customer Types Found */}
+      {viewMode === 'channel' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
+          <h4 className="font-bold text-yellow-800 mb-2">Debug: Customer Types in Sales Data</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <span className="font-semibold">Types Found:</span>
+              <ul className="ml-4">
+                {Object.entries(customerTypeDebug.typeCounts).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                  <li key={type}><code>{type}</code>: {count.toLocaleString()} records</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <span className="font-semibold">Sample Customers:</span>
+              <ul className="ml-4">
+                {customerTypeDebug.sampleCustomers.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Channel Summary Cards */}
       {viewMode === 'channel' && (
         <>
-          <div className="grid grid-cols-5 gap-4">
-            {/* Channel Cards */}
-            {channelPerformance.channels.map(channel => {
+          <div className="grid grid-cols-6 gap-3">
+            {/* Channel Cards - Show top 5 by revenue + Blended */}
+            {channelPerformance.channels
+              .sort((a, b) => b.revenue - a.revenue)
+              .slice(0, 5)
+              .map(channel => {
               const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
               const isSelected = selectedCustomerType === channel.channel;
 
@@ -780,42 +864,42 @@ export default function MarginsView({
                 <button
                   key={channel.channel}
                   onClick={() => setSelectedCustomerType(isSelected ? null : channel.channel)}
-                  className={`bg-white rounded-xl border-2 p-5 shadow-sm transition-all text-left ${
+                  className={`bg-white rounded-xl border-2 p-4 shadow-sm transition-all text-left ${
                     isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={`w-10 h-10 rounded-lg ${colors.light} flex items-center justify-center ${colors.text}`}>
-                      {CHANNEL_ICONS[channel.channel] || <DollarSign className="w-5 h-5" />}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-8 h-8 rounded-lg ${colors.light} flex items-center justify-center ${colors.text}`}>
+                      {CHANNEL_ICONS[channel.channel] || <DollarSign className="w-4 h-4" />}
                     </div>
-                    <div className="text-sm font-bold text-gray-600 uppercase tracking-wide">
+                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide">
                       {channel.channel}
                     </div>
                   </div>
-                  <p className={`text-3xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  <p className={`text-2xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {formatPercent(channel.trueMargin)}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatCurrency(channel.revenue)} · {channel.revenuePct.toFixed(0)}% mix
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatCurrency(channel.revenue)} · {channel.revenuePct.toFixed(0)}%
                   </p>
                 </button>
               );
             })}
 
             {/* Blended Card */}
-            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-5 shadow-sm">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-                  <Percent className="w-5 h-5 text-white" />
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Percent className="w-4 h-4 text-white" />
                 </div>
-                <div className="text-sm font-bold text-gray-300 uppercase tracking-wide">
+                <div className="text-xs font-bold text-gray-300 uppercase tracking-wide">
                   BLENDED
                 </div>
               </div>
-              <p className={`text-3xl font-bold font-mono ${channelPerformance.blended.trueMargin >= TARGET_MARGIN ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <p className={`text-2xl font-bold font-mono ${channelPerformance.blended.trueMargin >= TARGET_MARGIN ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {formatPercent(channelPerformance.blended.trueMargin)}
               </p>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-xs text-gray-400 mt-1">
                 {formatCurrency(channelPerformance.blended.revenue)} total
               </p>
             </div>
@@ -971,74 +1055,162 @@ export default function MarginsView({
             </div>
           </div>
 
-          {/* Customer Breakdown */}
-          {customerBreakdown.length > 0 && (
-            <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-              <div className="px-6 py-4 border-b-2 border-gray-200">
+          {/* Customer Breakdown with Filters */}
+          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-gray-200">
+              <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold text-gray-900">Top Customers by Revenue</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2 border-gray-200 bg-gray-50">
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Type</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Margin</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerBreakdown.slice(0, 10).map((customer, index) => (
-                      <tr
-                        key={customer.customer}
-                        onClick={() => setSelectedCustomer(selectedCustomer === customer.customer ? null : customer.customer)}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                          selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <td className="px-4 py-3 font-medium text-gray-900">{customer.customer}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 text-gray-600">
-                            {customer.customerType}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrency(customer.revenue)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-600">{formatNumber(customer.units)}</td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-900">${customer.avgNetPrice.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-mono font-semibold px-2 py-1 rounded ${getMarginColor(customer.margin)}`}>
-                            {formatPercent(customer.margin)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="flex items-center gap-4">
+                  {/* Channel Type Filter Buttons */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Channel:</span>
+                    <button
+                      onClick={() => setCustomerTypeFilters([])}
+                      className={`px-2 py-1 text-xs font-semibold rounded ${
+                        customerTypeFilters.length === 0 ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {['WH', 'BB', 'EC', 'PS', 'KI', 'DTC'].map(type => {
+                      const isActive = customerTypeFilters.includes(type);
+                      const colors = CHANNEL_COLORS[type] || { bg: 'bg-gray-600', light: 'bg-gray-100' };
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => {
+                            if (isActive) {
+                              setCustomerTypeFilters(customerTypeFilters.filter(t => t !== type));
+                            } else {
+                              setCustomerTypeFilters([...customerTypeFilters, type]);
+                            }
+                          }}
+                          className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${
+                            isActive ? `${colors.bg} text-white` : `${colors.light} text-gray-700 hover:opacity-80`
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Show Top N Selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Show:</span>
+                    <select
+                      value={showTopN}
+                      onChange={(e) => setShowTopN(Number(e.target.value))}
+                      className="text-sm border border-gray-300 rounded px-2 py-1"
+                    >
+                      <option value={10}>Top 10</option>
+                      <option value={25}>Top 25</option>
+                      <option value={50}>Top 50</option>
+                      <option value={0}>All</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b-2 border-gray-200 bg-gray-50">
+                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</th>
+                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Type</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerBreakdown.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                        No customers found with selected filters
+                      </td>
+                    </tr>
+                  ) : (
+                    customerBreakdown.map((customer, index) => {
+                      const typeColors = CHANNEL_COLORS[customer.customerType] || { bg: 'bg-gray-600', light: 'bg-gray-100', text: 'text-gray-700' };
+                      return (
+                        <tr
+                          key={`${customer.customer}-${index}`}
+                          onClick={() => setSelectedCustomer(selectedCustomer === customer.customer ? null : customer.customer)}
+                          className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                            selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-medium text-gray-900">{customer.customer}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-semibold px-2 py-1 rounded ${typeColors.light} ${typeColors.text}`}>
+                              {customer.customerType}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrency(customer.revenue)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-gray-600">{formatNumber(customer.units)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-gray-900">${customer.avgNetPrice.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`font-mono font-semibold px-2 py-1 rounded ${getMarginColor(customer.margin)}`}>
+                              {formatPercent(customer.margin)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* Style-Level Margin Analysis */}
           <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">Style-Level Margin Analysis</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Baseline (wholesale) vs Weighted (actual sales mix) margin comparison
-                </p>
+            <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Style-Level Margin Analysis</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Baseline (wholesale) vs Weighted (actual sales mix) margin comparison
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1">
+                    <span className="text-emerald-600">🟢</span> Above baseline
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-red-600">🔴</span> Below baseline
+                  </span>
+                  <span className="text-gray-500">
+                    {formatNumber(sortedStyleChannelMargins.length)} styles
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="flex items-center gap-1">
-                  <span className="text-emerald-600">🟢</span> Above baseline
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="text-red-600">🔴</span> Below baseline
-                </span>
-                <span className="text-gray-500">
-                  {formatNumber(sortedStyleChannelMargins.length)} styles
-                </span>
+              {/* Search Input */}
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Search by style # or description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {searchQuery && (
+                  <span className="text-sm text-gray-500">
+                    Found {formatNumber(sortedStyleChannelMargins.length)} matching styles
+                  </span>
+                )}
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -1056,9 +1228,9 @@ export default function MarginsView({
                     </th>
                     <th
                       className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
-                      onClick={() => handleSort('revenue' as SortField)}
+                      onClick={() => handleSort('totalRevenue')}
                     >
-                      Revenue
+                      Revenue <SortIcon field="totalRevenue" />
                     </th>
                     <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center" colSpan={4}>
                       Channel Mix
