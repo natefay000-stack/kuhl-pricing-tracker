@@ -179,11 +179,9 @@ export default function SalesView({
     return Array.from(all).sort();
   }, [sales]);
 
-  const customerTypes = useMemo(() => {
-    const all = new Set<string>();
-    sales.forEach((s) => s.customerType && all.add(s.customerType));
-    return Array.from(all).sort();
-  }, [sales]);
+  // FIXED: Use hardcoded list of 6 channels - DO NOT derive from sales data
+  // The sales data has comma-joined customerTypes from style aggregation
+  const customerTypes = ['WH', 'BB', 'WD', 'EC', 'PS', 'KI'];
 
   const customers = useMemo(() => {
     const all = new Set<string>();
@@ -295,8 +293,11 @@ export default function SalesView({
   // By Channel (for chart) - use PRE-COMPUTED aggregations from API (not style-aggregated sales)
   // This is critical: the API aggregates by individual customerType from raw sales records
   const byChannel = useMemo(() => {
-    if (!salesAggregations?.byChannel) {
-      // Fallback if no aggregations available
+    // Debug: Log what we're receiving
+    console.log('salesAggregations?.byChannel:', salesAggregations?.byChannel?.length, 'records');
+
+    if (!salesAggregations?.byChannel || salesAggregations.byChannel.length === 0) {
+      console.warn('No salesAggregations.byChannel available - chart will be empty');
       return [];
     }
 

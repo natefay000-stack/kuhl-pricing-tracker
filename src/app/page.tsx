@@ -19,7 +19,8 @@ import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product
 import { clearAllData } from '@/lib/db';
 
 // Cache version - increment to invalidate cache
-const CACHE_VERSION = 'v1';
+// v2: Added salesAggregations for correct channel/category/gender charts
+const CACHE_VERSION = 'v2';
 const CACHE_KEY = `kuhl-data-${CACHE_VERSION}`;
 
 // Sales aggregation types (from API)
