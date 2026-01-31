@@ -333,7 +333,17 @@ export default function SmartImportModal({
         // Add to all sales
         if (data.sales && data.sales.length > 0) {
           allSales.push(...data.sales);
-          if (fileItem.season) {
+
+          // Extract seasons from the actual sales records
+          const recordSeasons = data.sales
+            .map((s: Record<string, unknown>) => s.season as string)
+            .filter((s: string) => s && s.length > 0);
+
+          if (recordSeasons.length > 0) {
+            // Use seasons from records
+            allSeasons.push(...recordSeasons);
+          } else if (fileItem.season) {
+            // Fallback to filename-detected season
             allSeasons.push(fileItem.season);
           }
         }
@@ -445,7 +455,18 @@ export default function SmartImportModal({
 
       // Route to appropriate handler based on type
       if (selectedType === 'sales') {
-        onImportSalesOnly({ sales: data.sales });
+        // Extract unique seasons from the sales data for season-aware replace
+        const allSeasonValues = (data.sales || [])
+          .map((s: Record<string, unknown>) => s.season as string)
+          .filter((s: string) => s && s.length > 0);
+        const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
+        console.log('Sales import - detected seasons:', salesSeasons);
+
+        // Use season-aware replace (keeps other seasons intact)
+        onImportSalesReplace({
+          sales: data.sales,
+          seasons: salesSeasons,
+        });
       } else if (selectedType === 'lineList') {
         // Line List now imports with seasons from the file
         // Each product has its own season field

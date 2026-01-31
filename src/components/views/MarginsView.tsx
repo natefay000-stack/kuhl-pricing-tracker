@@ -109,26 +109,26 @@ interface CustomerBreakdown {
 type SortField = 'styleNumber' | 'styleDesc' | 'revenue' | 'cogs' | 'gross' | 'margin' | 'vsTarget' | 'weightedMargin' | 'marginDelta' | 'baselineMargin' | 'totalRevenue';
 type SortDirection = 'asc' | 'desc';
 
-// Customer Type mapping - each code is its OWN channel, not grouped
+// Customer Type mapping - FINAL
+// WD and DTC are combined as "KÜHL Stores"
 const CHANNEL_LABELS: Record<string, string> = {
   'WH': 'Wholesale',
   'BB': 'REI',
   'PS': 'Pro Sales',
   'EC': 'E-commerce',
-  'KI': 'KUHL Intl',
-  'DTC': 'DTC Stores',
-  'WD': 'Wholesale Direct',
+  'KI': 'KUHL International',
+  'KUHL_STORES': 'KÜHL Stores',  // Combined WD + DTC
 };
 
-// All 6 primary channels - BB is separate, NOT grouped under WH
-const PRIMARY_CHANNELS = ['EC', 'DTC', 'PS', 'BB', 'KI', 'WH'];
+// 6 primary channels (WD/DTC combined into KUHL_STORES)
+const PRIMARY_CHANNELS = ['WH', 'BB', 'KUHL_STORES', 'EC', 'PS', 'KI'];
 
-// Top 5 channels to show in cards (plus blended)
-const CARD_CHANNELS = ['EC', 'BB', 'WH', 'PS', 'KI'];
+// Top channels to show in cards
+const CARD_CHANNELS = ['WH', 'BB', 'KUHL_STORES', 'EC', 'PS', 'KI'];
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
   'EC': <Globe className="w-5 h-5" />,
-  'DTC': <Store className="w-5 h-5" />,
+  'KUHL_STORES': <Store className="w-5 h-5" />,
   'PS': <Users className="w-5 h-5" />,
   'WH': <ShoppingCart className="w-5 h-5" />,
   'BB': <Package className="w-5 h-5" />,
@@ -136,11 +136,11 @@ const CHANNEL_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }> = {
-  'EC': { bg: 'bg-purple-600', text: 'text-purple-700', light: 'bg-purple-100' },
-  'DTC': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100' },
-  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100' },
   'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100' },
   'BB': { bg: 'bg-red-600', text: 'text-red-700', light: 'bg-red-100' },
+  'KUHL_STORES': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100' },
+  'EC': { bg: 'bg-purple-600', text: 'text-purple-700', light: 'bg-purple-100' },
+  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100' },
   'KI': { bg: 'bg-cyan-600', text: 'text-cyan-700', light: 'bg-cyan-100' },
 };
 
@@ -190,16 +190,53 @@ function getMarginBarColor(tier: 'excellent' | 'target' | 'watch' | 'problem'): 
   }
 }
 
-// Normalize customer type - keep each type separate, just uppercase
-function normalizeCustomerType(customerType: string): string {
-  if (!customerType) return 'WH';
-  const upper = customerType.toUpperCase().trim();
-  // Return as-is if it's a known type
-  if (['WH', 'BB', 'PS', 'EC', 'KI', 'DTC', 'WD'].includes(upper)) {
-    return upper;
-  }
-  // Default to WH for unknown types
+// Known customer type codes from source data
+const RAW_TYPES = ['WH', 'BB', 'PS', 'EC', 'KI', 'DTC', 'WD'];
+
+// Normalize raw customer type to channel code
+// WD and DTC both map to KUHL_STORES
+function mapToChannel(rawType: string): string {
+  const upper = rawType.toUpperCase().trim();
+  // WD and DTC are both KÜHL Stores
+  if (upper === 'WD' || upper === 'DTC') return 'KUHL_STORES';
+  // Other known types map directly
+  if (['WH', 'BB', 'PS', 'EC', 'KI'].includes(upper)) return upper;
+  // Unknown defaults to WH
   return 'WH';
+}
+
+// Parse customer type - handles comma-separated values from aggregated data
+// Returns the normalized channel code
+function parseCustomerType(customerType: string): { channel: string; isMixed: boolean; rawTypes: string[] } {
+  if (!customerType) return { channel: 'WH', isMixed: false, rawTypes: [] };
+
+  const upper = customerType.toUpperCase().trim();
+
+  // Check for comma-separated values (aggregated data)
+  if (upper.includes(',')) {
+    const types = upper.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    const validTypes = types.filter(t => RAW_TYPES.includes(t));
+    // Get unique channels after mapping
+    const channels = Array.from(new Set(validTypes.map(mapToChannel)));
+    return {
+      channel: channels[0] || 'WH',
+      isMixed: channels.length > 1,
+      rawTypes: validTypes
+    };
+  }
+
+  // Single type
+  if (RAW_TYPES.includes(upper)) {
+    return { channel: mapToChannel(upper), isMixed: false, rawTypes: [upper] };
+  }
+
+  // Unknown type - default to WH
+  return { channel: 'WH', isMixed: false, rawTypes: [] };
+}
+
+// Simple normalize for backwards compatibility - returns channel code
+function normalizeCustomerType(customerType: string): string {
+  return parseCustomerType(customerType).channel;
 }
 
 export default function MarginsView({
@@ -228,28 +265,6 @@ export default function MarginsView({
   // Customer filters
   const [customerTypeFilters, setCustomerTypeFilters] = useState<string[]>([]);
   const [showTopN, setShowTopN] = useState<number>(10);
-
-  // Debug: Log unique customer types on first render
-  const customerTypeDebug = useMemo(() => {
-    const typeCounts: Record<string, number> = {};
-    const sampleCustomers: string[] = [];
-
-    sales.forEach((s, i) => {
-      const type = s.customerType || 'EMPTY';
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
-      if (i < 5 && s.customer) {
-        sampleCustomers.push(`${s.customer} (${type})`);
-      }
-    });
-
-    console.log('=== Customer Type Debug ===');
-    console.log('Unique Customer Types:', Object.keys(typeCounts));
-    console.log('Counts by Type:', typeCounts);
-    console.log('Sample Customers:', sampleCustomers);
-    console.log('Total Sales Records:', sales.length);
-
-    return { typeCounts, sampleCustomers };
-  }, [sales]);
 
   // Build cost lookup from costs data
   const costLookup = useMemo(() => {
@@ -823,30 +838,6 @@ export default function MarginsView({
         </div>
       </div>
 
-      {/* Debug Info - Customer Types Found */}
-      {viewMode === 'channel' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
-          <h4 className="font-bold text-yellow-800 mb-2">Debug: Customer Types in Sales Data</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <span className="font-semibold">Types Found:</span>
-              <ul className="ml-4">
-                {Object.entries(customerTypeDebug.typeCounts).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-                  <li key={type}><code>{type}</code>: {count.toLocaleString()} records</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <span className="font-semibold">Sample Customers:</span>
-              <ul className="ml-4">
-                {customerTypeDebug.sampleCustomers.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Channel Summary Cards */}
       {viewMode === 'channel' && (

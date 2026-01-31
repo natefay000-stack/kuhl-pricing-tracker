@@ -70,11 +70,18 @@ export interface ImportedSalesItem {
   customer: string;
   customerType: string;
   unitsBooked: number;
+  unitsOpen: number;
   revenue: number;
+  shipped: number;
   divisionDesc: string;
   categoryDesc: string;
+  gender: string;
   wholesalePrice: number;
   msrp: number;
+  netUnitPrice: number;
+  cost: number;
+  salesRep: string;
+  orderType: string;
 }
 
 export interface SeasonImportResult {
@@ -325,6 +332,17 @@ export function parsePricingXLSX(buffer: ArrayBuffer): ImportedPricingItem[] {
     });
 }
 
+// Helper to find a column value with flexible matching
+function getColumn(row: Record<string, unknown>, ...names: string[]): unknown {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== '') return row[name];
+    // Also try trimmed version
+    const trimmed = name.trim();
+    if (row[trimmed] !== undefined && row[trimmed] !== '') return row[trimmed];
+  }
+  return '';
+}
+
 export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
   const workbook = XLSX.read(buffer, { type: 'array' });
 
@@ -337,44 +355,57 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
 
   // Log column headers for debugging
   if (rows.length > 0) {
-    console.log('Sales file columns:', Object.keys(rows[0]));
+    const cols = Object.keys(rows[0]);
+    console.log('Sales file columns:', cols);
+    console.log('Total columns:', cols.length);
   }
 
-  return rows
+  const results = rows
     .filter(row => {
-      const styleNumber = parseString(row['Style']);
+      const styleNumber = parseString(getColumn(row, 'Style', 'Style #', 'Style#'));
       return styleNumber && styleNumber.length > 0;
     })
     .map((row) => {
-      const rawSeason = parseString(row['Season']);
+      const rawSeason = parseString(getColumn(row, 'Season', 'Seas'));
       const season = normalizeSeasonCode(rawSeason);
 
-      // Try multiple column name variations for customer name
-      const customer = parseString(
-        row['Customer Name'] ||
-        row['Customer'] ||
-        row['Cust Name'] ||
-        row['Cust'] ||
-        row['Account Name'] ||
-        row['Account']
-      );
-
       return {
-        styleNumber: parseString(row['Style']),
-        styleDesc: parseString(row['Style Description']),
-        colorCode: parseString(row['Color']),
-        colorDesc: parseString(row['Color Desc. From Clr Mst']),
+        styleNumber: parseString(getColumn(row, 'Style', 'Style #', 'Style#')),
+        styleDesc: parseString(getColumn(row, 'Style Description', 'Style Desc', 'Description')),
+        colorCode: parseString(getColumn(row, 'Color', 'Color Code', 'Clr')),
+        colorDesc: parseString(getColumn(row, 'Color Desc. From Clr Mst', 'Color Desc', 'Clr Desc')),
         season,
-        customer,
-        customerType: parseString(row['Customer Type']),
-        unitsBooked: parseNumber(row['Units Current Booked']),
-        revenue: parseNumber(row['$ Current Booked Net']),
-        divisionDesc: parseString(row['Division']),
-        categoryDesc: parseString(row['Category Description']),
-        wholesalePrice: parseNumber(row['Wholesale Price']),
-        msrp: parseNumber(row['MSRP (Style)']) || parseNumber(row['MSRP (Order)']),
+        customer: parseString(getColumn(row, 'Customer Name', 'Customer', 'Cust Name', 'Cust', 'Account Name', 'Account')),
+        customerType: parseString(getColumn(row, 'Customer Type', 'Cust Type', 'Type')),
+        unitsBooked: parseNumber(getColumn(row, 'Units Current Booked', 'Units Booked', 'Qty', 'Units')),
+        unitsOpen: parseNumber(getColumn(row, 'Units Open', 'Open Units')),
+        revenue: parseNumber(getColumn(row, '$ Current Booked Net', 'Revenue', 'Booked Net', 'Net Revenue')),
+        shipped: parseNumber(getColumn(row, '$ Shipped Net', 'Shipped', 'Shipped Net')),
+        divisionDesc: parseString(getColumn(row, 'Division', 'Div', 'Division Desc')),
+        categoryDesc: parseString(getColumn(row, 'Category Description', 'Category', 'Cat Desc', 'Category Desc')),
+        gender: parseString(getColumn(row, 'Gender Descripton', 'Gender Description', 'Gender', 'Gender Desc')),
+        wholesalePrice: parseNumber(getColumn(row, 'Wholesale Price', 'Wholesale', 'WHSL', 'Price')),
+        msrp: parseNumber(getColumn(row, 'MSRP (Style)', 'MSRP (Order)', 'MSRP', 'Retail')),
+        netUnitPrice: parseNumber(getColumn(row, 'Net Unit Price', 'Net Price', 'Unit Price')),
+        cost: parseNumber(getColumn(row, 'Cost', 'Unit Cost', 'COGS')),
+        salesRep: parseString(getColumn(row, 'Sales Rep 1', 'Sales Rep', 'Rep', 'Salesperson')),
+        orderType: parseString(getColumn(row, 'Order Type', 'Type')),
       };
     });
+
+  console.log(`Parsed ${results.length} sales records`);
+  if (results.length > 0) {
+    const sample = results[0];
+    console.log('Sample record:', {
+      style: sample.styleNumber,
+      customer: sample.customer,
+      customerType: sample.customerType,
+      revenue: sample.revenue,
+      units: sample.unitsBooked,
+    });
+  }
+
+  return results;
 }
 
 export function mergeSeasonData(
