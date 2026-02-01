@@ -3,6 +3,14 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// Helper to safely convert BigInt to Number
+function toNumber(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'bigint') return Number(val);
+  if (typeof val === 'number') return val;
+  return Number(val) || 0;
+}
+
 // Fast dashboard summary - aggregated queries only, no raw records
 export async function GET() {
   const startTime = Date.now();
@@ -25,17 +33,17 @@ export async function GET() {
       // Sales aggregates - use raw SQL for performance
       prisma.$queryRaw<Array<{
         season: string;
-        total_revenue: number;
-        total_units: number;
-        unique_styles: number;
-        unique_customers: number;
+        total_revenue: unknown;
+        total_units: unknown;
+        unique_styles: unknown;
+        unique_customers: unknown;
       }>>`
         SELECT
           season,
-          SUM(revenue)::float as total_revenue,
-          SUM("unitsBooked")::int as total_units,
-          COUNT(DISTINCT "styleNumber")::int as unique_styles,
-          COUNT(DISTINCT customer)::int as unique_customers
+          COALESCE(SUM(revenue), 0) as total_revenue,
+          COALESCE(SUM("unitsBooked"), 0) as total_units,
+          COUNT(DISTINCT "styleNumber") as unique_styles,
+          COUNT(DISTINCT customer) as unique_customers
         FROM "Sale"
         GROUP BY season
         ORDER BY season DESC
@@ -64,6 +72,10 @@ export async function GET() {
       `,
     ]);
 
+    console.log('[Summary API] Raw salesStats:', JSON.stringify(salesStats, (_, v) =>
+      typeof v === 'bigint' ? v.toString() : v
+    ));
+
     // Build summary by season
     const seasonSummaries: Record<string, {
       products: number;
@@ -89,14 +101,14 @@ export async function GET() {
       }
     });
 
-    // Fill in sales stats
+    // Fill in sales stats - convert BigInt to Number
     salesStats.forEach(s => {
       if (seasonSummaries[s.season]) {
         seasonSummaries[s.season].sales = {
-          revenue: s.total_revenue || 0,
-          units: s.total_units || 0,
-          styles: s.unique_styles || 0,
-          customers: s.unique_customers || 0,
+          revenue: toNumber(s.total_revenue),
+          units: toNumber(s.total_units),
+          styles: toNumber(s.unique_styles),
+          customers: toNumber(s.unique_customers),
         };
       }
     });
@@ -118,13 +130,19 @@ export async function GET() {
     // Calculate totals
     const totals = {
       products: productStats.reduce((sum, p) => sum + p._count.id, 0),
-      salesRevenue: salesStats.reduce((sum, s) => sum + (s.total_revenue || 0), 0),
-      salesUnits: salesStats.reduce((sum, s) => sum + (s.total_units || 0), 0),
+      salesRevenue: salesStats.reduce((sum, s) => sum + toNumber(s.total_revenue), 0),
+      salesUnits: salesStats.reduce((sum, s) => sum + toNumber(s.total_units), 0),
       costs: costStats.reduce((sum, c) => sum + c._count.id, 0),
       pricing: pricingStats.reduce((sum, p) => sum + p._count.id, 0),
     };
 
     const duration = Date.now() - startTime;
+
+    console.log('[Summary API] Returning:', {
+      seasons: seasonList.length,
+      totals,
+      duration: `${duration}ms`
+    });
 
     return NextResponse.json({
       success: true,

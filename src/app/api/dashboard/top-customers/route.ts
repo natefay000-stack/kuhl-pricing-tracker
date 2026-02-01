@@ -3,6 +3,14 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// Helper to safely convert BigInt to Number
+function toNumber(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'bigint') return Number(val);
+  if (typeof val === 'number') return val;
+  return Number(val) || 0;
+}
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
@@ -14,39 +22,39 @@ export async function GET(request: NextRequest) {
       ? await prisma.$queryRaw<Array<{
           customer: string;
           customer_type: string;
-          total_revenue: number;
-          total_units: number;
-          order_count: number;
+          total_revenue: unknown;
+          total_units: unknown;
+          order_count: unknown;
         }>>`
           SELECT
             customer,
             "customerType" as customer_type,
-            SUM(revenue)::float as total_revenue,
-            SUM("unitsBooked")::int as total_units,
-            COUNT(*)::int as order_count
+            COALESCE(SUM(revenue), 0) as total_revenue,
+            COALESCE(SUM("unitsBooked"), 0) as total_units,
+            COUNT(*) as order_count
           FROM "Sale"
           WHERE season = ${season} AND customer IS NOT NULL AND customer != ''
           GROUP BY customer, "customerType"
-          ORDER BY SUM(revenue) DESC
+          ORDER BY SUM(revenue) DESC NULLS LAST
           LIMIT ${limit}
         `
       : await prisma.$queryRaw<Array<{
           customer: string;
           customer_type: string;
-          total_revenue: number;
-          total_units: number;
-          order_count: number;
+          total_revenue: unknown;
+          total_units: unknown;
+          order_count: unknown;
         }>>`
           SELECT
             customer,
             "customerType" as customer_type,
-            SUM(revenue)::float as total_revenue,
-            SUM("unitsBooked")::int as total_units,
-            COUNT(*)::int as order_count
+            COALESCE(SUM(revenue), 0) as total_revenue,
+            COALESCE(SUM("unitsBooked"), 0) as total_units,
+            COUNT(*) as order_count
           FROM "Sale"
           WHERE customer IS NOT NULL AND customer != ''
           GROUP BY customer, "customerType"
-          ORDER BY SUM(revenue) DESC
+          ORDER BY SUM(revenue) DESC NULLS LAST
           LIMIT ${limit}
         `;
 
@@ -54,9 +62,9 @@ export async function GET(request: NextRequest) {
       rank: index + 1,
       customer: r.customer,
       customerType: r.customer_type || 'Unknown',
-      revenue: r.total_revenue || 0,
-      units: r.total_units || 0,
-      orders: r.order_count || 0,
+      revenue: toNumber(r.total_revenue),
+      units: toNumber(r.total_units),
+      orders: toNumber(r.order_count),
     }));
 
     return NextResponse.json({

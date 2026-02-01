@@ -3,6 +3,14 @@ import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+// Helper to safely convert BigInt to Number
+function toNumber(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'bigint') return Number(val);
+  if (typeof val === 'number') return val;
+  return Number(val) || 0;
+}
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
@@ -13,9 +21,9 @@ export async function GET(request: NextRequest) {
     const result = season
       ? await prisma.$queryRaw<Array<{
           gender: string;
-          total_revenue: number;
-          total_units: number;
-          style_count: number;
+          total_revenue: unknown;
+          total_units: unknown;
+          style_count: unknown;
         }>>`
           SELECT
             CASE
@@ -23,9 +31,9 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END as gender,
-            SUM(revenue)::float as total_revenue,
-            SUM("unitsBooked")::int as total_units,
-            COUNT(DISTINCT "styleNumber")::int as style_count
+            COALESCE(SUM(revenue), 0) as total_revenue,
+            COALESCE(SUM("unitsBooked"), 0) as total_units,
+            COUNT(DISTINCT "styleNumber") as style_count
           FROM "Sale"
           WHERE season = ${season}
           GROUP BY
@@ -34,13 +42,13 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END
-          ORDER BY SUM(revenue) DESC
+          ORDER BY SUM(revenue) DESC NULLS LAST
         `
       : await prisma.$queryRaw<Array<{
           gender: string;
-          total_revenue: number;
-          total_units: number;
-          style_count: number;
+          total_revenue: unknown;
+          total_units: unknown;
+          style_count: unknown;
         }>>`
           SELECT
             CASE
@@ -48,9 +56,9 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END as gender,
-            SUM(revenue)::float as total_revenue,
-            SUM("unitsBooked")::int as total_units,
-            COUNT(DISTINCT "styleNumber")::int as style_count
+            COALESCE(SUM(revenue), 0) as total_revenue,
+            COALESCE(SUM("unitsBooked"), 0) as total_units,
+            COUNT(DISTINCT "styleNumber") as style_count
           FROM "Sale"
           GROUP BY
             CASE
@@ -58,17 +66,17 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END
-          ORDER BY SUM(revenue) DESC
+          ORDER BY SUM(revenue) DESC NULLS LAST
         `;
 
-    const totalRevenue = result.reduce((sum, r) => sum + (r.total_revenue || 0), 0);
+    const totalRevenue = result.reduce((sum, r) => sum + toNumber(r.total_revenue), 0);
 
     const genders = result.map(r => ({
       gender: r.gender,
-      revenue: r.total_revenue || 0,
-      units: r.total_units || 0,
-      styles: r.style_count || 0,
-      revenuePercent: totalRevenue > 0 ? ((r.total_revenue || 0) / totalRevenue) * 100 : 0,
+      revenue: toNumber(r.total_revenue),
+      units: toNumber(r.total_units),
+      styles: toNumber(r.style_count),
+      revenuePercent: totalRevenue > 0 ? (toNumber(r.total_revenue) / totalRevenue) * 100 : 0,
     }));
 
     return NextResponse.json({
