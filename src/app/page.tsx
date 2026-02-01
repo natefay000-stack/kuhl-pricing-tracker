@@ -175,22 +175,28 @@ export default function Home() {
   // Load data on mount
   useEffect(() => {
     async function initializeData() {
-      // Timeout to skip loading if taking too long (for local dev without DB)
+      // Increased timeout to 60 seconds - large datasets take time to load
       const loadingTimeout = setTimeout(() => {
-        console.log('Loading timeout - showing empty state');
-        setLoadingStatus('Ready - no data loaded');
+        console.error('Loading timeout after 60s - this should not happen');
+        setLoadingStatus('Loading timed out - please refresh');
         setIsLoading(false);
-      }, 3000);
+      }, 60000);
 
       try {
         // Check cache first
         setLoadingStatus('Checking cache...');
         setLoadingProgress(5);
+        console.log('[Data Load] Starting - checking cache...');
 
         const cached = getCachedData();
-        if (cached) {
+        if (cached && cached.products.length > 0) {
           clearTimeout(loadingTimeout);
-          console.log('Loading from cache...');
+          console.log('[Data Load] Cache hit:', {
+            products: cached.products.length,
+            sales: cached.sales.length,
+            pricing: cached.pricing.length,
+            costs: cached.costs.length,
+          });
           setLoadingStatus('Loading from cache...');
           setLoadingProgress(50);
 
@@ -208,9 +214,9 @@ export default function Home() {
         }
 
         // Try loading from database first (for deployed environment)
-        setLoadingStatus('Connecting to database...');
+        setLoadingStatus('Loading data from server...');
         setLoadingProgress(10);
-        console.log('Trying database API...');
+        console.log('[Data Load] Cache miss - fetching from /api/data...');
 
         let data = {
           products: [] as Product[],
@@ -221,11 +227,20 @@ export default function Home() {
         };
 
         try {
+          const startTime = Date.now();
           const dbResponse = await fetch('/api/data');
+          const fetchDuration = Date.now() - startTime;
+          console.log(`[Data Load] /api/data response in ${fetchDuration}ms, status: ${dbResponse.status}`);
+
           if (dbResponse.ok) {
             const dbResult = await dbResponse.json();
-            if (dbResult.success && dbResult.counts.products > 0) {
-              console.log('Loaded from database:', dbResult.counts);
+            console.log('[Data Load] API response:', {
+              success: dbResult.success,
+              counts: dbResult.counts,
+            });
+
+            if (dbResult.success && dbResult.counts && dbResult.counts.products > 0) {
+              console.log('[Data Load] Setting data from database');
               setLoadingProgress(70);
               data = {
                 products: dbResult.data.products || [],
@@ -234,10 +249,15 @@ export default function Home() {
                 costs: dbResult.data.costs || [],
                 salesAggregations: dbResult.salesAggregations || null,
               };
+            } else {
+              console.warn('[Data Load] API returned success but no products:', dbResult);
             }
+          } else {
+            const errorText = await dbResponse.text();
+            console.error('[Data Load] API error:', dbResponse.status, errorText);
           }
         } catch (dbErr) {
-          console.log('Database not available, falling back to Excel files:', dbErr);
+          console.error('[Data Load] Fetch error:', dbErr);
         }
 
         // If database is empty, try Excel files (local dev only)
@@ -274,8 +294,15 @@ export default function Home() {
 
         // If still no data, show empty state (user needs to import)
         if (data.products.length === 0) {
-          console.log('No data found - user needs to import via Season Import Modal');
+          console.warn('[Data Load] No data found - user needs to import');
           setLoadingStatus('Ready - Import data to get started');
+        } else {
+          console.log('[Data Load] SUCCESS - Setting state:', {
+            products: data.products.length,
+            sales: data.sales.length,
+            pricing: data.pricing.length,
+            costs: data.costs.length,
+          });
         }
 
         setLoadingProgress(85);
@@ -287,23 +314,27 @@ export default function Home() {
           setSalesAggregations(data.salesAggregations);
         }
 
-        // Cache for next time
-        setLoadingStatus('Caching data...');
-        setLoadingProgress(95);
-        setCachedData({
-          products: data.products,
-          sales: data.sales,
-          pricing: data.pricing,
-          costs: data.costs,
-          salesAggregations: data.salesAggregations || undefined,
-        });
+        // Cache for next time (only if we have data)
+        if (data.products.length > 0) {
+          setLoadingStatus('Caching data...');
+          setLoadingProgress(95);
+          console.log('[Data Load] Caching data for next load...');
+          setCachedData({
+            products: data.products,
+            sales: data.sales,
+            pricing: data.pricing,
+            costs: data.costs,
+            salesAggregations: data.salesAggregations || undefined,
+          });
+        }
 
         setLoadingProgress(100);
         clearTimeout(loadingTimeout);
         setIsLoading(false);
+        console.log('[Data Load] Complete');
       } catch (err) {
-        console.error('Failed to initialize data:', err);
-        setLoadingStatus('Ready - Import data to get started');
+        console.error('[Data Load] CRITICAL ERROR:', err);
+        setLoadingStatus('Error loading data - check console');
         clearTimeout(loadingTimeout);
         setIsLoading(false);
       }
