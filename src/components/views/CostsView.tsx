@@ -19,6 +19,7 @@ import {
   Globe,
   Users,
   Layers,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface CostsViewProps {
@@ -349,6 +350,16 @@ export default function CostsView({
       poor: withMargin.filter((c) => (c.margin || 0) > 0 && (c.margin || 0) < 0.40).length,
     };
 
+    // Missing Costs: styles in products (filtered by season) that don't have cost data
+    const costStyleNumbers = new Set(filteredCostsWithSales.map(c => c.styleNumber));
+    const productStyleNumbers = new Set(
+      products
+        .filter(p => !filterSeason || p.season === filterSeason)
+        .map(p => p.styleNumber)
+    );
+    const missingCosts = Array.from(productStyleNumbers).filter(s => !costStyleNumbers.has(s)).length;
+    const totalProductStyles = productStyleNumbers.size;
+
     return {
       totalRecords: filteredCostsWithSales.length,
       totalRevenue,
@@ -360,8 +371,10 @@ export default function CostsView({
       avgLanded,
       avgMargin,
       marginBuckets,
+      missingCosts,
+      totalProductStyles,
     };
-  }, [filteredCostsWithSales]);
+  }, [filteredCostsWithSales, products, filterSeason]);
 
   // Group by Factory
   const byFactory = useMemo(() => {
@@ -603,10 +616,14 @@ export default function CostsView({
 
       {/* Filter Bar */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-        <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-sm font-black text-gray-700 uppercase tracking-wide">Filters</span>
+          <div className="flex-1 h-px bg-gray-200"></div>
+        </div>
+        <div className="flex flex-wrap gap-5 items-end">
           {/* Season Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Season</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Season</label>
             <select
               value={filterSeason}
               onChange={(e) => { setFilterSeason(e.target.value); setCurrentPage(1); }}
@@ -620,8 +637,8 @@ export default function CostsView({
           </div>
 
           {/* Style # Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Style #</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Style #</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -635,8 +652,8 @@ export default function CostsView({
           </div>
 
           {/* Factory Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Factory</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Factory</label>
             <select
               value={filterFactory}
               onChange={(e) => { setFilterFactory(e.target.value); setCurrentPage(1); }}
@@ -650,8 +667,8 @@ export default function CostsView({
           </div>
 
           {/* Country Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Country</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Country</label>
             <select
               value={filterCountry}
               onChange={(e) => { setFilterCountry(e.target.value); setCurrentPage(1); }}
@@ -665,8 +682,8 @@ export default function CostsView({
           </div>
 
           {/* Design Team Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Team</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Team</label>
             <select
               value={filterTeam}
               onChange={(e) => { setFilterTeam(e.target.value); setCurrentPage(1); }}
@@ -680,8 +697,8 @@ export default function CostsView({
           </div>
 
           {/* Developer Filter */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Developer</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Developer</label>
             <select
               value={filterDeveloper}
               onChange={(e) => { setFilterDeveloper(e.target.value); setCurrentPage(1); }}
@@ -720,7 +737,7 @@ export default function CostsView({
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
             <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Records</span>
@@ -772,6 +789,24 @@ export default function CostsView({
             <Globe className="w-6 h-6 text-cyan-500" />
           </div>
           <div className="text-3xl font-display font-bold text-gray-900">{summary.uniqueCountries}</div>
+        </div>
+
+        {/* Missing Costs Card */}
+        <div className={`rounded-xl border-2 p-5 shadow-sm ${
+          summary.missingCosts > 0 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-300'
+        }`}>
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Missing</span>
+            <AlertTriangle className={`w-6 h-6 ${summary.missingCosts > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+          </div>
+          <div className={`text-3xl font-display font-bold ${
+            summary.missingCosts > 0 ? 'text-amber-600' : 'text-emerald-600'
+          }`}>
+            {summary.missingCosts}
+          </div>
+          <div className="text-sm text-gray-500 mt-1">
+            of {summary.totalProductStyles} styles
+          </div>
         </div>
       </div>
 

@@ -133,12 +133,8 @@ export default function SeasonView({
     return Array.from(all).sort();
   }, [products]);
 
-  // Get unique customer types
-  const customerTypes = useMemo(() => {
-    const all = new Set<string>();
-    sales.forEach((s) => s.customerType && all.add(s.customerType));
-    return Array.from(all).sort();
-  }, [sales]);
+  // Hardcoded list of 6 individual channels (not derived from data which has combinations)
+  const customerTypes = ['WH', 'BB', 'WD', 'EC', 'PS', 'KI'];
 
   // Get unique customers
   const customers = useMemo(() => {
@@ -265,7 +261,7 @@ export default function SeasonView({
     // Sales by style+season
     const salesByStyleSeason = new Map<string, { revenue: number; units: number }>();
     sales.forEach((s) => {
-      if (selectedCustomerType && s.customerType !== selectedCustomerType) return;
+      if (selectedCustomerType && !s.customerType?.includes(selectedCustomerType)) return;
       if (selectedCustomer && s.customer !== selectedCustomer) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(s.season)) return;
 
@@ -835,20 +831,23 @@ export default function SeasonView({
                   const badge = getSeasonStatusBadge(status);
                   const currentSeason = getCurrentShippingSeason();
                   const isCurrent = season === currentSeason;
+                  // Abbreviate status labels to keep columns tight
+                  const shortLabel = badge.label === 'SHIPPING' ? 'SHIP'
+                    : badge.label === 'PRE-BOOK' ? 'PRE'
+                    : badge.label === 'PLANNING' ? 'PLAN'
+                    : badge.label;
                   return (
                     <th
                       key={season}
-                      className={`px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 min-w-[120px] border-l border-gray-200 ${isCurrent ? 'bg-cyan-50' : 'bg-gray-100'}`}
+                      className={`px-3 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 min-w-[100px] border-l border-gray-200 ${isCurrent ? 'bg-cyan-50' : 'bg-gray-100'}`}
                       onClick={() => handleSort(season)}
                     >
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono">{season}</span>
-                          <ArrowUpDown className="w-4 h-4" />
-                        </div>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${badge.color}`}>
-                          {badge.icon} {badge.label}
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="font-mono text-base">{season}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${badge.color}`}>
+                          {shortLabel}
                         </span>
+                        <ArrowUpDown className="w-3 h-3 flex-shrink-0" />
                       </div>
                     </th>
                   );

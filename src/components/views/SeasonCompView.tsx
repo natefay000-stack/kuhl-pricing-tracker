@@ -30,6 +30,8 @@ export default function SeasonCompView({
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedDesigner, setSelectedDesigner] = useState<string>('');
   const [selectedSeasons, setSelectedSeasons] = useState<string[]>([]);
+  const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
 
   // Get all available seasons (only recent ones: 24-27)
   const allSeasons = useMemo(() => {
@@ -62,6 +64,22 @@ export default function SeasonCompView({
     setSelectedSeasons([]);
   };
 
+  // Select all Spring or all Fall seasons
+  const selectSeasonType = (type: 'SP' | 'FA') => {
+    const matching = allSeasons.filter((s) => s.includes(type));
+    const allSelected = matching.every((s) => selectedSeasons.includes(s));
+    if (allSelected) {
+      // Deselect all of this type
+      setSelectedSeasons((prev) => prev.filter((s) => !s.includes(type)));
+    } else {
+      // Select all of this type
+      setSelectedSeasons((prev) => {
+        const others = prev.filter((s) => !s.includes(type));
+        return [...others, ...matching];
+      });
+    }
+  };
+
   // Get filter options
   const divisions = useMemo(() => {
     const all = new Set<string>();
@@ -74,6 +92,20 @@ export default function SeasonCompView({
     products.forEach((p) => p.designerName && all.add(p.designerName));
     return Array.from(all).sort();
   }, [products]);
+
+  // Get unique customer types from sales
+  const customerTypes = useMemo(() => {
+    const all = new Set<string>();
+    sales.forEach((s) => s.customerType && all.add(s.customerType));
+    return Array.from(all).sort();
+  }, [sales]);
+
+  // Get unique customers from sales
+  const customers = useMemo(() => {
+    const all = new Set<string>();
+    sales.forEach((s) => s.customer && all.add(s.customer));
+    return Array.from(all).sort();
+  }, [sales]);
 
   // Get categories based on division filter
   const categories = useMemo(() => {
@@ -157,6 +189,10 @@ export default function SeasonCompView({
         const styleProduct = products.find((p) => p.styleNumber === s.styleNumber && p.designerName === selectedDesigner);
         if (!styleProduct) return;
       }
+      // Filter by customer type
+      if (selectedCustomerType && s.customerType !== selectedCustomerType) return;
+      // Filter by customer
+      if (selectedCustomer && s.customer !== selectedCustomer) return;
 
       const category = normalizeCategory(s.categoryDesc) || 'Other';
       const seasonMap = data.get(s.season);
@@ -171,7 +207,7 @@ export default function SeasonCompView({
     });
 
     return data;
-  }, [products, sales, seasons, selectedDivision, selectedDesigner, allSeasons]);
+  }, [products, sales, seasons, selectedDivision, selectedDesigner, selectedCustomerType, selectedCustomer, allSeasons]);
 
   // Get data for a specific season/category
   const getData = (season: string, category: string) => {
@@ -342,7 +378,30 @@ export default function SeasonCompView({
       {/* Quick Season Filter */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-bold text-gray-500 uppercase tracking-wide">Quick Season Filter</span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-bold text-gray-500 uppercase tracking-wide">Quick Season Filter</span>
+            {/* All Spring / All Fall buttons */}
+            <button
+              onClick={() => selectSeasonType('SP')}
+              className={`text-sm font-bold px-4 py-1.5 rounded-lg transition-colors ${
+                allSeasons.filter((s) => s.includes('SP')).every((s) => selectedSeasons.includes(s)) && allSeasons.filter((s) => s.includes('SP')).length > 0
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+              }`}
+            >
+              All Spring
+            </button>
+            <button
+              onClick={() => selectSeasonType('FA')}
+              className={`text-sm font-bold px-4 py-1.5 rounded-lg transition-colors ${
+                allSeasons.filter((s) => s.includes('FA')).every((s) => selectedSeasons.includes(s)) && allSeasons.filter((s) => s.includes('FA')).length > 0
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+              }`}
+            >
+              All Fall
+            </button>
+          </div>
           {selectedSeasons.length > 0 && (
             <button
               onClick={clearSeasonFilter}
@@ -431,6 +490,39 @@ export default function SeasonCompView({
               <option value="">All Designers</option>
               {designers.map((d) => (
                 <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Customer Type</label>
+            <select
+              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[160px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
+                selectedCustomerType ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
+              }`}
+              value={selectedCustomerType}
+              onChange={(e) => {
+                setSelectedCustomerType(e.target.value);
+                setSelectedCustomer(''); // Reset customer when type changes
+              }}
+            >
+              <option value="">All Types</option>
+              {customerTypes.map((ct) => (
+                <option key={ct} value={ct}>{ct}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Customer</label>
+            <select
+              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
+                selectedCustomer ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
+              }`}
+              value={selectedCustomer}
+              onChange={(e) => setSelectedCustomer(e.target.value)}
+            >
+              <option value="">All Customers</option>
+              {customers.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>

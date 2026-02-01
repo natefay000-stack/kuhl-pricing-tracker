@@ -51,9 +51,9 @@ const COLUMN_GROUPS: ColumnGroup[] = [
     id: 'core',
     label: 'Core',
     columns: [
-      { key: 'flags', label: 'Flags', width: '100px' },
-      { key: 'styleNumber', label: 'Style #', width: '80px' },
-      { key: 'styleDesc', label: 'Style Name', width: '180px' },
+      // FLAGS column hidden until proper flag data is available (CO = Carryover was working, but topSeller/smu/kore/map are not populated)
+      { key: 'styleNumber', label: 'Style #', width: '100px' },
+      { key: 'styleDesc', label: 'Style Name', width: '200px' },
       { key: 'color', label: 'Color', width: '70px' },
       { key: 'colorDesc', label: 'Color Desc', width: '120px' },
       { key: 'categoryDesc', label: 'Category', width: '100px' },
@@ -143,6 +143,7 @@ export default function LineListView({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
+  const [rollUpStyles, setRollUpStyles] = useState<boolean>(false);
 
   // Get filter options
   const divisions = useMemo(() => {
@@ -347,9 +348,33 @@ export default function LineListView({
     stylesWithSales,
   ]);
 
+  // Roll up to style level (aggregate colors into one row per style)
+  const rolledUpData = useMemo(() => {
+    if (!rollUpStyles) return filteredData;
+
+    const styleMap = new Map<string, EnrichedProduct & { colorCount: number }>();
+
+    filteredData.forEach((item) => {
+      const existing = styleMap.get(item.styleNumber);
+      if (existing) {
+        // Aggregate: increment color count, keep first row's data
+        existing.colorCount++;
+      } else {
+        styleMap.set(item.styleNumber, {
+          ...item,
+          color: '', // Clear color since we're rolling up
+          colorDesc: '', // Clear color desc
+          colorCount: 1,
+        });
+      }
+    });
+
+    return Array.from(styleMap.values());
+  }, [filteredData, rollUpStyles]);
+
   // Sort data
   const sortedData = useMemo(() => {
-    return [...filteredData].sort((a, b) => {
+    return [...rolledUpData].sort((a, b) => {
       const aVal = (a as Record<string, unknown>)[sortColumn];
       const bVal = (b as Record<string, unknown>)[sortColumn];
 
@@ -361,7 +386,7 @@ export default function LineListView({
       const bStr = String(bVal || '');
       return sortDir === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
     });
-  }, [filteredData, sortColumn, sortDir]);
+  }, [rolledUpData, sortColumn, sortDir]);
 
   // Paginate
   const paginatedData = useMemo(() => {
@@ -552,33 +577,18 @@ export default function LineListView({
   const formatCurrency = (val: number) => (val > 0 ? `$${val.toFixed(2)}` : '—');
   const formatPercent = (val: number) => (val > 0 ? `${val.toFixed(1)}%` : '—');
 
-  const getCellValue = (row: EnrichedProduct, key: string): React.ReactNode => {
-    if (key === 'flags') {
+  const getCellValue = (row: EnrichedProduct & { colorCount?: number }, key: string): React.ReactNode => {
+    // Handle rolled-up color columns
+    if (rollUpStyles && key === 'color') {
+      const count = row.colorCount || 1;
       return (
-        <div className="flex flex-wrap gap-1">
-          {row.isNew && (
-            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">NEW</span>
-          )}
-          {row.topSeller && (
-            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-bold rounded">TOP</span>
-          )}
-          {row.smu && (
-            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded">SMU</span>
-          )}
-          {row.kore && (
-            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">KORE</span>
-          )}
-          {row.mapProtected && (
-            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">MAP</span>
-          )}
-          {row.isCarryOver && (
-            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-bold rounded">CO</span>
-          )}
-          {row.isDropped && (
-            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">DROP</span>
-          )}
-        </div>
+        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+          {count} color{count !== 1 ? 's' : ''}
+        </span>
       );
+    }
+    if (rollUpStyles && key === 'colorDesc') {
+      return '—';
     }
     if (key === 'msrp' || key === 'price' || key === 'landed' || key === 'fob') {
       return formatCurrency((row as unknown as Record<string, number>)[key]);
@@ -723,6 +733,25 @@ export default function LineListView({
               placeholder="Style #, name, color..."
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
             />
+          </div>
+
+          {/* Roll Up Styles Toggle */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">View</label>
+            <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+              <input
+                type="checkbox"
+                checked={rollUpStyles}
+                onChange={(e) => {
+                  setRollUpStyles(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Roll up styles
+              </span>
+            </label>
           </div>
 
           {/* Hide No Sales Toggle - only for historical seasons */}
@@ -915,18 +944,18 @@ export default function LineListView({
                 {visibleColumns.map((col, idx) => (
                   <th
                     key={col.key}
-                    onClick={() => col.key !== 'flags' && handleSort(col.key)}
-                    className={`px-3 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide ${
-                      col.key !== 'flags' ? 'cursor-pointer hover:text-gray-900' : ''
-                    } ${idx < 3 ? 'sticky left-0 bg-gray-100 z-10' : ''}`}
+                    onClick={() => handleSort(col.key)}
+                    className={`px-3 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 ${
+                      idx < 2 ? 'sticky left-0 bg-gray-100 z-10' : ''
+                    }`}
                     style={{
                       minWidth: col.width,
-                      left: idx === 0 ? 0 : idx === 1 ? '100px' : idx === 2 ? '180px' : undefined,
+                      left: idx === 0 ? 0 : idx === 1 ? '100px' : undefined,
                     }}
                   >
                     <div className="flex items-center gap-1">
                       {col.label}
-                      {col.key !== 'flags' && <ArrowUpDown className="w-3 h-3" />}
+                      <ArrowUpDown className="w-3 h-3" />
                     </div>
                   </th>
                 ))}
@@ -945,10 +974,10 @@ export default function LineListView({
                     <td
                       key={col.key}
                       className={`px-3 py-3 text-sm ${
-                        colIdx < 3 ? 'sticky bg-inherit z-10' : ''
+                        colIdx < 2 ? 'sticky bg-inherit z-10' : ''
                       } ${col.key === 'styleNumber' ? 'font-mono font-bold text-gray-900' : 'text-gray-700'}`}
                       style={{
-                        left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : colIdx === 2 ? '180px' : undefined,
+                        left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : undefined,
                       }}
                     >
                       {getCellValue(row, col.key)}
@@ -963,7 +992,7 @@ export default function LineListView({
         {/* Pagination */}
         <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-700">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)} of {sortedData.length} SKUs
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)} of {sortedData.length} {rollUpStyles ? 'styles' : 'SKUs'}
           </span>
           <div className="flex items-center gap-2">
             <button

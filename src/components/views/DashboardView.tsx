@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
-import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
+import { DollarSign, Package, TrendingUp, Layers, ChevronRight } from 'lucide-react';
 
 interface DashboardViewProps {
   products: Product[];
@@ -130,6 +130,7 @@ export default function DashboardView({
     });
 
     return Array.from(grouped.entries())
+      .filter(([gender]) => gender !== 'Unknown') // Hide Unknown gender
       .map(([gender, revenue]) => ({
         gender,
         revenue,
@@ -137,50 +138,6 @@ export default function DashboardView({
       }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredSales, productGenderMap]);
-
-  // Cost summary stats
-  const costStats = useMemo(() => {
-    // Filter costs by selected season
-    const filteredCosts = selectedSeason
-      ? costs.filter((c) => c.season === selectedSeason)
-      : costs;
-
-    const stylesWithCosts = filteredCosts.filter((c) => c.landed > 0);
-    const totalStyles = stylesWithCosts.length;
-
-    if (totalStyles === 0) {
-      return {
-        totalStyles: 0,
-        avgLanded: 0,
-        avgFob: 0,
-        avgMargin: 0,
-        marginBuckets: { excellent: 0, good: 0, fair: 0, poor: 0 },
-      };
-    }
-
-    const avgLanded = stylesWithCosts.reduce((sum, c) => sum + c.landed, 0) / totalStyles;
-    const avgFob = stylesWithCosts.reduce((sum, c) => sum + (c.fob || 0), 0) / totalStyles;
-
-    // Calculate margins using suggested wholesale from costs
-    const margins = stylesWithCosts
-      .filter((c) => c.suggestedWholesale && c.suggestedWholesale > 0)
-      .map((c) => ((c.suggestedWholesale! - c.landed) / c.suggestedWholesale!) * 100);
-
-    const avgMargin = margins.length > 0
-      ? margins.reduce((sum, m) => sum + m, 0) / margins.length
-      : 0;
-
-    // Margin distribution buckets
-    const marginBuckets = { excellent: 0, good: 0, fair: 0, poor: 0 };
-    margins.forEach((m) => {
-      if (m >= 50) marginBuckets.excellent++;
-      else if (m >= 45) marginBuckets.good++;
-      else if (m >= 40) marginBuckets.fair++;
-      else marginBuckets.poor++;
-    });
-
-    return { totalStyles, avgLanded, avgFob, avgMargin, marginBuckets };
-  }, [costs, selectedSeason]);
 
   // Top styles by revenue
   const topStyles = useMemo(() => {
@@ -368,97 +325,6 @@ export default function DashboardView({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Costs Summary */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-300">
-          <h3 className="text-xl font-bold text-gray-900">
-            Cost Analysis {selectedSeason ? `(${selectedSeason})` : '(All Seasons)'}
-          </h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-4 gap-6">
-            {/* Styles with Costs */}
-            <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatNumber(costStats.totalStyles)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
-                Styles with Costs
-              </p>
-            </div>
-
-            {/* Avg FOB */}
-            <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                ${costStats.avgFob.toFixed(2)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
-                Avg FOB
-              </p>
-            </div>
-
-            {/* Avg Landed */}
-            <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                ${costStats.avgLanded.toFixed(2)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
-                Avg Landed
-              </p>
-            </div>
-
-            {/* Avg Margin */}
-            <div className="text-center">
-              <p className={`text-3xl font-bold font-mono ${
-                costStats.avgMargin >= 50 ? 'text-emerald-600' :
-                costStats.avgMargin >= 45 ? 'text-amber-600' :
-                costStats.avgMargin >= 40 ? 'text-orange-600' : 'text-red-600'
-              }`}>
-                {formatPercent(costStats.avgMargin)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
-                Avg Margin
-              </p>
-            </div>
-          </div>
-
-          {/* Margin Distribution */}
-          {costStats.totalStyles > 0 && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm font-bold text-gray-600 uppercase tracking-wide mb-3">
-                Margin Distribution
-              </p>
-              <div className="flex gap-4">
-                <div className="flex-1 bg-emerald-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-emerald-700">
-                    {costStats.marginBuckets.excellent}
-                  </p>
-                  <p className="text-xs font-semibold text-emerald-600 mt-1">50%+ Excellent</p>
-                </div>
-                <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-amber-700">
-                    {costStats.marginBuckets.good}
-                  </p>
-                  <p className="text-xs font-semibold text-amber-600 mt-1">45-50% Good</p>
-                </div>
-                <div className="flex-1 bg-orange-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-orange-700">
-                    {costStats.marginBuckets.fair}
-                  </p>
-                  <p className="text-xs font-semibold text-orange-600 mt-1">40-45% Fair</p>
-                </div>
-                <div className="flex-1 bg-red-50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-red-700">
-                    {costStats.marginBuckets.poor}
-                  </p>
-                  <p className="text-xs font-semibold text-red-600 mt-1">&lt;40% Poor</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

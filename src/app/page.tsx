@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar, { ViewId } from '@/components/layout/Sidebar';
 import AppHeader from '@/components/layout/AppHeader';
-import FilterBar from '@/components/layout/FilterBar';
 import DashboardView from '@/components/views/DashboardView';
 import SeasonView from '@/components/views/SeasonView';
 import SalesView from '@/components/views/SalesView';
@@ -758,20 +757,6 @@ export default function Home() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={handleRefresh}
-        />
-
-        {/* Filter Bar */}
-        <FilterBar
-          activeView={activeView}
-          seasons={seasons}
-          divisions={divisions}
-          categories={categories}
-          selectedSeason={selectedSeason}
-          selectedDivision={selectedDivision}
-          selectedCategory={selectedCategory}
-          onSeasonChange={setSelectedSeason}
-          onDivisionChange={setSelectedDivision}
-          onCategoryChange={setSelectedCategory}
         />
 
         {/* View Content */}

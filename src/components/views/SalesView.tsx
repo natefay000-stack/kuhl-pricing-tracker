@@ -63,6 +63,20 @@ const GENDER_COLORS: Record<string, string> = {
   "Unknown": '#6b7280',  // gray-500
 };
 
+// Channel colors for By Channel chart
+const CHANNEL_COLORS: Record<string, string> = {
+  'WH': '#16a34a',       // green-600 - Wholesale
+  'BB': '#dc2626',       // red-600 - REI
+  'KUHL_STORES': '#2563eb', // blue-600 - KÜHL Stores
+  'WD': '#2563eb',       // blue-600 - Wholesale Direct
+  'EC': '#9333ea',       // purple-600 - E-Commerce
+  'PS': '#d97706',       // amber-600 - Pro Sales
+  'KI': '#0891b2',       // cyan-600 - KUHL International
+};
+
+// Primary channel order for display
+const PRIMARY_CHANNELS = ['WH', 'BB', 'WD', 'EC', 'PS', 'KI'];
+
 interface SalesViewProps {
   sales: SalesRecord[];
   products: Product[];
@@ -101,6 +115,16 @@ function getGenderFromDivision(divisionDesc: string): string {
   if (lower.includes("women's") || lower.includes("woman")) return "Women's";
   if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
   return "Unknown";
+}
+
+// Extract base style number by stripping color suffix patterns (e.g., "-ONYX", "R", "X", "T")
+function getBaseStyleNumber(styleNumber: string): string {
+  if (!styleNumber) return styleNumber;
+  // Remove trailing single letter suffix (R, X, T patterns for colors)
+  // Also handle patterns like "-ONYX", "-GUN", "-ES"
+  return styleNumber
+    .replace(/-[A-Z]{2,}$/i, '') // Remove -COLOR suffix
+    .replace(/[RXT]$/i, ''); // Remove single letter color suffix
 }
 
 // Get the previous season code (e.g., 26FA → 25FA, 26SP → 25SP)
@@ -148,6 +172,7 @@ export default function SalesView({
   const [sortField, setSortField] = useState<SortField>('revenue');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [combineStyles, setCombineStyles] = useState(false);
   const pageSize = 50;
 
   // Get all unique values for filter dropdowns
@@ -188,7 +213,7 @@ export default function SalesView({
     return sales.filter((s) => {
       if (filterSeason && s.season !== filterSeason) return false;
       if (filterCategory && normalizeCategory(s.categoryDesc) !== filterCategory) return false;
-      if (filterCustomerType && s.customerType !== filterCustomerType) return false;
+      if (filterCustomerType && !s.customerType?.includes(filterCustomerType)) return false;
       if (filterCustomer && s.customer !== filterCustomer) return false;
       if (filterSalesRep && s.salesRep !== filterSalesRep) return false;
       if (filterStyleNumber && !s.styleNumber?.toLowerCase().includes(filterStyleNumber.toLowerCase())) return false;
@@ -239,7 +264,7 @@ export default function SalesView({
       const prevSales = sales.filter((s) => {
         if (s.season !== prevSeason) return false;
         if (filterCategory && normalizeCategory(s.categoryDesc) !== filterCategory) return false;
-        if (filterCustomerType && s.customerType !== filterCustomerType) return false;
+        if (filterCustomerType && !s.customerType?.includes(filterCustomerType)) return false;
         if (filterCustomer && s.customer !== filterCustomer) return false;
         if (filterSalesRep && s.salesRep !== filterSalesRep) return false;
         if (filterStyleNumber && !s.styleNumber?.toLowerCase().includes(filterStyleNumber.toLowerCase())) return false;
@@ -375,6 +400,53 @@ export default function SalesView({
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredSales, productGenderMap]);
 
+  // By Channel (for chart) - use PRE-COMPUTED aggregations from API
+  const byChannel = useMemo(() => {
+    if (!salesAggregations?.byChannel) {
+      return [];
+    }
+
+    // Filter by season if selected
+    let channelData = salesAggregations.byChannel;
+    if (filterSeason) {
+      channelData = channelData.filter(c => c.season === filterSeason);
+    }
+
+    // Group by channel and sum revenues
+    const grouped = new Map<string, { revenue: number; units: number }>();
+    channelData.forEach((c) => {
+      const key = c.channel;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.revenue += c.revenue;
+        existing.units += c.units;
+      } else {
+        grouped.set(key, { revenue: c.revenue, units: c.units });
+      }
+    });
+
+    // Calculate total for percentage
+    const total = Array.from(grouped.values()).reduce((sum, g) => sum + g.revenue, 0);
+
+    // Build result array in PRIMARY_CHANNELS order
+    const result = PRIMARY_CHANNELS
+      .filter(ch => grouped.has(ch))
+      .map(ch => {
+        const data = grouped.get(ch)!;
+        return {
+          key: ch,
+          label: CUSTOMER_TYPE_LABELS[ch] || ch,
+          revenue: data.revenue,
+          units: data.units,
+          sharePercent: total > 0 ? (data.revenue / total) * 100 : 0,
+          color: CHANNEL_COLORS[ch] || '#6b7280',
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+
+    return result;
+  }, [salesAggregations, filterSeason]);
+
   // Top Customers - use PRE-COMPUTED aggregations from API
   const topCustomers = useMemo(() => {
     if (!salesAggregations?.byCustomer) {
@@ -387,15 +459,20 @@ export default function SalesView({
       customerData = customerData.filter(c => c.season === filterSeason);
     }
 
-    // Group by customer
+    // Group by customer, combining KUHL Kultur entries into "KUHL Branded Stores"
     const grouped = new Map<string, { revenue: number; units: number }>();
     customerData.forEach((c) => {
-      const existing = grouped.get(c.customer);
+      // Combine all "KUHL Kultur" entries (Kultur 1, Kultur 2, etc.) into one entry
+      const customerName = c.customer?.toLowerCase().includes('kuhl kultur') || c.customer?.toLowerCase().includes('kultur ')
+        ? 'KUHL Branded Stores'
+        : c.customer;
+
+      const existing = grouped.get(customerName);
       if (existing) {
         existing.revenue += c.revenue;
         existing.units += c.units;
       } else {
-        grouped.set(c.customer, { revenue: c.revenue, units: c.units });
+        grouped.set(customerName, { revenue: c.revenue, units: c.units });
       }
     });
 
@@ -417,22 +494,34 @@ export default function SalesView({
         units: number;
         revenue: number;
         customers: Set<string>;
+        colorCount: number;
       }
     >();
 
     filteredSales.forEach((s) => {
-      const key = s.styleNumber;
-      if (!key) return;
+      const rawKey = s.styleNumber;
+      if (!rawKey) return;
+
+      // Use base style number when combining, otherwise use raw style number
+      const key = combineStyles ? getBaseStyleNumber(rawKey) : rawKey;
 
       if (!grouped.has(key)) {
+        // Priority 1: Look up gender from Line List (products)
+        let gender = productGenderMap.get(rawKey) || productGenderMap.get(key);
+        // Priority 2: Fall back to sales record's divisionDesc
+        if (!gender) {
+          gender = getGenderFromDivision(s.divisionDesc);
+        }
+
         grouped.set(key, {
           styleNumber: key,
           styleDesc: s.styleDesc || '',
-          gender: getGenderFromDivision(s.divisionDesc),
+          gender,
           categoryDesc: normalizeCategory(s.categoryDesc) || '',
           units: 0,
           revenue: 0,
           customers: new Set(),
+          colorCount: 0,
         });
       }
 
@@ -440,13 +529,17 @@ export default function SalesView({
       entry.units += s.unitsBooked || 0;
       entry.revenue += s.revenue || 0;
       if (s.customer) entry.customers.add(s.customer);
+      // Track unique colors when combining
+      if (combineStyles && rawKey !== key) {
+        entry.colorCount++;
+      }
     });
 
     return Array.from(grouped.values()).map((s) => ({
       ...s,
       customerCount: s.customers.size,
     }));
-  }, [filteredSales]);
+  }, [filteredSales, productGenderMap, combineStyles]);
 
   // Sorted and paginated styles
   const sortedStyles = useMemo(() => {
@@ -541,11 +634,15 @@ export default function SalesView({
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-xl border border-gray-300 p-5 shadow-sm">
-        <div className="flex flex-wrap gap-4 items-end">
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-sm font-black text-gray-700 uppercase tracking-wide">Filters</span>
+          <div className="flex-1 h-px bg-gray-200"></div>
+        </div>
+        <div className="flex flex-wrap gap-5 items-end">
           {/* Season */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Season</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Season</label>
             <select
               value={filterSeason}
               onChange={(e) => { setFilterSeason(e.target.value); setCurrentPage(1); }}
@@ -559,8 +656,8 @@ export default function SalesView({
           </div>
 
           {/* Category */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Category</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Category</label>
             <select
               value={filterCategory}
               onChange={(e) => { setFilterCategory(e.target.value); setCurrentPage(1); }}
@@ -574,8 +671,8 @@ export default function SalesView({
           </div>
 
           {/* Style Number */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Style #</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Style #</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -589,8 +686,8 @@ export default function SalesView({
           </div>
 
           {/* Customer Type */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Channel</label>
             <select
               value={filterCustomerType}
               onChange={(e) => { setFilterCustomerType(e.target.value); setCurrentPage(1); }}
@@ -604,8 +701,8 @@ export default function SalesView({
           </div>
 
           {/* Customer */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</label>
             <select
               value={filterCustomer}
               onChange={(e) => { setFilterCustomer(e.target.value); setCurrentPage(1); }}
@@ -619,8 +716,8 @@ export default function SalesView({
           </div>
 
           {/* Sales Rep */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Sales Rep</label>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sales Rep</label>
             <select
               value={filterSalesRep}
               onChange={(e) => { setFilterSalesRep(e.target.value); setCurrentPage(1); }}
@@ -763,7 +860,57 @@ export default function SalesView({
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* By Channel - Stacked horizontal bar */}
+        <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
+            <h3 className="text-xl font-bold text-gray-900">By Channel</h3>
+          </div>
+          <div className="p-6">
+            {byChannel.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No channel data available</p>
+            ) : (
+              <>
+                {/* Stacked horizontal bar */}
+                <div className="flex h-10 w-full rounded-lg overflow-hidden mb-4">
+                  {byChannel.map((item) => (
+                    <div
+                      key={item.key}
+                      className="h-full flex items-center justify-center text-white text-xs font-bold transition-all hover:opacity-90"
+                      style={{
+                        width: `${item.sharePercent}%`,
+                        backgroundColor: item.color,
+                        minWidth: item.sharePercent > 5 ? '30px' : '0'
+                      }}
+                      title={`${item.label}: ${formatCurrency(item.revenue)} (${item.sharePercent.toFixed(1)}%)`}
+                    >
+                      {item.sharePercent >= 8 ? `${item.sharePercent.toFixed(0)}%` : ''}
+                    </div>
+                  ))}
+                </div>
+                {/* Legend */}
+                <div className="space-y-2">
+                  {byChannel.map((item) => (
+                    <div key={item.key} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-gray-700 font-medium">{item.label}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-500 font-mono">{item.sharePercent.toFixed(0)}%</span>
+                        <span className="font-mono font-semibold text-gray-900 w-20 text-right">{formatCurrency(item.revenue)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         {/* By Gender - Horizontal bar chart */}
         <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
@@ -847,44 +994,90 @@ export default function SalesView({
       </div>
 
       {/* Top 10 Customers - Full width */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
+      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
           <h3 className="text-xl font-bold text-gray-900">Top 10 Customers</h3>
         </div>
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="p-6 space-y-4">
           {topCustomers.length === 0 ? (
-            <p className="text-gray-500 text-center py-4 col-span-2">No customer data available</p>
+            <p className="text-gray-500 text-center py-4">No customer data available</p>
           ) : (
-            topCustomers.map((item, index) => (
-              <button
-                key={item.customer}
-                onClick={() => setFilter('customer', item.customer)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
-                  activeFilters.customer === item.customer
-                    ? 'bg-amber-100 ring-2 ring-amber-500'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
-                    {index + 1}
-                  </span>
-                  <span className="text-sm text-gray-700 truncate max-w-[200px] font-medium">{item.customer}</span>
+            <>
+              {/* Row 1: Customers 1-5 */}
+              <div className="grid grid-cols-5 gap-4">
+                {topCustomers.slice(0, 5).map((item, index) => (
+                  <button
+                    key={item.customer}
+                    onClick={() => setFilter('customer', item.customer)}
+                    className={`flex flex-col items-center p-4 rounded-xl transition-colors border-2 ${
+                      activeFilters.customer === item.customer
+                        ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-500'
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center text-lg font-bold mb-3">
+                      {index + 1}
+                    </span>
+                    <span className="text-base font-semibold text-gray-900 text-center truncate w-full" title={item.customer}>
+                      {item.customer}
+                    </span>
+                    <span className="font-mono text-xl font-bold text-gray-900 mt-2">{formatCurrency(item.revenue)}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Row 2: Customers 6-10 */}
+              {topCustomers.length > 5 && (
+                <div className="grid grid-cols-5 gap-4">
+                  {topCustomers.slice(5, 10).map((item, index) => (
+                    <button
+                      key={item.customer}
+                      onClick={() => setFilter('customer', item.customer)}
+                      className={`flex flex-col items-center p-4 rounded-xl transition-colors border-2 ${
+                        activeFilters.customer === item.customer
+                          ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-500'
+                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="w-10 h-10 rounded-full bg-gray-400 text-white flex items-center justify-center text-lg font-bold mb-3">
+                        {index + 6}
+                      </span>
+                      <span className="text-base font-semibold text-gray-900 text-center truncate w-full" title={item.customer}>
+                        {item.customer}
+                      </span>
+                      <span className="font-mono text-xl font-bold text-gray-900 mt-2">{formatCurrency(item.revenue)}</span>
+                    </button>
+                  ))}
                 </div>
-                <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
-              </button>
-            ))
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Sales by Style Table */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Sales by Style</h3>
+      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <h3 className="text-xl font-bold text-gray-900">Sales by Style</h3>
+            {/* Combine Styles Toggle */}
+            <label className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={combineStyles}
+                onChange={(e) => {
+                  setCombineStyles(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
+                Combine Styles
+              </span>
+            </label>
+          </div>
           <button
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-colors shadow-sm"
           >
             <Download className="w-5 h-5" />
             Export CSV
