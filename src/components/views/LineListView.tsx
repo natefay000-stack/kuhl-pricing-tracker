@@ -3,8 +3,17 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
+import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+// Gender detection from division description
+function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex' {
+  if (!divisionDesc) return 'Unisex';
+  const lower = divisionDesc.toLowerCase();
+  if (lower.includes("women") || lower.includes("woman")) return 'Women';
+  if (lower.includes("men") && !lower.includes("women")) return 'Men';
+  return 'Unisex';
+}
 
 interface LineListViewProps {
   products: Product[];
@@ -383,6 +392,113 @@ export default function LineListView({
     };
   }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles, stylesWithSales]);
 
+  // Category stats with gender awareness
+  const categoryStats = useMemo(() => {
+    const seasonProducts = products.filter((p) => p.season === selectedSeason);
+    const categoryMap = new Map<string, {
+      name: string;
+      genders: Set<string>;
+      totalStyles: number;
+      menStyles: number;
+      womenStyles: number;
+      totalNew: number;
+      menNew: number;
+      womenNew: number;
+    }>();
+
+    // Build style-level data first (dedupe by style number)
+    const styleData = new Map<string, { category: string; gender: string; isNew: boolean }>();
+    seasonProducts.forEach((p) => {
+      const category = normalizeCategory(p.categoryDesc) || 'Other';
+      const gender = getGenderFromDivision(p.divisionDesc);
+      const isNew = !previousSeasonStyles.has(p.styleNumber);
+
+      // Only count each style once (first occurrence)
+      if (!styleData.has(p.styleNumber)) {
+        styleData.set(p.styleNumber, { category, gender, isNew });
+      }
+    });
+
+    // Aggregate by category
+    styleData.forEach(({ category, gender, isNew }) => {
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, {
+          name: category,
+          genders: new Set(),
+          totalStyles: 0,
+          menStyles: 0,
+          womenStyles: 0,
+          totalNew: 0,
+          menNew: 0,
+          womenNew: 0,
+        });
+      }
+
+      const cat = categoryMap.get(category)!;
+      cat.genders.add(gender);
+      cat.totalStyles++;
+      if (isNew) cat.totalNew++;
+
+      if (gender === 'Men') {
+        cat.menStyles++;
+        if (isNew) cat.menNew++;
+      } else if (gender === 'Women') {
+        cat.womenStyles++;
+        if (isNew) cat.womenNew++;
+      } else {
+        // Unisex counts for both
+        cat.menStyles++;
+        cat.womenStyles++;
+        if (isNew) {
+          cat.menNew++;
+          cat.womenNew++;
+        }
+      }
+    });
+
+    return Array.from(categoryMap.values()).sort((a, b) => b.totalStyles - a.totalStyles);
+  }, [products, selectedSeason, previousSeasonStyles]);
+
+  // Get visible categories based on division filter
+  const visibleCategories = useMemo(() => {
+    if (!divisionFilter) return categoryStats;
+
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    return categoryStats.filter((cat) => {
+      if (genderFilter === 'Men') return cat.menStyles > 0;
+      if (genderFilter === 'Women') return cat.womenStyles > 0;
+      return true;
+    });
+  }, [categoryStats, divisionFilter]);
+
+  // Get style count for a category based on current division filter
+  const getCategoryStyleCount = (cat: typeof categoryStats[0]) => {
+    if (!divisionFilter) return cat.totalStyles;
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (genderFilter === 'Men') return cat.menStyles;
+    if (genderFilter === 'Women') return cat.womenStyles;
+    return cat.totalStyles;
+  };
+
+  const getCategoryNewCount = (cat: typeof categoryStats[0]) => {
+    if (!divisionFilter) return cat.totalNew;
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (genderFilter === 'Men') return cat.menNew;
+    if (genderFilter === 'Women') return cat.womenNew;
+    return cat.totalNew;
+  };
+
+  // All categories totals for the "All" card
+  const allCategoryTotals = useMemo(() => {
+    let styles = 0;
+    let newCount = 0;
+    visibleCategories.forEach((cat) => {
+      styles += getCategoryStyleCount(cat);
+      newCount += getCategoryNewCount(cat);
+    });
+    return { styles, new: newCount };
+  }, [visibleCategories, divisionFilter]);
+
   // Visible columns
   const visibleColumns = useMemo(() => {
     return COLUMN_GROUPS.filter((g) => visibleGroups[g.id]).flatMap((g) => g.columns);
@@ -539,7 +655,10 @@ export default function LineListView({
             <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Division</label>
             <select
               value={divisionFilter}
-              onChange={(e) => setDivisionFilter(e.target.value)}
+              onChange={(e) => {
+                setDivisionFilter(e.target.value);
+                setCategoryFilter(''); // Reset category when division changes
+              }}
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
             >
               <option value="">All</option>
@@ -663,6 +782,84 @@ export default function LineListView({
             <p className="text-sm text-gray-500 font-bold uppercase mt-1">No Sales</p>
           </div>
         )}
+      </div>
+
+      {/* Category Cards */}
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Categories</span>
+            {divisionFilter && (
+              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+                {getGenderFromDivision(divisionFilter)}&apos;s
+              </span>
+            )}
+          </div>
+          {categoryFilter && (
+            <button
+              onClick={() => setCategoryFilter('')}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Clear filter
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-3">
+          {/* All Categories Card */}
+          <button
+            onClick={() => setCategoryFilter('')}
+            className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+              !categoryFilter
+                ? 'border-blue-500 bg-blue-50 shadow-md'
+                : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+            }`}
+          >
+            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600' : 'text-gray-900'}`}>
+              {allCategoryTotals.styles}
+            </div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">All</div>
+            <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600' : 'text-emerald-500'}`}>
+              +{allCategoryTotals.new} new
+            </div>
+            {!categoryFilter && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+            )}
+          </button>
+
+          {/* Individual Category Cards */}
+          {visibleCategories.map((cat) => {
+            const styleCount = getCategoryStyleCount(cat);
+            const newCount = getCategoryNewCount(cat);
+            const isSelected = categoryFilter === cat.name;
+
+            return (
+              <button
+                key={cat.name}
+                onClick={() => setCategoryFilter(cat.name)}
+                className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                }`}
+              >
+                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600' : 'text-gray-900'}`}>
+                  {styleCount}
+                </div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mt-1 truncate" title={cat.name}>
+                  {cat.name}
+                </div>
+                <div className={`text-xs mt-2 ${newCount > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
+                  {newCount > 0 ? `+${newCount} new` : '—'}
+                </div>
+                {isSelected && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Quick Filters */}

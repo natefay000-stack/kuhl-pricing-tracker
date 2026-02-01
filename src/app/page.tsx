@@ -13,8 +13,10 @@ import MarginsView from '@/components/views/MarginsView';
 import StyleMasterView from '@/components/views/StyleMasterView';
 import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
+import SeasonCompView from '@/components/views/SeasonCompView';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
+import SeasonsAdminModal from '@/components/SeasonsAdminModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 
@@ -148,6 +150,9 @@ export default function Home() {
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // Seasons admin modal
+  const [showSeasonsModal, setShowSeasonsModal] = useState(false);
+
   // Derive filter options from data
   const seasons = useMemo(() => {
     const all = new Set<string>();
@@ -171,6 +176,13 @@ export default function Home() {
   // Load data on mount
   useEffect(() => {
     async function initializeData() {
+      // Timeout to skip loading if taking too long (for local dev without DB)
+      const loadingTimeout = setTimeout(() => {
+        console.log('Loading timeout - showing empty state');
+        setLoadingStatus('Ready - no data loaded');
+        setIsLoading(false);
+      }, 3000);
+
       try {
         // Check cache first
         setLoadingStatus('Checking cache...');
@@ -178,6 +190,7 @@ export default function Home() {
 
         const cached = getCachedData();
         if (cached) {
+          clearTimeout(loadingTimeout);
           console.log('Loading from cache...');
           setLoadingStatus('Loading from cache...');
           setLoadingProgress(50);
@@ -287,10 +300,12 @@ export default function Home() {
         });
 
         setLoadingProgress(100);
+        clearTimeout(loadingTimeout);
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize data:', err);
         setLoadingStatus('Ready - Import data to get started');
+        clearTimeout(loadingTimeout);
         setIsLoading(false);
       }
     }
@@ -733,6 +748,7 @@ export default function Home() {
         activeView={activeView}
         onViewChange={setActiveView}
         onImportClick={() => setShowImportModal(true)}
+        onSeasonsClick={() => setShowSeasonsModal(true)}
       />
 
       {/* Main Content */}
@@ -780,6 +796,14 @@ export default function Home() {
               costs={costs}
               selectedDivision={selectedDivision}
               selectedCategory={selectedCategory}
+              onStyleClick={handleStyleClick}
+            />
+          )}
+
+          {activeView === 'seasoncomp' && (
+            <SeasonCompView
+              products={products}
+              sales={sales}
               onStyleClick={handleStyleClick}
             />
           )}
@@ -887,6 +911,16 @@ export default function Home() {
           onImportMultiSeason={handleMultiSeasonImport}
           onImportSalesReplace={handleSalesReplaceImport}
           onClose={() => setShowImportModal(false)}
+        />
+      )}
+
+      {/* Seasons Admin Modal */}
+      {showSeasonsModal && (
+        <SeasonsAdminModal
+          onClose={() => setShowSeasonsModal(false)}
+          onSeasonsUpdated={() => {
+            // Could refresh data here if needed
+          }}
         />
       )}
     </div>
