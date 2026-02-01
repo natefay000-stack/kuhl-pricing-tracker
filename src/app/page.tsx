@@ -739,7 +739,11 @@ export default function Home() {
     setSelectedSeason(data.season);
   };
 
-  if (isLoading) {
+  // Only show full-page loading for views that need heavy data (not dashboard)
+  // Dashboard has its own loading states with skeleton loaders
+  const needsHeavyData = activeView !== 'dashboard';
+
+  if (isLoading && needsHeavyData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="text-center max-w-md w-full px-8">
@@ -763,7 +767,7 @@ export default function Home() {
           {/* Tip for slow loads */}
           {loadingProgress > 10 && loadingProgress < 80 && (
             <p className="text-gray-500 text-xs mt-4">
-              First load processes 250K+ records. Subsequent loads use cache.
+              Loading detailed data for this view...
             </p>
           )}
         </div>
@@ -794,13 +798,8 @@ export default function Home() {
         <div className="min-h-[calc(100vh-112px)]">
           {activeView === 'dashboard' && (
             <DashboardView
-              products={products}
-              sales={sales}
-              costs={costs}
               selectedSeason={selectedSeason}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
+              onSeasonChange={setSelectedSeason}
             />
           )}
 

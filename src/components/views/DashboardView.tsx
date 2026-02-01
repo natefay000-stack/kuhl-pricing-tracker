@@ -1,26 +1,53 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
-import { DollarSign, Package, TrendingUp, Layers, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { DollarSign, Package, TrendingUp, Layers, Users, Store, RefreshCw } from 'lucide-react';
 
 interface DashboardViewProps {
-  products: Product[];
-  sales: SalesRecord[];
-  costs: CostRecord[];
   selectedSeason: string;
-  selectedDivision: string;
-  selectedCategory: string;
-  onStyleClick: (styleNumber: string) => void;
+  onSeasonChange?: (season: string) => void;
+}
+
+interface SeasonSummary {
+  products: number;
+  sales: { revenue: number; units: number; styles: number; customers: number };
+  costs: number;
+  pricing: number;
+}
+
+interface CategoryData {
+  category: string;
+  revenue: number;
+  units: number;
+  revenuePercent: number;
+}
+
+interface GenderData {
+  gender: string;
+  revenue: number;
+  units: number;
+  revenuePercent: number;
+}
+
+interface ChannelData {
+  channel: string;
+  channelLabel: string;
+  revenue: number;
+  units: number;
+  revenuePercent: number;
+}
+
+interface CustomerData {
+  rank: number;
+  customer: string;
+  customerType: string;
+  revenue: number;
+  units: number;
 }
 
 function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
-  }
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
   return `$${value.toFixed(0)}`;
 }
 
@@ -28,378 +55,439 @@ function formatNumber(value: number): string {
   return value.toLocaleString();
 }
 
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
+// Skeleton loader component
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl p-6 border border-gray-200 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
+      <div className="h-8 bg-gray-200 rounded w-32"></div>
+    </div>
+  );
 }
 
-export default function DashboardView({
-  products,
-  sales,
-  costs,
-  selectedSeason,
-  selectedDivision,
-  selectedCategory,
-  onStyleClick,
-}: DashboardViewProps) {
-  // Filter sales by selected filters
-  const filteredSales = useMemo(() => {
-    return sales.filter((s) => {
-      if (selectedSeason && s.season !== selectedSeason) return false;
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
-      if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
-      return true;
-    });
-  }, [sales, selectedSeason, selectedDivision, selectedCategory]);
+function SkeletonChart() {
+  return (
+    <div className="bg-white rounded-xl p-6 border border-gray-200 animate-pulse">
+      <div className="h-5 bg-gray-200 rounded w-32 mb-6"></div>
+      <div className="space-y-3">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="flex items-center gap-4">
+            <div className="h-4 bg-gray-200 rounded w-20"></div>
+            <div className="flex-1 h-6 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded w-16"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  // Calculate summary stats
-  const stats = useMemo(() => {
-    const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
-    const totalUnits = filteredSales.reduce((sum, s) => sum + (s.unitsBooked || 0), 0);
-    const uniqueStyles = new Set(filteredSales.map((s) => s.styleNumber)).size;
+export default function DashboardView({ selectedSeason, onSeasonChange }: DashboardViewProps) {
+  // Data state
+  const [seasons, setSeasons] = useState<string[]>([]);
+  const [summary, setSummary] = useState<SeasonSummary | null>(null);
+  const [categories, setCategories] = useState<CategoryData[]>([]);
+  const [genders, setGenders] = useState<GenderData[]>([]);
+  const [channels, setChannels] = useState<ChannelData[]>([]);
+  const [topCustomers, setTopCustomers] = useState<CustomerData[]>([]);
 
-    // Build cost lookup
-    const costLookup = new Map<string, number>();
-    costs.forEach((c) => {
-      const key = `${c.styleNumber}-${c.season}`;
-      if (c.landed > 0) {
-        costLookup.set(key, c.landed);
-      }
-    });
+  // Loading states
+  const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [loadingGenders, setLoadingGenders] = useState(true);
+  const [loadingChannels, setLoadingChannels] = useState(true);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
 
-    // Calculate margin
-    let totalCost = 0;
-    filteredSales.forEach((s) => {
-      const costKey = `${s.styleNumber}-${s.season}`;
-      const unitCost = costLookup.get(costKey) || 0;
-      totalCost += unitCost * s.unitsBooked;
-    });
+  const [error, setError] = useState<string | null>(null);
 
-    const margin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
+  // Load summary data (fast - runs first)
+  useEffect(() => {
+    async function loadSummary() {
+      setLoadingSummary(true);
+      try {
+        const res = await fetch('/api/dashboard/summary');
+        if (!res.ok) throw new Error('Failed to load summary');
+        const data = await res.json();
 
-    return { totalRevenue, totalUnits, uniqueStyles, margin };
-  }, [filteredSales, costs]);
+        if (data.success) {
+          setSeasons(data.seasons || []);
 
-  // Sales by category
-  const salesByCategory = useMemo(() => {
-    const grouped = new Map<string, number>();
-    filteredSales.forEach((s) => {
-      const cat = normalizeCategory(s.categoryDesc) || 'Unknown';
-      grouped.set(cat, (grouped.get(cat) || 0) + (s.revenue || 0));
-    });
-    return Array.from(grouped.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-  }, [filteredSales]);
-
-  // Helper to derive gender from divisionDesc
-  const getGenderFromDivision = (divisionDesc: string): string => {
-    if (!divisionDesc) return 'Unknown';
-    const lower = divisionDesc.toLowerCase();
-    if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
-    if (lower.includes("women's") || lower.includes("woman")) return "Women's";
-    if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
-    return "Unknown";
-  };
-
-  // Build gender lookup from products (Line List priority)
-  const productGenderMap = useMemo(() => {
-    const map = new Map<string, string>();
-    products.forEach((p) => {
-      if (p.styleNumber && p.divisionDesc) {
-        const gender = getGenderFromDivision(p.divisionDesc);
-        if (gender !== 'Unknown') {
-          map.set(p.styleNumber, gender);
+          // Get summary for selected season or first available
+          const targetSeason = selectedSeason || data.seasons?.[0];
+          if (targetSeason && data.seasonSummaries?.[targetSeason]) {
+            setSummary(data.seasonSummaries[targetSeason]);
+          } else if (data.totals) {
+            // Fallback to totals
+            setSummary({
+              products: data.totals.products,
+              sales: {
+                revenue: data.totals.salesRevenue,
+                units: data.totals.salesUnits,
+                styles: 0,
+                customers: 0,
+              },
+              costs: data.totals.costs,
+              pricing: data.totals.pricing,
+            });
+          }
         }
+      } catch (err) {
+        console.error('Summary load error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load');
+      } finally {
+        setLoadingSummary(false);
       }
-    });
-    return map;
-  }, [products]);
+    }
+    loadSummary();
+  }, [selectedSeason]);
 
-  // Sales by gender (Line List priority, fallback to sales divisionDesc)
-  const salesByGender = useMemo(() => {
-    const grouped = new Map<string, number>();
-    const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
+  // Load breakdown data in parallel (after summary)
+  useEffect(() => {
+    const seasonParam = selectedSeason ? `?season=${selectedSeason}` : '';
 
-    filteredSales.forEach((s) => {
-      // Priority: Line List first, then sales divisionDesc
-      let gender = productGenderMap.get(s.styleNumber);
-      if (!gender) {
-        gender = getGenderFromDivision(s.divisionDesc);
+    // Load categories
+    async function loadCategories() {
+      setLoadingCategories(true);
+      try {
+        const res = await fetch(`/api/dashboard/by-category${seasonParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setCategories(data.categories || []);
+        }
+      } catch (err) {
+        console.error('Categories load error:', err);
+      } finally {
+        setLoadingCategories(false);
       }
-      grouped.set(gender, (grouped.get(gender) || 0) + (s.revenue || 0));
-    });
+    }
 
-    return Array.from(grouped.entries())
-      .filter(([gender]) => gender !== 'Unknown') // Hide Unknown gender
-      .map(([gender, revenue]) => ({
-        gender,
-        revenue,
-        percent: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [filteredSales, productGenderMap]);
-
-  // Top styles by revenue
-  const topStyles = useMemo(() => {
-    const grouped = new Map<string, { styleNumber: string; styleDesc: string; units: number; revenue: number }>();
-
-    filteredSales.forEach((s) => {
-      const existing = grouped.get(s.styleNumber);
-      if (existing) {
-        existing.units += s.unitsBooked || 0;
-        existing.revenue += s.revenue || 0;
-      } else {
-        grouped.set(s.styleNumber, {
-          styleNumber: s.styleNumber,
-          styleDesc: s.styleDesc || '',
-          units: s.unitsBooked || 0,
-          revenue: s.revenue || 0,
-        });
+    // Load genders
+    async function loadGenders() {
+      setLoadingGenders(true);
+      try {
+        const res = await fetch(`/api/dashboard/by-gender${seasonParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setGenders(data.genders || []);
+        }
+      } catch (err) {
+        console.error('Genders load error:', err);
+      } finally {
+        setLoadingGenders(false);
       }
-    });
+    }
 
-    // Build cost lookup for margin
-    const costLookup = new Map<string, number>();
-    costs.forEach((c) => {
-      if (c.season === selectedSeason && c.landed > 0) {
-        costLookup.set(c.styleNumber, c.landed);
+    // Load channels
+    async function loadChannels() {
+      setLoadingChannels(true);
+      try {
+        const res = await fetch(`/api/dashboard/by-channel${seasonParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setChannels(data.channels || []);
+        }
+      } catch (err) {
+        console.error('Channels load error:', err);
+      } finally {
+        setLoadingChannels(false);
       }
-    });
+    }
 
-    return Array.from(grouped.values())
-      .map((style) => {
-        const unitCost = costLookup.get(style.styleNumber) || 0;
-        const totalCost = unitCost * style.units;
-        const margin = style.revenue > 0 ? ((style.revenue - totalCost) / style.revenue) * 100 : 0;
-        return { ...style, margin };
-      })
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10);
-  }, [filteredSales, costs, selectedSeason]);
+    // Load top customers
+    async function loadCustomers() {
+      setLoadingCustomers(true);
+      try {
+        const res = await fetch(`/api/dashboard/top-customers${seasonParam}&limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setTopCustomers(data.customers || []);
+        }
+      } catch (err) {
+        console.error('Customers load error:', err);
+      } finally {
+        setLoadingCustomers(false);
+      }
+    }
 
-  // Gender colors for chart
-  const genderColors: Record<string, string> = {
-    "Men's": '#2563eb',    // blue-600
-    "Women's": '#9333ea',  // purple-600
-    "Unisex": '#6b7280',   // gray-500
-    "Unknown": '#6b7280',  // gray-500
+    // Fire all in parallel
+    loadCategories();
+    loadGenders();
+    loadChannels();
+    loadCustomers();
+  }, [selectedSeason]);
+
+  const GENDER_COLORS: Record<string, string> = {
+    "Men's": '#2563eb',
+    "Women's": '#9333ea',
+    "Unisex": '#6b7280',
   };
+
+  const CHANNEL_COLORS: Record<string, string> = {
+    'WH': '#16a34a',
+    'BB': '#dc2626',
+    'WD': '#2563eb',
+    'EC': '#9333ea',
+    'PS': '#d97706',
+    'KI': '#0891b2',
+  };
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
+        >
+          <RefreshCw className="w-4 h-4 inline mr-2" />
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-4xl font-display font-bold text-gray-900">
-          Season Dashboard: {selectedSeason || 'All'}
-        </h2>
-        <p className="text-base text-gray-500 mt-2">
-          Overview of sales performance and key metrics
-        </p>
+    <div className="space-y-6">
+      {/* Season Selector */}
+      {seasons.length > 0 && (
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-bold text-gray-600 uppercase">Season:</label>
+          <select
+            value={selectedSeason}
+            onChange={(e) => onSeasonChange?.(e.target.value)}
+            className="px-4 py-2 border-2 border-gray-200 rounded-lg bg-white"
+          >
+            <option value="">All Seasons</option>
+            {seasons.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {loadingSummary ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : summary ? (
+          <>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-6 border border-emerald-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Revenue</span>
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatCurrency(summary.sales.revenue)}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-blue-700 uppercase tracking-wide">Units</span>
+                <Package className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatNumber(summary.sales.units)}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-purple-700 uppercase tracking-wide">Styles</span>
+                <Layers className="w-5 h-5 text-purple-600" />
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatNumber(summary.products)}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-6 border border-amber-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Customers</span>
+                <Users className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatNumber(summary.sales.customers)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="col-span-4 text-center py-8 text-gray-500">
+            No data available. Import data to get started.
+          </div>
+        )}
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-5">
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatCurrency(stats.totalRevenue)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Revenue
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-              <Package className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatNumber(stats.totalUnits)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Units
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatPercent(stats.margin)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Margin
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Layers className="w-6 h-6 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatNumber(stats.uniqueStyles)}
-              </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
-                Styles
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Two Column Row */}
-      <div className="grid grid-cols-2 gap-6">
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* By Category */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Category</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            {salesByCategory.map(([category, revenue]) => {
-              const maxRevenue = salesByCategory[0]?.[1] || 1;
-              const width = (revenue / maxRevenue) * 100;
-              return (
-                <div key={category} className="flex items-center gap-4">
-                  <div className="w-32 text-base text-gray-700 truncate font-medium">{category}</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-cyan-500 h-full rounded-full transition-all"
-                      style={{ width: `${width}%` }}
-                    />
+        {loadingCategories ? (
+          <SkeletonChart />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">By Category</h3>
+            </div>
+            <div className="p-6 space-y-3">
+              {categories.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No data</p>
+              ) : (
+                categories.slice(0, 8).map((item) => (
+                  <div key={item.category} className="flex items-center gap-4">
+                    <span className="w-24 text-sm text-gray-700 truncate font-medium">
+                      {item.category}
+                    </span>
+                    <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full"
+                        style={{ width: `${Math.min(item.revenuePercent, 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-20 text-right text-sm font-mono text-gray-900">
+                      {formatCurrency(item.revenue)}
+                    </span>
                   </div>
-                  <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
-                    {formatCurrency(revenue)}
-                  </div>
-                </div>
-              );
-            })}
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* By Gender */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
-          </div>
-          <div className="p-6 space-y-4">
-            {salesByGender.map(({ gender, revenue, percent }) => (
-              <div key={gender} className="flex items-center gap-4">
-                <div
-                  className="w-24 text-base font-medium px-2 py-1 rounded"
-                  style={{
-                    backgroundColor: `${genderColors[gender] || '#6b7280'}20`,
-                    color: genderColors[gender] || '#6b7280'
-                  }}
-                >
-                  {gender}
-                </div>
-                <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${percent}%`, backgroundColor: genderColors[gender] || '#6b7280' }}
-                  />
-                </div>
-                <div className="w-16 text-right text-base font-mono text-gray-500">
-                  {formatPercent(percent)}
-                </div>
-                <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
-                  {formatCurrency(revenue)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Top Styles Table */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-300 bg-gray-100 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Top Styles</h3>
-          <span className="text-sm text-gray-500 font-medium">Click row for details</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b-2 border-gray-300 text-left bg-gray-100">
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
-                  Style
-                </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
-                  Description
-                </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
-                  Units
-                </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
-                  Revenue
-                </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
-                  Margin
-                </th>
-                <th className="px-4 py-3 w-10 border-l border-gray-200"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {topStyles.map((style, index) => (
-                <tr
-                  key={style.styleNumber}
-                  onClick={() => onStyleClick(style.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
-                >
-                  <td className="px-4 py-4 border-r border-gray-200">
-                    <span className="font-mono text-lg font-bold text-gray-900">
-                      {style.styleNumber}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-base text-gray-700 max-w-xs truncate border-r border-gray-200">
-                    {style.styleDesc}
-                  </td>
-                  <td className="px-4 py-4 text-base font-mono font-medium text-gray-900 text-right border-l border-gray-200">
-                    {formatNumber(style.units)}
-                  </td>
-                  <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.revenue)}
-                  </td>
-                  <td className="px-4 py-4 text-right border-l border-gray-200">
+        {loadingGenders ? (
+          <SkeletonChart />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">By Gender</h3>
+            </div>
+            <div className="p-6 space-y-3">
+              {genders.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No data</p>
+              ) : (
+                genders.map((item) => (
+                  <div key={item.gender} className="flex items-center gap-4">
                     <span
-                      className={`text-base font-mono font-bold px-3 py-1 rounded ${
-                        style.margin >= 50
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : style.margin >= 40
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
+                      className="w-24 text-sm font-medium px-2 py-1 rounded"
+                      style={{
+                        backgroundColor: `${GENDER_COLORS[item.gender] || '#6b7280'}20`,
+                        color: GENDER_COLORS[item.gender] || '#6b7280',
+                      }}
                     >
-                      {formatPercent(style.margin)}
+                      {item.gender}
                     </span>
-                  </td>
-                  <td className="px-4 py-4 border-l border-gray-200">
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(item.revenuePercent, 100)}%`,
+                          backgroundColor: GENDER_COLORS[item.gender] || '#6b7280',
+                        }}
+                      />
+                    </div>
+                    <span className="w-12 text-right text-sm text-gray-500">
+                      {item.revenuePercent.toFixed(0)}%
+                    </span>
+                    <span className="w-20 text-right text-sm font-mono text-gray-900">
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* By Channel */}
+        {loadingChannels ? (
+          <SkeletonChart />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">By Channel</h3>
+            </div>
+            <div className="p-6 space-y-3">
+              {channels.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No data</p>
+              ) : (
+                channels.map((item) => (
+                  <div key={item.channel} className="flex items-center gap-4">
+                    <span
+                      className="w-28 text-sm font-medium px-2 py-1 rounded truncate"
+                      style={{
+                        backgroundColor: `${CHANNEL_COLORS[item.channel] || '#6b7280'}20`,
+                        color: CHANNEL_COLORS[item.channel] || '#6b7280',
+                      }}
+                    >
+                      {item.channelLabel}
+                    </span>
+                    <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(item.revenuePercent, 100)}%`,
+                          backgroundColor: CHANNEL_COLORS[item.channel] || '#6b7280',
+                        }}
+                      />
+                    </div>
+                    <span className="w-12 text-right text-sm text-gray-500">
+                      {item.revenuePercent.toFixed(0)}%
+                    </span>
+                    <span className="w-20 text-right text-sm font-mono text-gray-900">
+                      {formatCurrency(item.revenue)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Top Customers */}
+        {loadingCustomers ? (
+          <SkeletonChart />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-900">Top 10 Customers</h3>
+            </div>
+            <div className="p-6">
+              {topCustomers.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No data</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b">
+                      <th className="pb-2 font-medium">#</th>
+                      <th className="pb-2 font-medium">Customer</th>
+                      <th className="pb-2 font-medium text-right">Revenue</th>
+                      <th className="pb-2 font-medium text-right">Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topCustomers.map((c) => (
+                      <tr key={c.customer} className="border-b border-gray-100">
+                        <td className="py-2 text-gray-400">{c.rank}</td>
+                        <td className="py-2 font-medium text-gray-900 truncate max-w-[200px]">
+                          {c.customer}
+                        </td>
+                        <td className="py-2 text-right font-mono">{formatCurrency(c.revenue)}</td>
+                        <td className="py-2 text-right font-mono text-gray-600">
+                          {formatNumber(c.units)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
