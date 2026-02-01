@@ -69,15 +69,15 @@ function SourceIndicator({ source }: { source: PriceSource | null }) {
   switch (source) {
     case 'pricing':
       return (
-        <span className="inline-block w-2 h-2 rounded-full bg-cyan-500 ml-1" title="From pricebyseason" />
+        <span className="text-orange-500 ml-1 text-sm font-bold" title="Source: pricebyseason">◆</span>
       );
     case 'products':
       return (
-        <span className="inline-block w-2 h-2 rounded-full border-2 border-gray-400 ml-1" title="From Line List" />
+        <span className="text-blue-500 ml-1 text-sm" title="Source: Line List">○</span>
       );
     case 'sales':
       return (
-        <span className="inline-block w-2 h-2 rotate-45 bg-amber-500 ml-1" title="From Sales" />
+        <span className="text-gray-500 ml-1 text-sm font-bold" title="Source: Sales">●</span>
       );
     default:
       return null;
@@ -694,34 +694,29 @@ export default function PricingView({
         </div>
         <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Data Source Legend</span>
+            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">MSRP/Price Source Legend</span>
             {sortedData.length > 50 && (
               <span className="text-base text-gray-600 font-medium">
                 Showing 50 of {formatNumber(sortedData.length)} styles
               </span>
             )}
           </div>
-          <div className="flex gap-8 text-sm">
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200">
-              <span className="inline-block w-3 h-3 rounded-full bg-cyan-500" />
-              <div>
-                <span className="font-semibold text-gray-700">Blue Dot</span>
-                <span className="text-gray-500 ml-2">= Price by Season table (most accurate)</span>
-              </div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-500 text-lg font-bold">◆</span>
+              <span className="text-gray-700">pricebyseason (most accurate)</span>
             </div>
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200">
-              <span className="inline-block w-3 h-3 rounded-full border-2 border-gray-400" />
-              <div>
-                <span className="font-semibold text-gray-700">Empty Circle</span>
-                <span className="text-gray-500 ml-2">= Line List (product data)</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 text-lg">○</span>
+              <span className="text-gray-700">Line List</span>
             </div>
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-lg border border-gray-200">
-              <span className="inline-block w-3 h-3 rotate-45 bg-amber-500" />
-              <div>
-                <span className="font-semibold text-gray-700">Orange Diamond</span>
-                <span className="text-gray-500 ml-2">= Sales data (fallback)</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-lg font-bold">●</span>
+              <span className="text-gray-700">Sales (fallback)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-500 text-lg font-bold">■</span>
+              <span className="text-gray-700">Landed Sheet</span>
             </div>
           </div>
         </div>
