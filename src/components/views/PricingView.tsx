@@ -40,6 +40,7 @@ interface StylePricing {
   division: string;
   fromSource: PriceSource | null;
   toSource: PriceSource | null;
+  costEstimated: boolean; // True if cost was estimated at 50% of wholesale
 }
 
 function formatCurrency(value: number | null): string {
@@ -293,9 +294,20 @@ export default function PricingView({
       }
 
       // Calculate margin: (wholesale - cost) / wholesale
+      // If cost is missing, estimate at 50% of wholesale
       let margin: number | null = null;
-      if (toPrice !== null && cost && toPrice > 0) {
-        margin = ((toPrice - cost) / toPrice) * 100;
+      let costEstimated = false;
+
+      if (toPrice !== null && toPrice > 0) {
+        let finalCost = cost;
+
+        // If no cost data, estimate at 50% of wholesale
+        if (!finalCost) {
+          finalCost = toPrice * 0.5;
+          costEstimated = true;
+        }
+
+        margin = ((toPrice - finalCost) / toPrice) * 100;
       }
 
       data.push({
@@ -314,6 +326,7 @@ export default function PricingView({
         division: toData.division || fromData.division || info?.division || '',
         fromSource: fromData.source,
         toSource: toData.source,
+        costEstimated,
       });
     });
 
@@ -704,17 +717,27 @@ export default function PricingView({
                   </td>
                   <td className="px-4 py-4 text-right border-l-2 border-gray-400">
                     {style.margin !== null ? (
-                      <span
-                        className={`text-base font-mono font-bold px-3 py-1 rounded ${
-                          style.margin >= 50
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : style.margin >= 40
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {style.margin.toFixed(1)}%
-                      </span>
+                      <div className="inline-flex items-center gap-1">
+                        <span
+                          className={`text-base font-mono font-bold px-3 py-1 rounded ${
+                            style.margin >= 50
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : style.margin >= 40
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {style.margin.toFixed(1)}%
+                        </span>
+                        {style.costEstimated && (
+                          <span
+                            className="text-pink-500 text-xs"
+                            title="Cost estimated at 50% of wholesale"
+                          >
+                            ▲
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-gray-400 text-base">—</span>
                     )}
@@ -752,6 +775,10 @@ export default function PricingView({
             <div className="flex items-center gap-2">
               <span className="text-purple-500 text-lg font-bold">■</span>
               <span className="text-gray-700">Landed Sheet</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-pink-500 text-sm font-bold">▲</span>
+              <span className="text-gray-700">Cost estimated (50% of wholesale)</span>
             </div>
           </div>
         </div>
