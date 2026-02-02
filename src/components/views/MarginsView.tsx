@@ -843,11 +843,24 @@ export default function MarginsView({
       {viewMode === 'channel' && (
         <>
           <div className="grid grid-cols-6 gap-3">
-            {/* Channel Cards - Show top 5 by revenue + Blended */}
-            {channelPerformance.channels
-              .sort((a, b) => b.revenue - a.revenue)
-              .slice(0, 5)
-              .map(channel => {
+            {/* Channel Cards - Fixed order with BB first */}
+            {(() => {
+              // Define fixed channel order (BB first, then by typical importance)
+              const channelOrder = ['BB', 'WH', 'WD', 'EC', 'PS', 'KI'];
+
+              // Sort channels by fixed order
+              const sortedChannels = channelPerformance.channels
+                .slice() // Create a copy to avoid mutating original
+                .sort((a, b) => {
+                  const aIndex = channelOrder.indexOf(a.channel);
+                  const bIndex = channelOrder.indexOf(b.channel);
+                  if (aIndex === -1) return 1;
+                  if (bIndex === -1) return -1;
+                  return aIndex - bIndex;
+                })
+                .slice(0, 5);
+
+              return sortedChannels.map(channel => {
               const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
               const isSelected = selectedCustomerType === channel.channel;
 
@@ -877,7 +890,8 @@ export default function MarginsView({
                   </p>
                 </button>
               );
-            })}
+            });
+            })()}
 
             {/* Blended Card */}
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-4 shadow-sm">
