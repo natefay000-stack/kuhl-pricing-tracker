@@ -6,6 +6,7 @@ import AppHeader from '@/components/layout/AppHeader';
 import FilterBar from '@/components/layout/FilterBar';
 import DashboardView from '@/components/views/DashboardView';
 import SeasonView from '@/components/views/SeasonView';
+import SeasonCompView from '@/components/views/SeasonCompView';
 import SalesView from '@/components/views/SalesView';
 import CostsView from '@/components/views/CostsView';
 import PricingView from '@/components/views/PricingView';
@@ -780,6 +781,14 @@ export default function Home() {
               costs={costs}
               selectedDivision={selectedDivision}
               selectedCategory={selectedCategory}
+              onStyleClick={handleStyleClick}
+            />
+          )}
+
+          {activeView === 'seasoncomp' && (
+            <SeasonCompView
+              products={products}
+              sales={sales}
               onStyleClick={handleStyleClick}
             />
           )}
