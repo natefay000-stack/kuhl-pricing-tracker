@@ -1063,7 +1063,7 @@ export default function MarginsView({
                     >
                       All
                     </button>
-                    {['WH', 'BB', 'EC', 'PS', 'KI', 'DTC'].map(type => {
+                    {PRIMARY_CHANNELS.map(type => {
                       const isActive = customerTypeFilters.includes(type);
                       const colors = CHANNEL_COLORS[type] || { bg: 'bg-gray-600', light: 'bg-gray-100' };
                       return (
@@ -1080,7 +1080,7 @@ export default function MarginsView({
                             isActive ? `${colors.bg} text-white` : `${colors.light} text-gray-700 hover:opacity-80`
                           }`}
                         >
-                          {type}
+                          {CHANNEL_LABELS[type] || type}
                         </button>
                       );
                     })}
@@ -1177,6 +1177,19 @@ export default function MarginsView({
                   </span>
                 </div>
               </div>
+              {/* Channel Mix Legend */}
+              <div className="flex items-center gap-4 mb-3 text-xs">
+                <span className="text-gray-500 font-medium">Channel Mix:</span>
+                {PRIMARY_CHANNELS.map(ch => {
+                  const colors = CHANNEL_COLORS[ch];
+                  return (
+                    <span key={ch} className="flex items-center gap-1">
+                      <span className={`w-3 h-3 rounded ${colors.bg}`}></span>
+                      <span className="text-gray-600">{CHANNEL_LABELS[ch]}</span>
+                    </span>
+                  );
+                })}
+              </div>
               {/* Search Input */}
               <div className="flex items-center gap-4">
                 <div className="relative flex-1 max-w-md">
@@ -1223,7 +1236,7 @@ export default function MarginsView({
                     >
                       Revenue <SortIcon field="totalRevenue" />
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center" colSpan={4}>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center min-w-[200px]">
                       Channel Mix
                     </th>
                     <th
@@ -1245,18 +1258,6 @@ export default function MarginsView({
                       Δ <SortIcon field="marginDelta" />
                     </th>
                     <th className="px-4 py-3 w-10"></th>
-                  </tr>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-xs">
-                    <th colSpan={3}></th>
-                    {PRIMARY_CHANNELS.map(ch => {
-                      const colors = CHANNEL_COLORS[ch];
-                      return (
-                        <th key={ch} className={`px-2 py-1 text-center font-semibold ${colors.text}`}>
-                          {ch}
-                        </th>
-                      );
-                    })}
-                    <th colSpan={4}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1284,30 +1285,28 @@ export default function MarginsView({
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
                             {formatCurrency(style.totalRevenue)}
                           </td>
-                          {/* Channel Mix Mini Bars */}
-                          {PRIMARY_CHANNELS.map(ch => {
-                            const mix = style.channelMix[ch];
-                            const colors = CHANNEL_COLORS[ch];
-                            return (
-                              <td key={ch} className="px-2 py-3 text-center">
-                                {mix && mix.pct > 0 ? (
-                                  <div className="flex flex-col items-center">
-                                    <div className="w-8 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full ${colors.bg}`}
-                                        style={{ width: `${Math.min(mix.pct, 100)}%` }}
-                                      />
+                          {/* Channel Mix Stacked Horizontal Bar */}
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-5 w-full min-w-[150px] rounded overflow-hidden bg-gray-200">
+                                {PRIMARY_CHANNELS.map(ch => {
+                                  const mix = style.channelMix[ch];
+                                  if (!mix || mix.pct <= 0) return null;
+                                  const colors = CHANNEL_COLORS[ch];
+                                  return (
+                                    <div
+                                      key={ch}
+                                      className={`${colors.bg} h-full flex items-center justify-center text-white text-[10px] font-bold`}
+                                      style={{ width: `${mix.pct}%`, minWidth: mix.pct > 5 ? '20px' : '0' }}
+                                      title={`${CHANNEL_LABELS[ch]}: ${mix.pct.toFixed(0)}%`}
+                                    >
+                                      {mix.pct >= 10 ? `${mix.pct.toFixed(0)}%` : ''}
                                     </div>
-                                    <span className="text-xs font-mono text-gray-500 mt-0.5">
-                                      {mix.pct.toFixed(0)}%
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-300">-</span>
-                                )}
-                              </td>
-                            );
-                          })}
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-right">
                             <span className="font-mono text-sm text-gray-600">
                               {formatPercent(style.baselineMargin)}
@@ -1335,7 +1334,7 @@ export default function MarginsView({
                         {/* Expanded Detail Row */}
                         {isExpanded && (
                           <tr className="bg-gray-100 border-b border-gray-300">
-                            <td colSpan={11} className="px-6 py-4">
+                            <td colSpan={8} className="px-6 py-4">
                               <div className="grid grid-cols-4 gap-4">
                                 {PRIMARY_CHANNELS.map(ch => {
                                   const mix = style.channelMix[ch];

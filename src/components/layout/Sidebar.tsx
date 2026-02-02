@@ -11,19 +11,23 @@ import {
   Upload,
   List,
   AlertTriangle,
+  Settings,
+  GitCompare,
 } from 'lucide-react';
 
-export type ViewId = 'dashboard' | 'season' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'linelist' | 'validation';
+export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'linelist' | 'validation';
 
 interface SidebarProps {
   activeView: ViewId;
   onViewChange: (view: ViewId) => void;
   onImportClick?: () => void;
+  onSeasonsClick?: () => void;
 }
 
 const views = [
   { id: 'dashboard' as ViewId, label: 'Dashboard', icon: LayoutDashboard },
   { id: 'season' as ViewId, label: 'Season View', icon: Calendar },
+  { id: 'seasoncomp' as ViewId, label: 'Season Comp', icon: GitCompare },
   { id: 'linelist' as ViewId, label: 'Line List', icon: List },
   { id: 'validation' as ViewId, label: 'Validation', icon: AlertTriangle },
   { id: 'sales' as ViewId, label: 'Sales', icon: ShoppingBag },
@@ -33,7 +37,7 @@ const views = [
   { id: 'margins' as ViewId, label: 'Margins', icon: Percent },
 ];
 
-export default function Sidebar({ activeView, onViewChange, onImportClick }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick }: SidebarProps) {
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col h-screen fixed left-0 top-0">
       {/* Logo */}
@@ -73,9 +77,9 @@ export default function Sidebar({ activeView, onViewChange, onImportClick }: Sid
         </ul>
       </nav>
 
-      {/* Import Button */}
-      {onImportClick && (
-        <div className="px-2 pb-2">
+      {/* Action Buttons */}
+      <div className="px-2 pb-2 space-y-2">
+        {onImportClick && (
           <button
             onClick={onImportClick}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-all border border-dashed border-gray-700 hover:border-cyan-500"
@@ -83,8 +87,17 @@ export default function Sidebar({ activeView, onViewChange, onImportClick }: Sid
             <Upload className="w-4 h-4" />
             Import Data
           </button>
-        </div>
-      )}
+        )}
+        {onSeasonsClick && (
+          <button
+            onClick={onSeasonsClick}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
+          >
+            <Settings className="w-4 h-4" />
+            Manage Seasons
+          </button>
+        )}
+      </div>
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-800">

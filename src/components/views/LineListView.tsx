@@ -3,8 +3,17 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
+import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+// Gender detection from division description
+function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex' {
+  if (!divisionDesc) return 'Unisex';
+  const lower = divisionDesc.toLowerCase();
+  if (lower.includes("women") || lower.includes("woman")) return 'Women';
+  if (lower.includes("men") && !lower.includes("women")) return 'Men';
+  return 'Unisex';
+}
 
 interface LineListViewProps {
   products: Product[];
@@ -42,9 +51,9 @@ const COLUMN_GROUPS: ColumnGroup[] = [
     id: 'core',
     label: 'Core',
     columns: [
-      { key: 'flags', label: 'Flags', width: '100px' },
-      { key: 'styleNumber', label: 'Style #', width: '80px' },
-      { key: 'styleDesc', label: 'Style Name', width: '180px' },
+      // FLAGS column hidden until proper flag data is available (CO = Carryover was working, but topSeller/smu/kore/map are not populated)
+      { key: 'styleNumber', label: 'Style #', width: '100px' },
+      { key: 'styleDesc', label: 'Style Name', width: '200px' },
       { key: 'color', label: 'Color', width: '70px' },
       { key: 'colorDesc', label: 'Color Desc', width: '120px' },
       { key: 'categoryDesc', label: 'Category', width: '100px' },
@@ -134,6 +143,7 @@ export default function LineListView({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
+  const [rollUpStyles, setRollUpStyles] = useState<boolean>(false);
 
   // Get filter options
   const divisions = useMemo(() => {
@@ -338,9 +348,33 @@ export default function LineListView({
     stylesWithSales,
   ]);
 
+  // Roll up to style level (aggregate colors into one row per style)
+  const rolledUpData = useMemo(() => {
+    if (!rollUpStyles) return filteredData;
+
+    const styleMap = new Map<string, EnrichedProduct & { colorCount: number }>();
+
+    filteredData.forEach((item) => {
+      const existing = styleMap.get(item.styleNumber);
+      if (existing) {
+        // Aggregate: increment color count, keep first row's data
+        existing.colorCount++;
+      } else {
+        styleMap.set(item.styleNumber, {
+          ...item,
+          color: '', // Clear color since we're rolling up
+          colorDesc: '', // Clear color desc
+          colorCount: 1,
+        });
+      }
+    });
+
+    return Array.from(styleMap.values());
+  }, [filteredData, rollUpStyles]);
+
   // Sort data
   const sortedData = useMemo(() => {
-    return [...filteredData].sort((a, b) => {
+    return [...rolledUpData].sort((a, b) => {
       const aVal = (a as Record<string, unknown>)[sortColumn];
       const bVal = (b as Record<string, unknown>)[sortColumn];
 
@@ -352,7 +386,7 @@ export default function LineListView({
       const bStr = String(bVal || '');
       return sortDir === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
     });
-  }, [filteredData, sortColumn, sortDir]);
+  }, [rolledUpData, sortColumn, sortDir]);
 
   // Paginate
   const paginatedData = useMemo(() => {
@@ -382,6 +416,113 @@ export default function LineListView({
       noSales: noSalesStyles.length,
     };
   }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles, stylesWithSales]);
+
+  // Category stats with gender awareness
+  const categoryStats = useMemo(() => {
+    const seasonProducts = products.filter((p) => p.season === selectedSeason);
+    const categoryMap = new Map<string, {
+      name: string;
+      genders: Set<string>;
+      totalStyles: number;
+      menStyles: number;
+      womenStyles: number;
+      totalNew: number;
+      menNew: number;
+      womenNew: number;
+    }>();
+
+    // Build style-level data first (dedupe by style number)
+    const styleData = new Map<string, { category: string; gender: string; isNew: boolean }>();
+    seasonProducts.forEach((p) => {
+      const category = normalizeCategory(p.categoryDesc) || 'Other';
+      const gender = getGenderFromDivision(p.divisionDesc);
+      const isNew = !previousSeasonStyles.has(p.styleNumber);
+
+      // Only count each style once (first occurrence)
+      if (!styleData.has(p.styleNumber)) {
+        styleData.set(p.styleNumber, { category, gender, isNew });
+      }
+    });
+
+    // Aggregate by category
+    styleData.forEach(({ category, gender, isNew }) => {
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, {
+          name: category,
+          genders: new Set(),
+          totalStyles: 0,
+          menStyles: 0,
+          womenStyles: 0,
+          totalNew: 0,
+          menNew: 0,
+          womenNew: 0,
+        });
+      }
+
+      const cat = categoryMap.get(category)!;
+      cat.genders.add(gender);
+      cat.totalStyles++;
+      if (isNew) cat.totalNew++;
+
+      if (gender === 'Men') {
+        cat.menStyles++;
+        if (isNew) cat.menNew++;
+      } else if (gender === 'Women') {
+        cat.womenStyles++;
+        if (isNew) cat.womenNew++;
+      } else {
+        // Unisex counts for both
+        cat.menStyles++;
+        cat.womenStyles++;
+        if (isNew) {
+          cat.menNew++;
+          cat.womenNew++;
+        }
+      }
+    });
+
+    return Array.from(categoryMap.values()).sort((a, b) => b.totalStyles - a.totalStyles);
+  }, [products, selectedSeason, previousSeasonStyles]);
+
+  // Get visible categories based on division filter
+  const visibleCategories = useMemo(() => {
+    if (!divisionFilter) return categoryStats;
+
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    return categoryStats.filter((cat) => {
+      if (genderFilter === 'Men') return cat.menStyles > 0;
+      if (genderFilter === 'Women') return cat.womenStyles > 0;
+      return true;
+    });
+  }, [categoryStats, divisionFilter]);
+
+  // Get style count for a category based on current division filter
+  const getCategoryStyleCount = (cat: typeof categoryStats[0]) => {
+    if (!divisionFilter) return cat.totalStyles;
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (genderFilter === 'Men') return cat.menStyles;
+    if (genderFilter === 'Women') return cat.womenStyles;
+    return cat.totalStyles;
+  };
+
+  const getCategoryNewCount = (cat: typeof categoryStats[0]) => {
+    if (!divisionFilter) return cat.totalNew;
+    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (genderFilter === 'Men') return cat.menNew;
+    if (genderFilter === 'Women') return cat.womenNew;
+    return cat.totalNew;
+  };
+
+  // All categories totals for the "All" card
+  const allCategoryTotals = useMemo(() => {
+    let styles = 0;
+    let newCount = 0;
+    visibleCategories.forEach((cat) => {
+      styles += getCategoryStyleCount(cat);
+      newCount += getCategoryNewCount(cat);
+    });
+    return { styles, new: newCount };
+  }, [visibleCategories, divisionFilter]);
 
   // Visible columns
   const visibleColumns = useMemo(() => {
@@ -436,33 +577,18 @@ export default function LineListView({
   const formatCurrency = (val: number) => (val > 0 ? `$${val.toFixed(2)}` : '—');
   const formatPercent = (val: number) => (val > 0 ? `${val.toFixed(1)}%` : '—');
 
-  const getCellValue = (row: EnrichedProduct, key: string): React.ReactNode => {
-    if (key === 'flags') {
+  const getCellValue = (row: EnrichedProduct & { colorCount?: number }, key: string): React.ReactNode => {
+    // Handle rolled-up color columns
+    if (rollUpStyles && key === 'color') {
+      const count = row.colorCount || 1;
       return (
-        <div className="flex flex-wrap gap-1">
-          {row.isNew && (
-            <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded">NEW</span>
-          )}
-          {row.topSeller && (
-            <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-bold rounded">TOP</span>
-          )}
-          {row.smu && (
-            <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded">SMU</span>
-          )}
-          {row.kore && (
-            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">KORE</span>
-          )}
-          {row.mapProtected && (
-            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">MAP</span>
-          )}
-          {row.isCarryOver && (
-            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 text-xs font-bold rounded">CO</span>
-          )}
-          {row.isDropped && (
-            <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded">DROP</span>
-          )}
-        </div>
+        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+          {count} color{count !== 1 ? 's' : ''}
+        </span>
       );
+    }
+    if (rollUpStyles && key === 'colorDesc') {
+      return '—';
     }
     if (key === 'msrp' || key === 'price' || key === 'landed' || key === 'fob') {
       return formatCurrency((row as unknown as Record<string, number>)[key]);
@@ -539,7 +665,10 @@ export default function LineListView({
             <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Division</label>
             <select
               value={divisionFilter}
-              onChange={(e) => setDivisionFilter(e.target.value)}
+              onChange={(e) => {
+                setDivisionFilter(e.target.value);
+                setCategoryFilter(''); // Reset category when division changes
+              }}
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
             >
               <option value="">All</option>
@@ -606,6 +735,25 @@ export default function LineListView({
             />
           </div>
 
+          {/* Roll Up Styles Toggle */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">View</label>
+            <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+              <input
+                type="checkbox"
+                checked={rollUpStyles}
+                onChange={(e) => {
+                  setRollUpStyles(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Roll up styles
+              </span>
+            </label>
+          </div>
+
           {/* Hide No Sales Toggle - only for historical seasons */}
           {!isFutureSeason && (
             <div className="flex flex-col gap-1.5">
@@ -665,6 +813,84 @@ export default function LineListView({
         )}
       </div>
 
+      {/* Category Cards */}
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Categories</span>
+            {divisionFilter && (
+              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+                {getGenderFromDivision(divisionFilter)}&apos;s
+              </span>
+            )}
+          </div>
+          {categoryFilter && (
+            <button
+              onClick={() => setCategoryFilter('')}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Clear filter
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-3">
+          {/* All Categories Card */}
+          <button
+            onClick={() => setCategoryFilter('')}
+            className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+              !categoryFilter
+                ? 'border-blue-500 bg-blue-50 shadow-md'
+                : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+            }`}
+          >
+            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600' : 'text-gray-900'}`}>
+              {allCategoryTotals.styles}
+            </div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">All</div>
+            <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600' : 'text-emerald-500'}`}>
+              +{allCategoryTotals.new} new
+            </div>
+            {!categoryFilter && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+            )}
+          </button>
+
+          {/* Individual Category Cards */}
+          {visibleCategories.map((cat) => {
+            const styleCount = getCategoryStyleCount(cat);
+            const newCount = getCategoryNewCount(cat);
+            const isSelected = categoryFilter === cat.name;
+
+            return (
+              <button
+                key={cat.name}
+                onClick={() => setCategoryFilter(cat.name)}
+                className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                }`}
+              >
+                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600' : 'text-gray-900'}`}>
+                  {styleCount}
+                </div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mt-1 truncate" title={cat.name}>
+                  {cat.name}
+                </div>
+                <div className={`text-xs mt-2 ${newCount > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
+                  {newCount > 0 ? `+${newCount} new` : '—'}
+                </div>
+                {isSelected && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Quick Filters */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-3">
         <div className="flex items-center gap-2">
@@ -718,18 +944,18 @@ export default function LineListView({
                 {visibleColumns.map((col, idx) => (
                   <th
                     key={col.key}
-                    onClick={() => col.key !== 'flags' && handleSort(col.key)}
-                    className={`px-3 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide ${
-                      col.key !== 'flags' ? 'cursor-pointer hover:text-gray-900' : ''
-                    } ${idx < 3 ? 'sticky left-0 bg-gray-100 z-10' : ''}`}
+                    onClick={() => handleSort(col.key)}
+                    className={`px-3 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 ${
+                      idx < 2 ? 'sticky left-0 bg-gray-100 z-10' : ''
+                    }`}
                     style={{
                       minWidth: col.width,
-                      left: idx === 0 ? 0 : idx === 1 ? '100px' : idx === 2 ? '180px' : undefined,
+                      left: idx === 0 ? 0 : idx === 1 ? '100px' : undefined,
                     }}
                   >
                     <div className="flex items-center gap-1">
                       {col.label}
-                      {col.key !== 'flags' && <ArrowUpDown className="w-3 h-3" />}
+                      <ArrowUpDown className="w-3 h-3" />
                     </div>
                   </th>
                 ))}
@@ -748,10 +974,10 @@ export default function LineListView({
                     <td
                       key={col.key}
                       className={`px-3 py-3 text-sm ${
-                        colIdx < 3 ? 'sticky bg-inherit z-10' : ''
+                        colIdx < 2 ? 'sticky bg-inherit z-10' : ''
                       } ${col.key === 'styleNumber' ? 'font-mono font-bold text-gray-900' : 'text-gray-700'}`}
                       style={{
-                        left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : colIdx === 2 ? '180px' : undefined,
+                        left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : undefined,
                       }}
                     >
                       {getCellValue(row, col.key)}
@@ -766,7 +992,7 @@ export default function LineListView({
         {/* Pagination */}
         <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-700">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)} of {sortedData.length} SKUs
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)} of {sortedData.length} {rollUpStyles ? 'styles' : 'SKUs'}
           </span>
           <div className="flex items-center gap-2">
             <button

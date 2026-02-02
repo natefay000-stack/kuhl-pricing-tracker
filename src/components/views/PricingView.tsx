@@ -69,15 +69,15 @@ function SourceIndicator({ source }: { source: PriceSource | null }) {
   switch (source) {
     case 'pricing':
       return (
-        <span className="inline-block w-2 h-2 rounded-full bg-cyan-500 ml-1" title="From pricebyseason" />
+        <span className="text-orange-500 ml-1 text-sm font-bold" title="Source: pricebyseason">◆</span>
       );
     case 'products':
       return (
-        <span className="inline-block w-2 h-2 rounded-full border-2 border-gray-400 ml-1" title="From Line List" />
+        <span className="text-blue-500 ml-1 text-sm" title="Source: Line List">○</span>
       );
     case 'sales':
       return (
-        <span className="inline-block w-2 h-2 rotate-45 bg-amber-500 ml-1" title="From Sales" />
+        <span className="text-gray-500 ml-1 text-sm font-bold" title="Source: Sales">●</span>
       );
     default:
       return null;
@@ -109,6 +109,23 @@ export default function PricingView({
   const [toSeason, setToSeason] = useState<string>(() => {
     return availableSeasons.length >= 1 ? availableSeasons[availableSeasons.length - 1] : '';
   });
+
+  // Local filters
+  const [filterDivision, setFilterDivision] = useState<string>(selectedDivision || '');
+  const [filterCategory, setFilterCategory] = useState<string>(selectedCategory || '');
+
+  // Get unique divisions and categories
+  const divisions = useMemo(() => {
+    const all = new Set<string>();
+    products.forEach(p => p.divisionDesc && all.add(p.divisionDesc));
+    return Array.from(all).sort();
+  }, [products]);
+
+  const categories = useMemo(() => {
+    const all = new Set<string>();
+    products.forEach(p => p.categoryDesc && all.add(p.categoryDesc));
+    return Array.from(all).sort();
+  }, [products]);
 
   // Build style pricing comparison - aggregate from ALL sources
   const stylePricingData = useMemo(() => {
@@ -267,11 +284,11 @@ export default function PricingView({
 
     // Filter by division and category
     return data.filter(d => {
-      if (selectedDivision && d.division !== selectedDivision) return false;
-      if (selectedCategory && d.category !== selectedCategory) return false;
+      if (filterDivision && d.division !== filterDivision) return false;
+      if (filterCategory && d.category !== filterCategory) return false;
       return true;
     });
-  }, [pricing, costs, products, sales, fromSeason, toSeason, selectedDivision, selectedCategory]);
+  }, [pricing, costs, products, sales, fromSeason, toSeason, filterDivision, filterCategory]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -488,68 +505,52 @@ export default function PricingView({
         </div>
       </div>
 
-      {/* By Category Breakdown */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-200">
-          <h3 className="text-xl font-bold text-gray-900">Price Changes by Category</h3>
+      {/* Filters */}
+      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-sm font-black text-gray-700 uppercase tracking-wide">Filters</span>
+          <div className="flex-1 h-px bg-gray-200"></div>
         </div>
-        <div className="p-6">
-          <div className="space-y-4">
-            {changesByCategory.map(({ category, increases, decreases, unchanged, total }) => {
-              const incPct = (increases / total) * 100;
-              const decPct = (decreases / total) * 100;
-              const unchPct = (unchanged / total) * 100;
-              return (
-                <div key={category} className="flex items-center gap-4">
-                  <div className="w-36 text-base text-gray-700 truncate font-medium">{category}</div>
-                  <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden flex">
-                    {incPct > 0 && (
-                      <div
-                        className="bg-emerald-500 h-full"
-                        style={{ width: `${incPct}%` }}
-                        title={`${increases} increases`}
-                      />
-                    )}
-                    {unchPct > 0 && (
-                      <div
-                        className="bg-gray-300 h-full"
-                        style={{ width: `${unchPct}%` }}
-                        title={`${unchanged} unchanged`}
-                      />
-                    )}
-                    {decPct > 0 && (
-                      <div
-                        className="bg-red-500 h-full"
-                        style={{ width: `${decPct}%` }}
-                        title={`${decreases} decreases`}
-                      />
-                    )}
-                  </div>
-                  <div className="w-32 text-right text-sm font-mono">
-                    <span className="text-emerald-600">{increases}</span>
-                    <span className="text-gray-400 mx-1">/</span>
-                    <span className="text-gray-500">{unchanged}</span>
-                    <span className="text-gray-400 mx-1">/</span>
-                    <span className="text-red-600">{decreases}</span>
-                  </div>
-                </div>
-              );
-            })}
+        <div className="flex flex-wrap gap-5 items-end">
+          {/* Division Filter */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Division</label>
+            <select
+              value={filterDivision}
+              onChange={(e) => setFilterDivision(e.target.value)}
+              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[180px] bg-white"
+            >
+              <option value="">All Divisions</option>
+              {divisions.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100 flex gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-emerald-500 rounded-full" />
-              <span className="text-gray-600">Price Increase</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-300 rounded-full" />
-              <span className="text-gray-600">Unchanged</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full" />
-              <span className="text-gray-600">Price Decrease</span>
-            </div>
+
+          {/* Category Filter */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Category</label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
+
+          {/* Clear Filters */}
+          {(filterDivision || filterCategory) && (
+            <button
+              onClick={() => { setFilterDivision(''); setFilterCategory(''); }}
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -691,26 +692,33 @@ export default function PricingView({
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 flex items-center justify-between">
-          <div className="flex gap-6 text-sm">
+        <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">MSRP/Price Source Legend</span>
+            {sortedData.length > 50 && (
+              <span className="text-base text-gray-600 font-medium">
+                Showing 50 of {formatNumber(sortedData.length)} styles
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-6 text-sm">
             <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-cyan-500" />
-              <span className="text-gray-600">Pricing Table</span>
+              <span className="text-orange-500 text-lg font-bold">◆</span>
+              <span className="text-gray-700">pricebyseason (most accurate)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full border-2 border-gray-400" />
-              <span className="text-gray-600">Line List</span>
+              <span className="text-blue-500 text-lg">○</span>
+              <span className="text-gray-700">Line List</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rotate-45 bg-amber-500" />
-              <span className="text-gray-600">Sales Data</span>
+              <span className="text-gray-500 text-lg font-bold">●</span>
+              <span className="text-gray-700">Sales (fallback)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-500 text-lg font-bold">■</span>
+              <span className="text-gray-700">Landed Sheet</span>
             </div>
           </div>
-          {sortedData.length > 50 && (
-            <span className="text-base text-gray-600 font-medium">
-              Showing 50 of {formatNumber(sortedData.length)} styles
-            </span>
-          )}
         </div>
       </div>
     </div>

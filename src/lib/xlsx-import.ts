@@ -375,7 +375,7 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
         colorCode: parseString(getColumn(row, 'Color', 'Color Code', 'Clr')),
         colorDesc: parseString(getColumn(row, 'Color Desc. From Clr Mst', 'Color Desc', 'Clr Desc')),
         season,
-        customer: parseString(getColumn(row, 'Customer Name', 'Customer', 'Cust Name', 'Cust', 'Account Name', 'Account')),
+        customer: parseString(getColumn(row, 'Customer Name', 'Customer', 'Cust Name', 'Cust', 'Account Name', 'Account', 'Ship To', 'Ship To Name', 'Sold To', 'Sold To Name', 'Bill To', 'Bill To Name', 'Company', 'Company Name', 'Retailer', 'Client')),
         customerType: parseString(getColumn(row, 'Customer Type', 'Cust Type', 'Type')),
         unitsBooked: parseNumber(getColumn(row, 'Units Current Booked', 'Units Booked', 'Qty', 'Units')),
         unitsOpen: parseNumber(getColumn(row, 'Units Open', 'Open Units')),
