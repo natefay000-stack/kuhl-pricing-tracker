@@ -855,12 +855,14 @@ export default function MarginsView({
                 <button
                   key={channel.channel}
                   onClick={() => setSelectedCustomerType(isSelected ? null : channel.channel)}
-                  className={`bg-white rounded-xl border-2 p-4 shadow-sm transition-all text-left ${
-                    isSelected ? 'border-cyan-500 ring-2 ring-cyan-200' : 'border-gray-200 hover:border-gray-300'
+                  className={`rounded-xl border-2 p-4 shadow-sm transition-all text-left ${
+                    isSelected
+                      ? `${colors.light} border-gray-300`
+                      : 'bg-white border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-8 h-8 rounded-lg ${colors.light} flex items-center justify-center ${colors.text}`}>
+                    <div className={`w-8 h-8 rounded-lg ${isSelected ? 'bg-white' : colors.light} flex items-center justify-center ${colors.text}`}>
                       {CHANNEL_ICONS[channel.channel] || <DollarSign className="w-4 h-4" />}
                     </div>
                     <div className="text-xs font-bold text-gray-600 uppercase tracking-wide">
@@ -963,12 +965,13 @@ export default function MarginsView({
                 <tbody>
                   {channelPerformance.channels.map((channel, index) => {
                     const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
+                    const isSelected = selectedCustomerType === channel.channel;
                     return (
                       <tr
                         key={channel.channel}
                         onClick={() => setSelectedCustomerType(selectedCustomerType === channel.channel ? null : channel.channel)}
                         className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                          selectedCustomerType === channel.channel ? 'bg-cyan-50' : 'hover:bg-gray-50'
+                          isSelected ? colors.light : 'hover:bg-gray-50'
                         }`}
                       >
                         <td className="px-4 py-3">
