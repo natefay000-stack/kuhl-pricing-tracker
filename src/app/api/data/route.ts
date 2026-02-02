@@ -5,24 +5,37 @@ import prisma from '@/lib/prisma';
 export const maxDuration = 60; // 60 seconds
 export const dynamic = 'force-dynamic';
 
-// Interface for aggregated sales data
-interface AggregatedSale {
-  styleNumber: string;
-  styleDesc: string;
+// Channel aggregation for charts
+interface ChannelAggregation {
+  channel: string;
   season: string;
-  seasonType: string;
-  divisionDesc: string;
-  categoryDesc: string;
-  gender: string;
-  unitsBooked: number;
-  unitsOpen: number;
   revenue: number;
-  shipped: number;
-  cost: number;
-  wholesalePrice: number;
-  msrp: number;
-  customerCount: number;
-  customerTypes: string[];
+  units: number;
+}
+
+// Category aggregation
+interface CategoryAggregation {
+  category: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+// Gender aggregation
+interface GenderAggregation {
+  gender: string;
+  season: string;
+  revenue: number;
+  units: number;
+}
+
+// Customer aggregation
+interface CustomerAggregation {
+  customer: string;
+  customerType: string;
+  season: string;
+  revenue: number;
+  units: number;
 }
 
 // GET - Load all data from database
@@ -63,50 +76,96 @@ export async function GET() {
       }),
     ]);
 
-    // Aggregate sales by style+season to reduce 246K records to ~5K
-    const salesAggMap = new Map<string, AggregatedSale>();
+    // Build channel, category, gender, and customer aggregations from raw data
+    const channelAggMap = new Map<string, ChannelAggregation>();
+    const categoryAggMap = new Map<string, CategoryAggregation>();
+    const genderAggMap = new Map<string, GenderAggregation>();
+    const customerAggMap = new Map<string, CustomerAggregation>();
+
     for (const s of salesRaw) {
-      const key = `${s.styleNumber}-${s.season}`;
-      const existing = salesAggMap.get(key);
-      if (existing) {
-        existing.unitsBooked += s.unitsBooked || 0;
-        existing.unitsOpen += s.unitsOpen || 0;
-        existing.revenue += s.revenue || 0;
-        existing.shipped += s.shipped || 0;
-        existing.cost += s.cost || 0;
-        existing.customerCount++;
-        if (s.customerType && !existing.customerTypes.includes(s.customerType)) {
-          existing.customerTypes.push(s.customerType);
+      const revenue = s.revenue || 0;
+      const units = s.unitsBooked || 0;
+
+      // Channel aggregation (by season + customerType)
+      if (s.customerType) {
+        const channelKey = `${s.season}-${s.customerType}`;
+        const channelExisting = channelAggMap.get(channelKey);
+        if (channelExisting) {
+          channelExisting.revenue += revenue;
+          channelExisting.units += units;
+        } else {
+          channelAggMap.set(channelKey, {
+            channel: s.customerType,
+            season: s.season,
+            revenue: revenue,
+            units: units,
+          });
         }
-        // Keep first non-empty values for descriptive fields
-        if (!existing.styleDesc && s.styleDesc) existing.styleDesc = s.styleDesc;
-        if (!existing.divisionDesc && s.divisionDesc) existing.divisionDesc = s.divisionDesc;
-        if (!existing.categoryDesc && s.categoryDesc) existing.categoryDesc = s.categoryDesc;
-        if (!existing.gender && s.gender) existing.gender = s.gender;
-        if (!existing.wholesalePrice && s.wholesalePrice) existing.wholesalePrice = s.wholesalePrice;
-        if (!existing.msrp && s.msrp) existing.msrp = s.msrp;
+      }
+
+      // Category aggregation (by season + category)
+      const category = s.categoryDesc || 'Other';
+      const categoryKey = `${s.season}-${category}`;
+      const categoryExisting = categoryAggMap.get(categoryKey);
+      if (categoryExisting) {
+        categoryExisting.revenue += revenue;
+        categoryExisting.units += units;
       } else {
-        salesAggMap.set(key, {
-          styleNumber: s.styleNumber,
-          styleDesc: s.styleDesc || '',
+        categoryAggMap.set(categoryKey, {
+          category: category,
           season: s.season,
-          seasonType: s.seasonType || 'Main',
-          divisionDesc: s.divisionDesc || '',
-          categoryDesc: s.categoryDesc || '',
-          gender: s.gender || '',
-          unitsBooked: s.unitsBooked || 0,
-          unitsOpen: s.unitsOpen || 0,
-          revenue: s.revenue || 0,
-          shipped: s.shipped || 0,
-          cost: s.cost || 0,
-          wholesalePrice: s.wholesalePrice || 0,
-          msrp: s.msrp || 0,
-          customerCount: 1,
-          customerTypes: s.customerType ? [s.customerType] : [],
+          revenue: revenue,
+          units: units,
         });
       }
+
+      // Gender aggregation (derive from divisionDesc)
+      const divisionLower = (s.divisionDesc || '').toLowerCase();
+      let gender = 'Unknown';
+      if (divisionLower.includes("men's") && !divisionLower.includes("women's")) {
+        gender = "Men's";
+      } else if (divisionLower.includes("women's") || divisionLower.includes("woman")) {
+        gender = "Women's";
+      } else if (divisionLower.includes("unisex") || divisionLower.includes("accessories")) {
+        gender = "Unisex";
+      }
+      const genderKey = `${s.season}-${gender}`;
+      const genderExisting = genderAggMap.get(genderKey);
+      if (genderExisting) {
+        genderExisting.revenue += revenue;
+        genderExisting.units += units;
+      } else {
+        genderAggMap.set(genderKey, {
+          gender: gender,
+          season: s.season,
+          revenue: revenue,
+          units: units,
+        });
+      }
+
+      // Customer aggregation (by season + customer)
+      if (s.customer) {
+        const customerKey = `${s.season}-${s.customer}`;
+        const customerExisting = customerAggMap.get(customerKey);
+        if (customerExisting) {
+          customerExisting.revenue += revenue;
+          customerExisting.units += units;
+        } else {
+          customerAggMap.set(customerKey, {
+            customer: s.customer,
+            customerType: s.customerType || '',
+            season: s.season,
+            revenue: revenue,
+            units: units,
+          });
+        }
+      }
     }
-    const sales = Array.from(salesAggMap.values());
+
+    const salesByChannel = Array.from(channelAggMap.values());
+    const salesByCategory = Array.from(categoryAggMap.values());
+    const salesByGender = Array.from(genderAggMap.values());
+    const salesByCustomer = Array.from(customerAggMap.values());
 
     // Transform to match expected format
     const transformedProducts = products.map((p) => ({
@@ -140,31 +199,31 @@ export async function GET() {
       styleColorNotes: p.styleColorNotes || '',
     }));
 
-    // Sales are already aggregated, just format for output
-    const transformedSales = sales.map((s, idx) => ({
-      id: `agg-${idx}`,
+    // Return raw sales records (no aggregation) for proper filtering
+    const transformedSales = salesRaw.map((s, idx) => ({
+      id: `sale-${idx}`,
       styleNumber: s.styleNumber,
-      styleDesc: s.styleDesc,
+      styleDesc: s.styleDesc || '',
       colorCode: '',
       colorDesc: '',
       season: s.season,
-      seasonType: s.seasonType,
-      customer: '',
-      customerType: s.customerTypes.join(', ') || '',
+      seasonType: s.seasonType || 'Main',
+      customer: s.customer || '',
+      customerType: s.customerType || '',
       salesRep: '',
-      divisionDesc: s.divisionDesc,
-      categoryDesc: s.categoryDesc,
-      gender: s.gender,
-      unitsBooked: s.unitsBooked,
-      unitsOpen: s.unitsOpen,
-      revenue: s.revenue,
-      shipped: s.shipped,
-      cost: s.cost,
-      wholesalePrice: s.wholesalePrice,
-      msrp: s.msrp,
+      divisionDesc: s.divisionDesc || '',
+      categoryDesc: s.categoryDesc || '',
+      gender: s.gender || '',
+      unitsBooked: s.unitsBooked || 0,
+      unitsOpen: s.unitsOpen || 0,
+      revenue: s.revenue || 0,
+      shipped: s.shipped || 0,
+      cost: s.cost || 0,
+      wholesalePrice: s.wholesalePrice || 0,
+      msrp: s.msrp || 0,
       netUnitPrice: 0,
       orderType: '',
-      customerCount: s.customerCount,
+      customerCount: 1,
     }));
 
     const transformedPricing = pricing.map((p) => ({
@@ -206,8 +265,7 @@ export async function GET() {
       success: true,
       counts: {
         products: products.length,
-        sales: salesRaw.length, // Show raw count for reference
-        salesAggregated: sales.length, // Aggregated by style+season
+        sales: salesRaw.length,
         pricing: pricing.length,
         costs: costs.length,
       },
@@ -216,6 +274,13 @@ export async function GET() {
         sales: transformedSales,
         pricing: transformedPricing,
         costs: transformedCosts,
+      },
+      // Pre-computed aggregations for Sales View charts (from raw data, not style-aggregated)
+      salesAggregations: {
+        byChannel: salesByChannel,
+        byCategory: salesByCategory,
+        byGender: salesByGender,
+        byCustomer: salesByCustomer,
       },
     });
   } catch (error) {
