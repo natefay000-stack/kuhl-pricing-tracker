@@ -140,10 +140,38 @@ export default function PricingView({
       division: string;
     }
 
+    // Build fast lookup maps ONCE (O(n) instead of O(n²))
+    const pricingMap = new Map<string, PricingRecord>();
+    const productsMap = new Map<string, Product>();
+    const salesMap = new Map<string, SalesRecord>();
+
+    (pricing || []).forEach(p => {
+      const key = `${p.styleNumber}-${p.season}`;
+      if (!pricingMap.has(key) && (p.price > 0 || p.msrp > 0)) {
+        pricingMap.set(key, p);
+      }
+    });
+
+    (products || []).forEach(p => {
+      const key = `${p.styleNumber}-${p.season}`;
+      if (!productsMap.has(key) && (p.price > 0 || p.msrp > 0)) {
+        productsMap.set(key, p);
+      }
+    });
+
+    (sales || []).forEach(s => {
+      const key = `${s.styleNumber}-${s.season}`;
+      if (!salesMap.has(key) && ((s.wholesalePrice && s.wholesalePrice > 0) || (s.msrp && s.msrp > 0))) {
+        salesMap.set(key, s);
+      }
+    });
+
     const getPriceForStyleSeason = (styleNumber: string, season: string): PriceData => {
+      const key = `${styleNumber}-${season}`;
+
       // 1. Check pricing table first (highest priority)
-      const pricingRecord = (pricing || []).find(p => p.styleNumber === styleNumber && p.season === season);
-      if (pricingRecord && (pricingRecord.price > 0 || pricingRecord.msrp > 0)) {
+      const pricingRecord = pricingMap.get(key);
+      if (pricingRecord) {
         return {
           price: pricingRecord.price > 0 ? pricingRecord.price : null,
           msrp: pricingRecord.msrp > 0 ? pricingRecord.msrp : null,
@@ -155,8 +183,8 @@ export default function PricingView({
       }
 
       // 2. Check products table (from Line List imports)
-      const productRecord = (products || []).find(p => p.styleNumber === styleNumber && p.season === season);
-      if (productRecord && (productRecord.price > 0 || productRecord.msrp > 0)) {
+      const productRecord = productsMap.get(key);
+      if (productRecord) {
         return {
           price: productRecord.price > 0 ? productRecord.price : null,
           msrp: productRecord.msrp > 0 ? productRecord.msrp : null,
@@ -168,20 +196,16 @@ export default function PricingView({
       }
 
       // 3. Check sales table (extract from sales records)
-      const salesRecords = (sales || []).filter(s => s.styleNumber === styleNumber && s.season === season);
-      if (salesRecords.length > 0) {
-        // Get the first record with pricing info
-        const withPricing = salesRecords.find(s => (s.wholesalePrice && s.wholesalePrice > 0) || (s.msrp && s.msrp > 0));
-        if (withPricing) {
-          return {
-            price: withPricing.wholesalePrice && withPricing.wholesalePrice > 0 ? withPricing.wholesalePrice : null,
-            msrp: withPricing.msrp && withPricing.msrp > 0 ? withPricing.msrp : null,
-            source: 'sales',
-            styleDesc: withPricing.styleDesc || '',
-            category: withPricing.categoryDesc || '',
-            division: withPricing.divisionDesc || '',
-          };
-        }
+      const salesRecord = salesMap.get(key);
+      if (salesRecord) {
+        return {
+          price: salesRecord.wholesalePrice && salesRecord.wholesalePrice > 0 ? salesRecord.wholesalePrice : null,
+          msrp: salesRecord.msrp && salesRecord.msrp > 0 ? salesRecord.msrp : null,
+          source: 'sales',
+          styleDesc: salesRecord.styleDesc || '',
+          category: salesRecord.categoryDesc || '',
+          division: salesRecord.divisionDesc || '',
+        };
       }
 
       return { price: null, msrp: null, source: null, styleDesc: '', category: '', division: '' };
@@ -195,23 +219,33 @@ export default function PricingView({
       }
     });
 
-    // Get all unique style numbers from ALL sources
+    // Get all unique style numbers from the selected seasons only (faster)
     const allStyles = new Set<string>();
-    (pricing || []).forEach(p => {
-      if (p.season === fromSeason || p.season === toSeason) allStyles.add(p.styleNumber);
+    pricingMap.forEach((_, key) => {
+      const season = key.split('-')[1];
+      if (season === fromSeason || season === toSeason) {
+        allStyles.add(key.split('-')[0]);
+      }
     });
-    (products || []).forEach(p => {
-      if (p.season === fromSeason || p.season === toSeason) allStyles.add(p.styleNumber);
+    productsMap.forEach((_, key) => {
+      const season = key.split('-')[1];
+      if (season === fromSeason || season === toSeason) {
+        allStyles.add(key.split('-')[0]);
+      }
     });
-    (sales || []).forEach(s => {
-      if (s.season === fromSeason || s.season === toSeason) allStyles.add(s.styleNumber);
+    salesMap.forEach((_, key) => {
+      const season = key.split('-')[1];
+      if (season === fromSeason || season === toSeason) {
+        allStyles.add(key.split('-')[0]);
+      }
     });
 
-    // Build product info lookup for category/division
+    // Build product info lookup for category/division (already in the maps above)
     const productInfo = new Map<string, { category: string; division: string; styleDesc: string }>();
-    (products || []).forEach(p => {
-      if (!productInfo.has(p.styleNumber)) {
-        productInfo.set(p.styleNumber, {
+    productsMap.forEach((p, key) => {
+      const styleNumber = key.split('-')[0];
+      if (!productInfo.has(styleNumber)) {
+        productInfo.set(styleNumber, {
           category: p.categoryDesc || '',
           division: p.divisionDesc || '',
           styleDesc: p.styleDesc || '',
@@ -219,9 +253,10 @@ export default function PricingView({
       }
     });
     // Also add from sales if not in products
-    (sales || []).forEach(s => {
-      if (!productInfo.has(s.styleNumber)) {
-        productInfo.set(s.styleNumber, {
+    salesMap.forEach((s, key) => {
+      const styleNumber = key.split('-')[0];
+      if (!productInfo.has(styleNumber)) {
+        productInfo.set(styleNumber, {
           category: s.categoryDesc || '',
           division: s.divisionDesc || '',
           styleDesc: s.styleDesc || '',
