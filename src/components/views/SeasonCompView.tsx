@@ -631,50 +631,76 @@ export default function SeasonCompView({
       )}
 
       {/* Category Breakdown Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
-        <div className="p-5 border-b-2 border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-black text-gray-900">Category Breakdown</h2>
-          <span className="text-sm font-medium text-gray-500">
-            {selectedDivision || 'All Divisions'} • Showing: Style Count & Revenue
-          </span>
+      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
+        <div className="p-6 border-b-2 border-gray-300 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-black text-gray-900">Category Breakdown</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {selectedDivision || 'All Divisions'} • Compare styles and revenue across seasons
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide">Categories</div>
+              <div className="text-3xl font-black text-gray-900">{categories.length}</div>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-gray-300">
               <tr>
-                <th className="text-left text-sm font-bold text-gray-500 uppercase tracking-wide px-5 py-4 w-48">
+                <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4 w-56 sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-10">
                   Category
                 </th>
                 {seasons.map((season) => {
                   const prevYearSeason = getPreviousYearSeason(season);
+                  const status = getSeasonStatus(season);
+                  const isPlanning = status === 'Planning';
                   return (
-                    <th key={season} className="text-center text-sm font-bold text-gray-500 uppercase tracking-wide px-5 py-4">
-                      <div>{season}</div>
+                    <th key={season} className={`text-center text-xs font-black uppercase tracking-wider px-6 py-4 border-l-2 ${isPlanning ? 'border-purple-200 bg-purple-50' : 'border-gray-200'}`}>
+                      <div className={`font-mono text-base font-black ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>{season}</div>
                       {prevYearSeason && (
-                        <div className="text-xs text-gray-400 font-medium mt-1">vs {prevYearSeason}</div>
+                        <div className="text-xs text-gray-400 font-semibold mt-1">vs {prevYearSeason}</div>
                       )}
                     </th>
                   );
                 })}
-                <th className="text-left text-sm font-bold text-gray-500 uppercase tracking-wide px-5 py-4 w-72">
+                <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4 w-80 border-l-2 border-gray-300">
                   Insight
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {categories.map((category) => {
+            <tbody className="divide-y divide-gray-200">
+              {categories.map((category, idx) => {
                 const insight = getCategoryInsight(category);
+                const isSelected = selectedCategory === category;
                 return (
                   <tr
                     key={category}
-                    className={`hover:bg-gray-50 cursor-pointer transition-colors ${
-                      selectedCategory === category ? 'bg-emerald-50' : ''
+                    className={`cursor-pointer transition-all duration-150 ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 shadow-inner'
+                        : idx % 2 === 0
+                        ? 'bg-white hover:bg-gray-50'
+                        : 'bg-gray-50/50 hover:bg-gray-100'
                     }`}
                     onClick={() => setSelectedCategory(category === selectedCategory ? '' : category)}
                   >
-                    <td className="px-5 py-4">
-                      <span className="text-base font-bold text-gray-900">{category}</span>
+                    <td className={`px-6 py-5 sticky left-0 z-10 ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100'
+                        : idx % 2 === 0
+                        ? 'bg-white'
+                        : 'bg-gray-50/50'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-1 h-8 rounded-full ${isSelected ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
+                        <span className={`text-base font-bold ${isSelected ? 'text-emerald-900' : 'text-gray-900'}`}>
+                          {category}
+                        </span>
+                      </div>
                     </td>
                     {seasons.map((season) => {
                       const data = getData(season, category);
@@ -684,40 +710,53 @@ export default function SeasonCompView({
                       const isPlanning = getSeasonStatus(season) === 'Planning';
 
                       return (
-                        <td key={season} className="px-5 py-4 text-center">
-                          <div className="text-lg font-bold text-gray-900">{data.styles}</div>
-                          <div className="text-sm text-gray-500">
-                            {isPlanning ? 'planned' : formatCurrency(data.revenue)}
-                          </div>
-                          {stylesChange !== null && prevYearSeason && (
-                            <div className={`text-sm font-bold ${
-                              stylesChange > 0 ? 'text-emerald-600' :
-                              stylesChange < 0 ? 'text-red-500' : 'text-gray-400'
-                            }`}>
-                              {stylesChange > 0 ? '+' : ''}{stylesChange}%
+                        <td key={season} className={`px-6 py-5 text-center border-l-2 ${isPlanning ? 'border-purple-100' : 'border-gray-100'}`}>
+                          <div className="space-y-1">
+                            <div className={`text-2xl font-black ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
+                              {data.styles}
                             </div>
-                          )}
+                            <div className={`text-xs font-semibold ${isPlanning ? 'text-purple-500' : 'text-gray-500'}`}>
+                              {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                            </div>
+                            {stylesChange !== null && prevYearSeason && (
+                              <div className={`inline-flex items-center gap-1 text-sm font-bold px-2 py-0.5 rounded-full ${
+                                stylesChange > 0
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : stylesChange < 0
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'} {Math.abs(stylesChange)}%
+                              </div>
+                            )}
+                          </div>
                         </td>
                       );
                     })}
-                    <td className="px-5 py-4">
+                    <td className="px-6 py-5 border-l-2 border-gray-300">
                       {insight && (
-                        <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${
+                        <div className={`inline-flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg shadow-sm ${
                           insight.type === 'warning'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}>
-                          {insight.text}
-                        </span>
+                          <span className="text-lg">{insight.type === 'warning' ? '⚠️' : '✨'}</span>
+                          <span>{insight.text}</span>
+                        </div>
                       )}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            <tfoot className="bg-gray-50 font-bold">
-              <tr className="border-t-2 border-gray-300">
-                <td className="px-5 py-4 text-base font-black text-gray-900 uppercase">Total</td>
+            <tfoot className="bg-gradient-to-b from-gray-100 to-gray-200">
+              <tr className="border-t-4 border-gray-400">
+                <td className="px-6 py-5 text-base font-black text-gray-900 uppercase tracking-wide sticky left-0 bg-gradient-to-b from-gray-100 to-gray-200 z-10">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-8 rounded-full bg-gray-500"></div>
+                    Total
+                  </div>
+                </td>
                 {seasons.map((season) => {
                   const data = getData(season, '');
                   const prevYearSeason = getPreviousYearSeason(season);
@@ -726,23 +765,30 @@ export default function SeasonCompView({
                   const isPlanning = getSeasonStatus(season) === 'Planning';
 
                   return (
-                    <td key={season} className="px-5 py-4 text-center">
-                      <div className="text-lg font-black text-gray-900">{data.styles}</div>
-                      <div className="text-sm font-semibold text-gray-600">
-                        {isPlanning ? 'planned' : formatCurrency(data.revenue)}
-                      </div>
-                      {stylesChange !== null && prevYearSeason && (
-                        <div className={`text-sm font-bold ${
-                          stylesChange > 0 ? 'text-emerald-600' :
-                          stylesChange < 0 ? 'text-red-500' : 'text-gray-400'
-                        }`}>
-                          {stylesChange > 0 ? '+' : ''}{stylesChange}%
+                    <td key={season} className={`px-6 py-5 text-center border-l-2 ${isPlanning ? 'border-purple-200' : 'border-gray-300'}`}>
+                      <div className="space-y-1">
+                        <div className={`text-2xl font-black ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
+                          {data.styles}
                         </div>
-                      )}
+                        <div className={`text-xs font-bold ${isPlanning ? 'text-purple-600' : 'text-gray-700'}`}>
+                          {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                        </div>
+                        {stylesChange !== null && prevYearSeason && (
+                          <div className={`inline-flex items-center gap-1 text-sm font-black px-2 py-0.5 rounded-full ${
+                            stylesChange > 0
+                              ? 'bg-emerald-200 text-emerald-900'
+                              : stylesChange < 0
+                              ? 'bg-red-200 text-red-900'
+                              : 'bg-gray-300 text-gray-700'
+                          }`}>
+                            {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'} {Math.abs(stylesChange)}%
+                          </div>
+                        )}
+                      </div>
                     </td>
                   );
                 })}
-                <td></td>
+                <td className="border-l-2 border-gray-300"></td>
               </tr>
             </tfoot>
           </table>
