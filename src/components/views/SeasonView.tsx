@@ -533,21 +533,26 @@ export default function SeasonView({
         let bVal = 0;
 
         if (sortBy === 'price') {
-          // For price, get the average price across seasons (using MSRP metric)
+          // For price, calculate average MSRP across seasons
+          // Note: We need to access the actual MSRP data, not the current metric view
           let aTotal = 0;
           let aCount = 0;
           let bTotal = 0;
           let bCount = 0;
 
+          // Access the style's MSRP data directly from dataLookups
           seasons.forEach((season) => {
-            const aData = a.seasonData[season];
-            const bData = b.seasonData[season];
-            if (aData && metric === 'msrp') {
-              aTotal += aData;
+            const aStyleKey = `${a.styleNumber}-${season}`;
+            const bStyleKey = `${b.styleNumber}-${season}`;
+            const aPricing = dataLookups.pricingByStyleSeason.get(aStyleKey);
+            const bPricing = dataLookups.pricingByStyleSeason.get(bStyleKey);
+
+            if (aPricing && aPricing.msrp > 0) {
+              aTotal += aPricing.msrp;
               aCount += 1;
             }
-            if (bData && metric === 'msrp') {
-              bTotal += bData;
+            if (bPricing && bPricing.msrp > 0) {
+              bTotal += bPricing.msrp;
               bCount += 1;
             }
           });
@@ -558,22 +563,41 @@ export default function SeasonView({
           // If one has no price and the other does, prioritize the one with price
           if (aVal === 0 && bVal > 0) return 1; // a goes to bottom
           if (bVal === 0 && aVal > 0) return -1; // b goes to bottom
-        } else {
-          // Calculate total across all seasons for the selected metric
+        } else if (sortBy === 'revenue') {
+          // For revenue, sum sales across seasons (from sales data)
           seasons.forEach((season) => {
-            const aData = a.seasonData[season];
-            const bData = b.seasonData[season];
-            if (sortBy === 'revenue' && metric === 'sales') {
-              aVal += aData || 0;
-              bVal += bData || 0;
-            } else if (sortBy === 'units' && metric === 'units') {
-              aVal += aData || 0;
-              bVal += bData || 0;
-            } else if (sortBy === 'styles') {
-              // For styles, count non-zero values
-              if (aData) aVal += 1;
-              if (bData) bVal += 1;
-            }
+            const aKey = `${a.styleNumber}-${season}`;
+            const bKey = `${b.styleNumber}-${season}`;
+            const aSales = dataLookups.salesByStyleSeason.get(aKey);
+            const bSales = dataLookups.salesByStyleSeason.get(bKey);
+            aVal += aSales?.revenue || 0;
+            bVal += bSales?.revenue || 0;
+          });
+        } else if (sortBy === 'units') {
+          // For units, sum units across seasons (from sales data)
+          seasons.forEach((season) => {
+            const aKey = `${a.styleNumber}-${season}`;
+            const bKey = `${b.styleNumber}-${season}`;
+            const aSales = dataLookups.salesByStyleSeason.get(aKey);
+            const bSales = dataLookups.salesByStyleSeason.get(bKey);
+            aVal += aSales?.units || 0;
+            bVal += bSales?.units || 0;
+          });
+        } else if (sortBy === 'styles') {
+          // For styles, count how many seasons the style appears in
+          seasons.forEach((season) => {
+            const aKey = `${a.styleNumber}-${season}`;
+            const bKey = `${b.styleNumber}-${season}`;
+            const aSales = dataLookups.salesByStyleSeason.get(aKey);
+            const bSales = dataLookups.salesByStyleSeason.get(bKey);
+            const aPricing = dataLookups.pricingByStyleSeason.get(aKey);
+            const bPricing = dataLookups.pricingByStyleSeason.get(bKey);
+            const aCost = dataLookups.costByStyleSeason.get(aKey);
+            const bCost = dataLookups.costByStyleSeason.get(bKey);
+
+            // Count if style has any data in this season
+            if (aSales || aPricing || aCost) aVal += 1;
+            if (bSales || bPricing || bCost) bVal += 1;
           });
         }
 
@@ -611,7 +635,7 @@ export default function SeasonView({
       }
       return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
     });
-  }, [relevantPivotData, sortColumn, sortDir, seasons, sortBy, metric]);
+  }, [relevantPivotData, sortColumn, sortDir, seasons, sortBy, metric, dataLookups]);
 
   // Calculate totals
   const totals = useMemo(() => {
