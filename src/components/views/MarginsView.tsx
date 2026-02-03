@@ -20,7 +20,7 @@ import {
   X,
   Download,
 } from 'lucide-react';
-import { exportToCSV } from '@/utils/exportData';
+import { exportToExcel } from '@/utils/exportData';
 
 interface MarginsViewProps {
   products: Product[];
@@ -863,7 +863,7 @@ export default function MarginsView({
   const handleExport = () => {
     if (viewMode === 'channel') {
       // Export style-level channel analysis
-      exportToCSV(
+      exportToExcel(
         styleChannelMargins.slice(0, 50).map(style => ({
           Style: style.styleNumber,
           Description: style.styleDesc,
@@ -883,7 +883,7 @@ export default function MarginsView({
       );
     } else {
       // Export traditional margin analysis
-      exportToCSV(
+      exportToExcel(
         styleMargins.slice(0, 50).map(style => ({
           Style: style.styleNumber,
           Description: style.styleDesc,

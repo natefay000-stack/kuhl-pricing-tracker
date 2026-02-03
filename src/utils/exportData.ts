@@ -1,6 +1,31 @@
 /**
- * Export utilities for converting data to CSV and downloading files
+ * Export utilities for converting data to Excel and CSV formats
  */
+
+import * as XLSX from 'xlsx';
+
+export function exportToExcel(data: any[], filename: string) {
+  if (!data || data.length === 0) {
+    alert('No data to export');
+    return;
+  }
+
+  // Create a new workbook
+  const wb = XLSX.utils.book_new();
+
+  // Convert data to worksheet
+  const ws = XLSX.utils.json_to_sheet(data);
+
+  // Add worksheet to workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+
+  // Generate file name with date
+  const dateStr = new Date().toISOString().split('T')[0];
+  const fileName = `${filename}_${dateStr}.xlsx`;
+
+  // Write the file
+  XLSX.writeFile(wb, fileName);
+}
 
 export function exportToCSV(data: any[], filename: string) {
   if (!data || data.length === 0) {

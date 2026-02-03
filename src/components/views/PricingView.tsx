@@ -12,7 +12,7 @@ import {
   DollarSign,
   Download,
 } from 'lucide-react';
-import { exportToCSV } from '@/utils/exportData';
+import { exportToExcel } from '@/utils/exportData';
 
 interface PricingViewProps {
   products: Product[];
@@ -425,7 +425,7 @@ export default function PricingView({
 
   // Export pricing data
   const handleExport = () => {
-    exportToCSV(
+    exportToExcel(
       topDeltaStyles.slice(0, 100).map(style => ({
         Style: style.styleNumber,
         Description: style.styleDesc,

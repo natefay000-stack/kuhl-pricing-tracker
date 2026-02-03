@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { Search, Download, ChevronRight, Users } from 'lucide-react';
-import { exportToCSV } from '@/utils/exportData';
+import { exportToExcel } from '@/utils/exportData';
 
 interface CustomerViewProps {
   products: Product[];
@@ -171,7 +171,7 @@ export default function CustomerView({
   const handleExport = () => {
     if (selectedCustomer) {
       // Export detail view data based on active tab
-      exportToCSV(
+      exportToExcel(
         customerCategoryData.map(d => ({
           Category: d.category,
           Revenue: d.revenue,
@@ -184,7 +184,7 @@ export default function CustomerView({
       );
     } else {
       // Export customer list
-      exportToCSV(
+      exportToExcel(
         filteredCustomers.map((c, idx) => ({
           Rank: idx + 1,
           Customer: c.customer,
