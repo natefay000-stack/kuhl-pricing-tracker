@@ -53,9 +53,9 @@ interface StyleChannelMargin {
   msrp: number;
   wholesalePrice: number;
   landedCost: number;
-  msrpSource: 'linelist' | 'sales' | 'pricebyseason' | 'none';
-  wholesaleSource: 'linelist' | 'sales' | 'pricebyseason' | 'none';
-  costSource: 'landed' | 'linelist' | 'none';
+  msrpSource: string;
+  wholesaleSource: string;
+  costSource: string;
   baselineMargin: number;
   totalRevenue: number;
   totalUnits: number;
@@ -391,6 +391,9 @@ export default function MarginsView({
       msrp: number;
       wholesalePrice: number;
       landedCost: number;
+      msrpSource: string;
+      wholesaleSource: string;
+      costSource: string;
       channels: Map<string, { revenue: number; units: number }>;
     }>();
 
