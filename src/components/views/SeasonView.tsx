@@ -84,6 +84,9 @@ export default function SeasonView({
   const [selectedDesigner, setSelectedDesigner] = useState<string>('');
   const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [localGenderFilter, setLocalGenderFilter] = useState<string>('');
+  const [localCategoryFilter, setLocalCategoryFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'revenue' | 'units' | 'styles' | ''>('');
 
   // Toggle a season in the selection
   const toggleSeason = (season: string) => {
@@ -132,6 +135,36 @@ export default function SeasonView({
     products.forEach((p) => p.designerName && all.add(p.designerName));
     return Array.from(all).sort();
   }, [products]);
+
+  // Get unique genders from divisions
+  const genders = useMemo(() => {
+    const all = new Set<string>();
+    products.forEach((p) => {
+      if (p.divisionDesc) {
+        const lower = p.divisionDesc.toLowerCase();
+        if (lower.includes("men's") && !lower.includes("women's")) all.add("Men's");
+        else if (lower.includes("women's")) all.add("Women's");
+        else if (lower.includes("unisex")) all.add("Unisex");
+      }
+    });
+    sales.forEach((s) => {
+      if (s.divisionDesc) {
+        const lower = s.divisionDesc.toLowerCase();
+        if (lower.includes("men's") && !lower.includes("women's")) all.add("Men's");
+        else if (lower.includes("women's")) all.add("Women's");
+        else if (lower.includes("unisex")) all.add("Unisex");
+      }
+    });
+    return Array.from(all).sort();
+  }, [products, sales]);
+
+  // Get unique categories
+  const categories = useMemo(() => {
+    const all = new Set<string>();
+    products.forEach((p) => p.categoryDesc && all.add(p.categoryDesc));
+    sales.forEach((s) => s.categoryDesc && all.add(s.categoryDesc));
+    return Array.from(all).sort();
+  }, [products, sales]);
 
   // Hardcoded list of 6 individual channels (not derived from data which has combinations)
   const customerTypes = ['WH', 'BB', 'WD', 'EC', 'PS', 'KI'];
@@ -207,6 +240,13 @@ export default function SeasonView({
     const filtered = Array.from(styleMap.values()).filter((style) => {
       if (selectedDivision && style.divisionDesc !== selectedDivision) return false;
       if (selectedCategory && style.categoryDesc !== selectedCategory) return false;
+      if (localCategoryFilter && style.categoryDesc !== localCategoryFilter) return false;
+      if (localGenderFilter) {
+        const lower = style.divisionDesc?.toLowerCase() || '';
+        if (localGenderFilter === "Men's" && !(lower.includes("men's") && !lower.includes("women's"))) return false;
+        if (localGenderFilter === "Women's" && !lower.includes("women's")) return false;
+        if (localGenderFilter === "Unisex" && !lower.includes("unisex")) return false;
+      }
       if (selectedDesigner && style.designerName !== selectedDesigner) return false;
       if (styleNumberFilter && !style.styleNumber.toLowerCase().includes(styleNumberFilter.toLowerCase())) return false;
       if (styleNameFilter && !style.styleDesc?.toLowerCase().includes(styleNameFilter.toLowerCase())) return false;
@@ -252,7 +292,7 @@ export default function SeasonView({
     }
 
     return filtered;
-  }, [products, sales, pricing, costs, selectedDivision, selectedCategory, selectedDesigner, styleNumberFilter, styleNameFilter, combineStyles]);
+  }, [products, sales, pricing, costs, selectedDivision, selectedCategory, localGenderFilter, localCategoryFilter, selectedDesigner, styleNumberFilter, styleNameFilter, combineStyles]);
 
   // Build lookup maps for quick access using WATERFALL LOGIC
   // Pricing: 1st pricebyseason → 2nd Line List → 3rd Sales (calculated)
@@ -486,6 +526,33 @@ export default function SeasonView({
 
   // Sort data
   const sortedData = useMemo(() => {
+    // If sortBy filter is set, use it for sorting
+    if (sortBy) {
+      return [...relevantPivotData].sort((a, b) => {
+        let aVal = 0;
+        let bVal = 0;
+
+        // Calculate total across all seasons for the selected metric
+        seasons.forEach((season) => {
+          const aData = a.seasonData[season];
+          const bData = b.seasonData[season];
+          if (sortBy === 'revenue' && metric === 'sales') {
+            aVal += aData || 0;
+            bVal += bData || 0;
+          } else if (sortBy === 'units' && metric === 'units') {
+            aVal += aData || 0;
+            bVal += bData || 0;
+          } else if (sortBy === 'styles') {
+            // For styles, count non-zero values
+            if (aData) aVal += 1;
+            if (bData) bVal += 1;
+          }
+        });
+
+        return bVal - aVal; // Descending order
+      });
+    }
+
     if (!sortColumn) {
       // Default sort: by last season descending
       const lastSeason = seasons[seasons.length - 1];
@@ -516,7 +583,7 @@ export default function SeasonView({
       }
       return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
     });
-  }, [relevantPivotData, sortColumn, sortDir, seasons]);
+  }, [relevantPivotData, sortColumn, sortDir, seasons, sortBy, metric]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -566,9 +633,12 @@ export default function SeasonView({
     setSelectedDesigner('');
     setSelectedCustomerType('');
     setSelectedCustomer('');
+    setLocalGenderFilter('');
+    setLocalCategoryFilter('');
+    setSortBy('');
   };
 
-  const hasFilters = selectedSeasons.length > 0 || styleNumberFilter || styleNameFilter || selectedDesigner || selectedCustomerType || selectedCustomer;
+  const hasFilters = selectedSeasons.length > 0 || styleNumberFilter || styleNameFilter || selectedDesigner || selectedCustomerType || selectedCustomer || localGenderFilter || localCategoryFilter || sortBy;
 
   const metricButtons = [
     { id: 'sales' as MetricType, label: 'Sales $' },
@@ -744,6 +814,51 @@ export default function SeasonView({
               {customers.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Gender Filter */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Gender</label>
+            <select
+              value={localGenderFilter}
+              onChange={(e) => setLocalGenderFilter(e.target.value)}
+              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+            >
+              <option value="">All Genders</option>
+              {genders.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Filter */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Category</label>
+            <select
+              value={localCategoryFilter}
+              onChange={(e) => setLocalCategoryFilter(e.target.value)}
+              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
+            >
+              <option value="">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sort By */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Sort By</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'revenue' | 'units' | 'styles' | '')}
+              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+            >
+              <option value="">Default</option>
+              <option value="revenue">Revenue</option>
+              <option value="units">Units</option>
+              <option value="styles">Styles</option>
             </select>
           </div>
 
