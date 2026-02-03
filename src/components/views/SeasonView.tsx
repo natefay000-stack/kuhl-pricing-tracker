@@ -86,7 +86,7 @@ export default function SeasonView({
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [localGenderFilter, setLocalGenderFilter] = useState<string>('');
   const [localCategoryFilter, setLocalCategoryFilter] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'revenue' | 'units' | 'styles' | ''>('');
+  const [sortBy, setSortBy] = useState<'revenue' | 'units' | 'styles' | 'price' | ''>('');
 
   // Toggle a season in the selection
   const toggleSeason = (season: string) => {
@@ -532,22 +532,46 @@ export default function SeasonView({
         let aVal = 0;
         let bVal = 0;
 
-        // Calculate total across all seasons for the selected metric
-        seasons.forEach((season) => {
-          const aData = a.seasonData[season];
-          const bData = b.seasonData[season];
-          if (sortBy === 'revenue' && metric === 'sales') {
-            aVal += aData || 0;
-            bVal += bData || 0;
-          } else if (sortBy === 'units' && metric === 'units') {
-            aVal += aData || 0;
-            bVal += bData || 0;
-          } else if (sortBy === 'styles') {
-            // For styles, count non-zero values
-            if (aData) aVal += 1;
-            if (bData) bVal += 1;
-          }
-        });
+        if (sortBy === 'price') {
+          // For price, get the average price across seasons (using MSRP metric)
+          let aTotal = 0;
+          let aCount = 0;
+          let bTotal = 0;
+          let bCount = 0;
+
+          seasons.forEach((season) => {
+            const aData = a.seasonData[season];
+            const bData = b.seasonData[season];
+            if (aData && metric === 'msrp') {
+              aTotal += aData;
+              aCount += 1;
+            }
+            if (bData && metric === 'msrp') {
+              bTotal += bData;
+              bCount += 1;
+            }
+          });
+
+          aVal = aCount > 0 ? aTotal / aCount : 0;
+          bVal = bCount > 0 ? bTotal / bCount : 0;
+        } else {
+          // Calculate total across all seasons for the selected metric
+          seasons.forEach((season) => {
+            const aData = a.seasonData[season];
+            const bData = b.seasonData[season];
+            if (sortBy === 'revenue' && metric === 'sales') {
+              aVal += aData || 0;
+              bVal += bData || 0;
+            } else if (sortBy === 'units' && metric === 'units') {
+              aVal += aData || 0;
+              bVal += bData || 0;
+            } else if (sortBy === 'styles') {
+              // For styles, count non-zero values
+              if (aData) aVal += 1;
+              if (bData) bVal += 1;
+            }
+          });
+        }
 
         return bVal - aVal; // Descending order
       });
@@ -852,13 +876,14 @@ export default function SeasonView({
             <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Sort By</label>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'revenue' | 'units' | 'styles' | '')}
+              onChange={(e) => setSortBy(e.target.value as 'revenue' | 'units' | 'styles' | 'price' | '')}
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
             >
               <option value="">Default</option>
               <option value="revenue">Revenue</option>
               <option value="units">Units</option>
               <option value="styles">Styles</option>
+              <option value="price">Price</option>
             </select>
           </div>
 
