@@ -552,7 +552,9 @@ export default function LineListView({
 
   const exportToExcel = () => {
     const exportData = sortedData.map((row) => {
-      const obj: Record<string, unknown> = {};
+      const obj: Record<string, unknown> = {
+        Season: row.season || selectedSeason,
+      };
       visibleColumns.forEach((col) => {
         if (col.key === 'flags') {
           const flags = [];

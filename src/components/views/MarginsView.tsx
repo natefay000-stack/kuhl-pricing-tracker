@@ -865,6 +865,7 @@ export default function MarginsView({
       // Export style-level channel analysis
       exportToExcel(
         styleChannelMargins.slice(0, 50).map(style => ({
+          Season: styleLevelSeasonFilter === 'all' ? 'ALL' : styleLevelSeasonFilter,
           Style: style.styleNumber,
           Description: style.styleDesc,
           Category: style.categoryDesc,
@@ -885,6 +886,7 @@ export default function MarginsView({
       // Export traditional margin analysis
       exportToExcel(
         styleMargins.slice(0, 50).map(style => ({
+          Season: selectedSeason || 'ALL',
           Style: style.styleNumber,
           Description: style.styleDesc,
           Category: style.categoryDesc,

@@ -173,6 +173,8 @@ export default function CustomerView({
       // Export detail view data based on active tab
       exportToExcel(
         customerCategoryData.map(d => ({
+          Season: activeSeason,
+          Customer: selectedCustomer,
           Category: d.category,
           Revenue: d.revenue,
           Units: d.units,
@@ -186,6 +188,7 @@ export default function CustomerView({
       // Export customer list
       exportToExcel(
         filteredCustomers.map((c, idx) => ({
+          Season: activeSeason,
           Rank: idx + 1,
           Customer: c.customer,
           Type: c.customerType,
