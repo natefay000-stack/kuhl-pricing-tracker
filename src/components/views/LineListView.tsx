@@ -215,12 +215,14 @@ export default function LineListView({
 
   // Check if current season is a future season (27SP or later)
   const isFutureSeason = useMemo(() => {
+    if (selectedSeason === 'ALL') return false;
     const futureSessions = ['27SP', '27FA', '28SP', '28FA', '29SP', '29FA'];
     return futureSessions.includes(selectedSeason);
   }, [selectedSeason]);
 
   // Get styles in previous season for new/dropped detection
   const previousSeasonStyles = useMemo(() => {
+    if (selectedSeason === 'ALL') return new Set<string>();
     const prevSeason = getPreviousSeason(selectedSeason);
     if (!prevSeason) return new Set<string>();
     return new Set(
@@ -230,13 +232,17 @@ export default function LineListView({
 
   const currentSeasonStyles = useMemo(() => {
     return new Set(
-      products.filter((p) => p.season === selectedSeason).map((p) => p.styleNumber)
+      selectedSeason === 'ALL'
+        ? products.map((p) => p.styleNumber)
+        : products.filter((p) => p.season === selectedSeason).map((p) => p.styleNumber)
     );
   }, [products, selectedSeason]);
 
   // Filter and enrich data
   const filteredData = useMemo(() => {
-    let data = products.filter((p) => p.season === selectedSeason);
+    let data = selectedSeason === 'ALL'
+      ? products
+      : products.filter((p) => p.season === selectedSeason);
 
     // Apply filters
     if (divisionFilter) data = data.filter((d) => d.divisionDesc === divisionFilter);
@@ -654,6 +660,7 @@ export default function LineListView({
               }}
               className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] font-mono font-bold"
             >
+              <option value="ALL">ALL</option>
               {seasons.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
