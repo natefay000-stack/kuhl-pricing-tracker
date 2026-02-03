@@ -554,6 +554,10 @@ export default function SeasonView({
 
           aVal = aCount > 0 ? aTotal / aCount : 0;
           bVal = bCount > 0 ? bTotal / bCount : 0;
+
+          // If one has no price and the other does, prioritize the one with price
+          if (aVal === 0 && bVal > 0) return 1; // a goes to bottom
+          if (bVal === 0 && aVal > 0) return -1; // b goes to bottom
         } else {
           // Calculate total across all seasons for the selected metric
           seasons.forEach((season) => {
