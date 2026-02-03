@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { Search, Download, ChevronRight, Users } from 'lucide-react';
+import { exportToCSV } from '@/utils/exportData';
 
 interface CustomerViewProps {
   products: Product[];
@@ -164,6 +165,38 @@ export default function CustomerView({
       WD: 'bg-red-100 text-red-700',
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
+  };
+
+  // Export current view data
+  const handleExport = () => {
+    if (selectedCustomer) {
+      // Export detail view data based on active tab
+      exportToCSV(
+        customerCategoryData.map(d => ({
+          Category: d.category,
+          Revenue: d.revenue,
+          Units: d.units,
+          Styles: d.styles,
+          'Rev/Style': d.revPerStyle.toFixed(2),
+          '% of Total': d.pctOfTotal.toFixed(1) + '%',
+        })),
+        `customer_${selectedCustomer}_${activeTab}_${activeSeason}`
+      );
+    } else {
+      // Export customer list
+      exportToCSV(
+        filteredCustomers.map((c, idx) => ({
+          Rank: idx + 1,
+          Customer: c.customer,
+          Type: c.customerType,
+          Revenue: c.revenue.toFixed(2),
+          Units: c.units,
+          Styles: c.styles.size,
+          'Rev/Style': c.styles.size > 0 ? (c.revenue / c.styles.size).toFixed(2) : '0',
+        })),
+        `customers_${activeSeason}`
+      );
+    }
   };
 
   // Customer detail data - By Category
@@ -370,11 +403,20 @@ export default function CustomerView({
       </div>
 
       {/* Page Header */}
-      <div>
-        <h1 className="text-4xl font-black text-gray-900 tracking-tight">Customers</h1>
-        <p className="text-base text-gray-500 mt-1">
-          Analyze customer performance by category, gender, and season
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">Customers</h1>
+          <p className="text-base text-gray-500 mt-1">
+            Analyze customer performance by category, gender, and season
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+        >
+          <Download className="w-5 h-5" />
+          Export {selectedCustomer ? 'Detail' : 'List'}
+        </button>
       </div>
 
       {/* Filters */}

@@ -10,7 +10,9 @@ import {
   Layers,
   Percent,
   DollarSign,
+  Download,
 } from 'lucide-react';
+import { exportToCSV } from '@/utils/exportData';
 
 interface PricingViewProps {
   products: Product[];
@@ -421,6 +423,28 @@ export default function PricingView({
     });
   }, [stylePricingData]);
 
+  // Export pricing data
+  const handleExport = () => {
+    exportToCSV(
+      topDeltaStyles.slice(0, 100).map(style => ({
+        Style: style.styleNumber,
+        Description: style.styleDesc,
+        Category: style.categoryDesc,
+        Division: style.divisionDesc,
+        'From Season': fromSeason,
+        'From Price': style.fromPrice?.toFixed(2) || 'N/A',
+        'To Season': toSeason,
+        'To Price': style.toPrice?.toFixed(2) || 'N/A',
+        'Price Delta $': style.priceDelta?.toFixed(2) || 'N/A',
+        'Delta %': style.deltaPercent?.toFixed(1) || 'N/A',
+        Cost: style.cost?.toFixed(2) || 'N/A',
+        'From Margin %': style.fromMargin?.toFixed(1) || 'N/A',
+        'To Margin %': style.toMargin?.toFixed(1) || 'N/A',
+      })),
+      `pricing_analysis_${fromSeason}_to_${toSeason}`
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -434,8 +458,9 @@ export default function PricingView({
           </p>
         </div>
 
-        {/* Season Compare Selector */}
-        <div className="flex items-center gap-3 bg-white rounded-xl border-2 border-gray-200 p-4">
+        <div className="flex items-center gap-3">
+          {/* Season Compare Selector */}
+          <div className="flex items-center gap-3 bg-white rounded-xl border-2 border-gray-200 p-4">
           <div>
             <label className="block text-sm font-bold text-gray-600 uppercase tracking-wide mb-1">
               From
@@ -468,6 +493,14 @@ export default function PricingView({
             </select>
           </div>
         </div>
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+        >
+          <Download className="w-5 h-5" />
+          Export
+        </button>
+      </div>
       </div>
 
       {/* Stat Cards */}

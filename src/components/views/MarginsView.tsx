@@ -18,7 +18,9 @@ import {
   ShoppingCart,
   Filter,
   X,
+  Download,
 } from 'lucide-react';
+import { exportToCSV } from '@/utils/exportData';
 
 interface MarginsViewProps {
   products: Product[];
@@ -857,6 +859,50 @@ export default function MarginsView({
     );
   };
 
+  // Export data based on current view mode
+  const handleExport = () => {
+    if (viewMode === 'channel') {
+      // Export style-level channel analysis
+      exportToCSV(
+        styleChannelMargins.slice(0, 50).map(style => ({
+          Style: style.styleNumber,
+          Description: style.styleDesc,
+          Category: style.categoryDesc,
+          Division: style.divisionDesc,
+          MSRP: style.msrp.toFixed(2),
+          Wholesale: style.wholesalePrice.toFixed(2),
+          Cost: style.landedCost.toFixed(2),
+          'Baseline Margin %': style.baselineMargin.toFixed(1),
+          'Weighted Margin %': style.weightedMargin.toFixed(1),
+          'Margin Delta': style.marginDelta.toFixed(1),
+          Revenue: style.totalRevenue.toFixed(2),
+          Units: style.totalUnits,
+          'Avg Net Price': style.avgNetPrice.toFixed(2),
+        })),
+        `margins_channel_analysis_${styleLevelSeasonFilter}`
+      );
+    } else {
+      // Export traditional margin analysis
+      exportToCSV(
+        styleMargins.slice(0, 50).map(style => ({
+          Style: style.styleNumber,
+          Description: style.styleDesc,
+          Category: style.categoryDesc,
+          Division: style.divisionDesc,
+          Gender: style.gender,
+          Revenue: style.revenue.toFixed(2),
+          Units: style.units,
+          Cost: style.cost.toFixed(2),
+          COGS: style.cogs.toFixed(2),
+          'Gross Profit': style.gross.toFixed(2),
+          'Margin %': style.margin.toFixed(1),
+          'vs Target': style.vsTarget.toFixed(1),
+        })),
+        `margins_traditional_${selectedSeason || 'all'}`
+      );
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header with View Toggle */}
@@ -869,26 +915,35 @@ export default function MarginsView({
             True margin analysis using actual sales prices by channel
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setViewMode('channel')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              viewMode === 'channel'
-                ? 'bg-cyan-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            Channel Analysis
-          </button>
-          <button
-            onClick={() => setViewMode('traditional')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              viewMode === 'traditional'
-                ? 'bg-cyan-600 text-white'
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode('channel')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                viewMode === 'channel'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Channel Analysis
+            </button>
+            <button
+              onClick={() => setViewMode('traditional')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                viewMode === 'traditional'
+                  ? 'bg-cyan-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             Traditional View
+          </button>
+          </div>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+          >
+            <Download className="w-5 h-5" />
+            Export Data
           </button>
         </div>
       </div>
