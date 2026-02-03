@@ -5,6 +5,7 @@ import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { Search, Download, ChevronRight, Users } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
+import { SourceLegend } from '@/components/SourceBadge';
 
 interface CustomerViewProps {
   products: Product[];
@@ -421,6 +422,9 @@ export default function CustomerView({
           Export {selectedCustomer ? 'Detail' : 'List'}
         </button>
       </div>
+
+      {/* Data Sources Legend */}
+      <SourceLegend sources={['sales']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
 
       {/* Filters */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-5">

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
+import { SourceLegend } from '@/components/SourceBadge';
 
 interface DashboardViewProps {
   products: Product[];
@@ -239,6 +240,9 @@ export default function DashboardView({
           Overview of sales performance and key metrics
         </p>
       </div>
+
+      {/* Data Sources Legend */}
+      <SourceLegend sources={['sales', 'landed', 'linelist']} className="bg-white rounded-xl border border-gray-200 p-4" />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-5">

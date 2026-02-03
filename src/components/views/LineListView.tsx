@@ -5,6 +5,7 @@ import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } fr
 import { sortSeasons } from '@/lib/store';
 import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { SourceLegend } from '@/components/SourceBadge';
 
 // Gender detection from division description
 function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex' {
@@ -647,6 +648,9 @@ export default function LineListView({
           Export Excel
         </button>
       </div>
+
+      {/* Data Sources Legend */}
+      <SourceLegend sources={['linelist', 'pricing', 'landed', 'sales', 'calculated']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
 
       {/* Filters Row 1 */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-4">

@@ -5,6 +5,7 @@ import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { Download, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { SourceLegend } from '@/components/SourceBadge';
 
 interface SeasonCompViewProps {
   products: Product[];
@@ -375,6 +376,9 @@ export default function SeasonCompView({
           Export Analysis
         </button>
       </div>
+
+      {/* Data Sources Legend */}
+      <SourceLegend sources={['sales', 'linelist']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
 
       {/* Quick Season Filter */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-5">

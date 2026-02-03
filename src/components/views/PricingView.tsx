@@ -13,6 +13,7 @@ import {
   Download,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
+import { SourceLegend } from '@/components/SourceBadge';
 
 interface PricingViewProps {
   products: Product[];
@@ -502,6 +503,9 @@ export default function PricingView({
         </button>
       </div>
       </div>
+
+      {/* Data Sources Legend */}
+      <SourceLegend sources={['pricing', 'linelist', 'sales', 'landed']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-5 gap-4">
