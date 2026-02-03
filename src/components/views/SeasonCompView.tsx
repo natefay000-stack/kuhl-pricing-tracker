@@ -32,6 +32,7 @@ export default function SeasonCompView({
   const [selectedSeasons, setSelectedSeasons] = useState<string[]>([]);
   const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [breakdownMetric, setBreakdownMetric] = useState<'all' | 'styles' | 'revenue' | 'revPerStyle'>('all');
 
   // Get all available seasons (only recent ones: 24-27)
   const allSeasons = useMemo(() => {
@@ -566,14 +567,19 @@ export default function SeasonCompView({
                   {isPlanning ? '—' : formatCurrency(data.revenue)}
                 </div>
                 <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mt-1">Total Revenue</div>
-                {revenueChange !== null && !isPlanning && prevYearSeason && (
-                  <div className={`text-base font-bold mt-2 ${
-                    revenueChange > 0 ? 'text-emerald-600' :
-                    revenueChange < 0 ? 'text-red-500' : 'text-gray-500'
-                  }`}>
-                    {revenueChange > 0 ? '↑' : revenueChange < 0 ? '↓' : '→'} {Math.abs(revenueChange)}% vs {prevYearSeason}
-                  </div>
-                )}
+                {/* Fixed height for comparison to maintain alignment */}
+                <div className="h-7 mt-2">
+                  {revenueChange !== null && !isPlanning && prevYearSeason ? (
+                    <div className={`text-base font-bold ${
+                      revenueChange > 0 ? 'text-emerald-600' :
+                      revenueChange < 0 ? 'text-red-500' : 'text-gray-500'
+                    }`}>
+                      {revenueChange > 0 ? '↑' : revenueChange < 0 ? '↓' : '→'} {Math.abs(revenueChange)}% vs {prevYearSeason}
+                    </div>
+                  ) : (
+                    <div className="text-transparent">—</div>
+                  )}
+                </div>
               </div>
 
               {/* Supporting Metrics */}
@@ -581,21 +587,29 @@ export default function SeasonCompView({
                 <div>
                   <div className="text-2xl font-black text-gray-900">{data.styles}</div>
                   <div className="text-sm font-medium text-gray-500">Styles</div>
-                  {stylesChange !== null && prevYearSeason && (
-                    <div className={`text-sm font-bold ${
-                      stylesChange > 0 ? 'text-emerald-600' :
-                      stylesChange < 0 ? 'text-red-500' : 'text-gray-400'
-                    }`}>
-                      {stylesChange > 0 ? '+' : ''}{stylesChange}%
-                    </div>
-                  )}
+                  {/* Fixed height for comparison */}
+                  <div className="h-5 mt-1">
+                    {stylesChange !== null && prevYearSeason ? (
+                      <div className={`text-sm font-bold ${
+                        stylesChange > 0 ? 'text-emerald-600' :
+                        stylesChange < 0 ? 'text-red-500' : 'text-gray-400'
+                      }`}>
+                        {stylesChange > 0 ? '+' : ''}{stylesChange}%
+                      </div>
+                    ) : (
+                      <div className="text-transparent">—</div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <div className="text-2xl font-black text-gray-900">
                     {isPlanning ? '—' : formatCurrency(revenuePerStyle)}
                   </div>
                   <div className="text-sm font-medium text-gray-500">Rev / Style</div>
-                  <div className="text-sm text-gray-400">avg</div>
+                  {/* Fixed height for consistency */}
+                  <div className="h-5 mt-1">
+                    <div className="text-sm text-gray-400">avg</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -634,8 +648,52 @@ export default function SeasonCompView({
       <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-lg">
         <div className="p-6 border-b-2 border-gray-300 bg-gradient-to-r from-gray-50 to-white">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black text-gray-900">Category Breakdown</h2>
+            <div className="flex-1">
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-black text-gray-900">Category Breakdown</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBreakdownMetric('all')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                      breakdownMetric === 'all'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setBreakdownMetric('styles')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                      breakdownMetric === 'styles'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    Qty
+                  </button>
+                  <button
+                    onClick={() => setBreakdownMetric('revenue')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                      breakdownMetric === 'revenue'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    Rev
+                  </button>
+                  <button
+                    onClick={() => setBreakdownMetric('revPerStyle')}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+                      breakdownMetric === 'revPerStyle'
+                        ? 'bg-emerald-500 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    Rev/Style
+                  </button>
+                </div>
+              </div>
               <p className="text-sm text-gray-500 mt-1">
                 {selectedDivision || 'All Divisions'} • Compare styles and revenue across seasons
               </p>
@@ -710,26 +768,66 @@ export default function SeasonCompView({
                       const isPlanning = getSeasonStatus(season) === 'Planning';
 
                       return (
-                        <td key={season} className={`px-6 py-5 text-center border-l-2 ${isPlanning ? 'border-purple-100' : 'border-gray-100'}`}>
-                          <div className="space-y-1">
-                            <div className={`text-2xl font-black ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
-                              {data.styles}
-                            </div>
-                            <div className={`text-xs font-semibold ${isPlanning ? 'text-purple-500' : 'text-gray-500'}`}>
-                              {isPlanning ? 'planned' : formatCurrency(data.revenue)}
-                            </div>
-                            {stylesChange !== null && prevYearSeason && (
-                              <div className={`inline-flex items-center gap-1 text-sm font-bold px-2 py-0.5 rounded-full ${
-                                stylesChange > 0
-                                  ? 'bg-emerald-100 text-emerald-700'
-                                  : stylesChange < 0
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-gray-100 text-gray-500'
-                              }`}>
-                                {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'} {Math.abs(stylesChange)}%
+                        <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-100' : 'border-gray-100'}`}>
+                          {breakdownMetric === 'all' ? (
+                            <div className="space-y-0.5">
+                              <div className="relative">
+                                <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
+                                  {data.styles}
+                                </div>
+                                {stylesChange !== null && prevYearSeason && (
+                                  <div className="absolute left-1/2 top-0 ml-6">
+                                    <div className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                      stylesChange > 0
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : stylesChange < 0
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-gray-100 text-gray-500'
+                                    }`}>
+                                      {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
+                              <div className={`text-sm font-semibold ${isPlanning ? 'text-purple-500' : 'text-gray-500'}`}>
+                                {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                              </div>
+                              {!isPlanning && data.styles > 0 ? (
+                                <div className="text-xs font-medium text-blue-600">
+                                  {formatCurrency(data.revenue / data.styles)}/style
+                                </div>
+                              ) : (
+                                <div className="text-xs font-medium text-transparent">—</div>
+                              )}
+                            </div>
+                          ) : breakdownMetric === 'styles' ? (
+                            <div className="relative">
+                              <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
+                                {data.styles}
+                              </div>
+                              {stylesChange !== null && prevYearSeason && (
+                                <div className="absolute left-1/2 top-0 ml-8">
+                                  <div className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                    stylesChange > 0
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : stylesChange < 0
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : breakdownMetric === 'revenue' ? (
+                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
+                              {isPlanning ? '—' : formatCurrency(data.revenue)}
+                            </div>
+                          ) : (
+                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : data.styles > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
+                              {!isPlanning && data.styles > 0 ? formatCurrency(data.revenue / data.styles) : '—'}
+                            </div>
+                          )}
                         </td>
                       );
                     })}
@@ -765,26 +863,66 @@ export default function SeasonCompView({
                   const isPlanning = getSeasonStatus(season) === 'Planning';
 
                   return (
-                    <td key={season} className={`px-6 py-5 text-center border-l-2 ${isPlanning ? 'border-purple-200' : 'border-gray-300'}`}>
-                      <div className="space-y-1">
-                        <div className={`text-2xl font-black ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
-                          {data.styles}
-                        </div>
-                        <div className={`text-xs font-bold ${isPlanning ? 'text-purple-600' : 'text-gray-700'}`}>
-                          {isPlanning ? 'planned' : formatCurrency(data.revenue)}
-                        </div>
-                        {stylesChange !== null && prevYearSeason && (
-                          <div className={`inline-flex items-center gap-1 text-sm font-black px-2 py-0.5 rounded-full ${
-                            stylesChange > 0
-                              ? 'bg-emerald-200 text-emerald-900'
-                              : stylesChange < 0
-                              ? 'bg-red-200 text-red-900'
-                              : 'bg-gray-300 text-gray-700'
-                          }`}>
-                            {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'} {Math.abs(stylesChange)}%
+                    <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-200' : 'border-gray-300'}`}>
+                      {breakdownMetric === 'all' ? (
+                        <div className="space-y-0.5">
+                          <div className="relative">
+                            <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
+                              {data.styles}
+                            </div>
+                            {stylesChange !== null && prevYearSeason && (
+                              <div className="absolute left-1/2 top-0 ml-6">
+                                <div className={`inline-flex items-center gap-0.5 text-xs font-black px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                  stylesChange > 0
+                                    ? 'bg-emerald-200 text-emerald-900'
+                                    : stylesChange < 0
+                                    ? 'bg-red-200 text-red-900'
+                                    : 'bg-gray-300 text-gray-700'
+                                }`}>
+                                  {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                          <div className={`text-sm font-bold ${isPlanning ? 'text-purple-600' : 'text-gray-700'}`}>
+                            {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                          </div>
+                          {!isPlanning && data.styles > 0 ? (
+                            <div className="text-xs font-bold text-blue-700">
+                              {formatCurrency(data.revenue / data.styles)}/style
+                            </div>
+                          ) : (
+                            <div className="text-xs font-bold text-transparent">—</div>
+                          )}
+                        </div>
+                      ) : breakdownMetric === 'styles' ? (
+                        <div className="relative">
+                          <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
+                            {data.styles}
+                          </div>
+                          {stylesChange !== null && prevYearSeason && (
+                            <div className="absolute left-1/2 top-0 ml-8">
+                              <div className={`inline-flex items-center gap-0.5 text-xs font-black px-1.5 py-0.5 rounded-full whitespace-nowrap ${
+                                stylesChange > 0
+                                  ? 'bg-emerald-200 text-emerald-900'
+                                  : stylesChange < 0
+                                  ? 'bg-red-200 text-red-900'
+                                  : 'bg-gray-300 text-gray-700'
+                              }`}>
+                                {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : breakdownMetric === 'revenue' ? (
+                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
+                          {isPlanning ? '—' : formatCurrency(data.revenue)}
+                        </div>
+                      ) : (
+                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : data.styles > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
+                          {!isPlanning && data.styles > 0 ? formatCurrency(data.revenue / data.styles) : '—'}
+                        </div>
+                      )}
                     </td>
                   );
                 })}

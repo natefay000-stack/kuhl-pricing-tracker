@@ -14,6 +14,7 @@ import MarginsView from '@/components/views/MarginsView';
 import StyleMasterView from '@/components/views/StyleMasterView';
 import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
+import CustomerView from '@/components/views/CustomerView';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
@@ -851,6 +852,14 @@ export default function Home() {
               selectedSeason={selectedSeason}
               selectedDivision={selectedDivision}
               selectedCategory={selectedCategory}
+              onStyleClick={handleStyleClick}
+            />
+          )}
+
+          {activeView === 'customers' && (
+            <CustomerView
+              products={products}
+              sales={sales}
               onStyleClick={handleStyleClick}
             />
           )}

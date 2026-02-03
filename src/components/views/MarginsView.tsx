@@ -50,8 +50,12 @@ interface StyleChannelMargin {
   styleDesc: string;
   categoryDesc: string;
   divisionDesc: string;
-  landedCost: number;
+  msrp: number;
   wholesalePrice: number;
+  landedCost: number;
+  msrpSource: 'linelist' | 'sales' | 'pricebyseason' | 'none';
+  wholesaleSource: 'linelist' | 'sales' | 'pricebyseason' | 'none';
+  costSource: 'landed' | 'linelist' | 'none';
   baselineMargin: number;
   totalRevenue: number;
   totalUnits: number;
@@ -261,10 +265,18 @@ export default function MarginsView({
 
   // Search filter for style-level analysis
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [styleLevelSeasonFilter, setStyleLevelSeasonFilter] = useState<string>('all');
 
   // Customer filters
   const [customerTypeFilters, setCustomerTypeFilters] = useState<string[]>([]);
   const [showTopN, setShowTopN] = useState<number>(10);
+
+  // Get available seasons for filter
+  const availableSeasons = useMemo(() => {
+    const seasons = new Set<string>();
+    sales.forEach(s => s.season && seasons.add(s.season));
+    return Array.from(seasons).sort().filter(s => /^(24|25|26|27)/.test(s));
+  }, [sales]);
 
   // Build cost lookup from costs data
   const costLookup = useMemo(() => {
@@ -376,8 +388,9 @@ export default function MarginsView({
       styleDesc: string;
       categoryDesc: string;
       divisionDesc: string;
-      landedCost: number;
+      msrp: number;
       wholesalePrice: number;
+      landedCost: number;
       channels: Map<string, { revenue: number; units: number }>;
     }>();
 
@@ -385,22 +398,57 @@ export default function MarginsView({
       // Apply division/category filters
       if (selectedDivision && record.divisionDesc !== selectedDivision) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+      // Apply season filter if not "all"
+      if (styleLevelSeasonFilter !== 'all' && record.season !== styleLevelSeasonFilter) return;
 
       const channel = normalizeCustomerType(record.customerType);
       const landedCost = costLookup.get(record.styleNumber) || 0;
 
       if (!byStyle.has(record.styleNumber)) {
-        // Get wholesale price from products or sales record
+        // Get pricing from products (line list)
         const product = products.find(p => p.styleNumber === record.styleNumber);
-        const wholesalePrice = product?.price || record.wholesalePrice || 0;
+
+        // Track MSRP source
+        let msrp = 0;
+        let msrpSource: 'linelist' | 'sales' | 'pricebyseason' | 'none' = 'none';
+        if (product?.msrp) {
+          msrp = product.msrp;
+          msrpSource = 'linelist';
+        }
+
+        // Track Wholesale source
+        let wholesalePrice = 0;
+        let wholesaleSource: 'linelist' | 'sales' | 'pricebyseason' | 'none' = 'none';
+        if (product?.price) {
+          wholesalePrice = product.price;
+          wholesaleSource = 'linelist';
+        } else if (record.wholesalePrice) {
+          wholesalePrice = record.wholesalePrice;
+          wholesaleSource = 'sales';
+        }
+
+        // Track Cost source
+        let cost = 0;
+        let costSource: 'landed' | 'linelist' | 'none' = 'none';
+        if (landedCost > 0) {
+          cost = landedCost;
+          costSource = 'landed';
+        } else if (product?.cost) {
+          cost = product.cost;
+          costSource = 'linelist';
+        }
 
         byStyle.set(record.styleNumber, {
           styleNumber: record.styleNumber,
           styleDesc: record.styleDesc || '',
           categoryDesc: normalizeCategory(record.categoryDesc) || '',
           divisionDesc: record.divisionDesc || '',
-          landedCost,
+          msrp,
           wholesalePrice,
+          landedCost: cost,
+          msrpSource,
+          wholesaleSource,
+          costSource,
           channels: new Map(),
         });
       }
@@ -454,8 +502,12 @@ export default function MarginsView({
         styleDesc: style.styleDesc,
         categoryDesc: style.categoryDesc,
         divisionDesc: style.divisionDesc,
-        landedCost: style.landedCost,
+        msrp: style.msrp,
         wholesalePrice: style.wholesalePrice,
+        landedCost: style.landedCost,
+        msrpSource: style.msrpSource,
+        wholesaleSource: style.wholesaleSource,
+        costSource: style.costSource,
         baselineMargin,
         totalRevenue,
         totalUnits,
@@ -467,7 +519,7 @@ export default function MarginsView({
     });
 
     return results.filter(s => s.totalRevenue > 0);
-  }, [filteredSales, costLookup, products, selectedDivision, selectedCategory]);
+  }, [filteredSales, costLookup, products, selectedDivision, selectedCategory, styleLevelSeasonFilter]);
 
   // Customer breakdown for drill-down - with filters
   const customerBreakdown = useMemo(() => {
@@ -1194,6 +1246,35 @@ export default function MarginsView({
                   </span>
                 </div>
               </div>
+              {/* Season Filter Pills */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs text-gray-500 font-medium">Season:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStyleLevelSeasonFilter('all')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                      styleLevelSeasonFilter === 'all'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                  >
+                    All Seasons
+                  </button>
+                  {availableSeasons.map(season => (
+                    <button
+                      key={season}
+                      onClick={() => setStyleLevelSeasonFilter(season)}
+                      className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                        styleLevelSeasonFilter === season
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                      }`}
+                    >
+                      {season}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {/* Channel Mix Legend */}
               <div className="flex items-center gap-4 mb-3 text-xs">
                 <span className="text-gray-500 font-medium">Channel Mix:</span>
@@ -1206,6 +1287,22 @@ export default function MarginsView({
                     </span>
                   );
                 })}
+              </div>
+              {/* Data Source Legend */}
+              <div className="flex items-center gap-4 mb-3 text-xs">
+                <span className="text-gray-500 font-medium">Price Source:</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                  <span className="text-gray-600">Line List</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                  <span className="text-gray-600">Sales</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                  <span className="text-gray-600">Landed Sheet</span>
+                </span>
               </div>
               {/* Search Input */}
               <div className="flex items-center gap-4">
@@ -1246,6 +1343,15 @@ export default function MarginsView({
                     </th>
                     <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide">
                       Description
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                      MSRP
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                      Wholesale
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                      Cost
                     </th>
                     <th
                       className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
@@ -1298,6 +1404,47 @@ export default function MarginsView({
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 max-w-[180px] truncate">
                             {style.styleDesc}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {style.msrpSource !== 'none' && (
+                                <span className={`w-2 h-2 rounded-full ${
+                                  style.msrpSource === 'linelist' ? 'bg-blue-500' :
+                                  style.msrpSource === 'sales' ? 'bg-purple-500' :
+                                  'bg-orange-500'
+                                }`} title={style.msrpSource === 'linelist' ? 'Line List' : style.msrpSource === 'sales' ? 'Sales' : 'Landed Sheet'}></span>
+                              )}
+                              <span className="font-mono text-sm text-gray-900">
+                                {style.msrp > 0 ? `$${style.msrp.toFixed(0)}` : '—'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {style.wholesaleSource !== 'none' && (
+                                <span className={`w-2 h-2 rounded-full ${
+                                  style.wholesaleSource === 'linelist' ? 'bg-blue-500' :
+                                  style.wholesaleSource === 'sales' ? 'bg-purple-500' :
+                                  'bg-orange-500'
+                                }`} title={style.wholesaleSource === 'linelist' ? 'Line List' : style.wholesaleSource === 'sales' ? 'Sales' : 'Landed Sheet'}></span>
+                              )}
+                              <span className="font-mono text-sm text-gray-900">
+                                {style.wholesalePrice > 0 ? `$${style.wholesalePrice.toFixed(2)}` : '—'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {style.costSource !== 'none' && (
+                                <span className={`w-2 h-2 rounded-full ${
+                                  style.costSource === 'landed' ? 'bg-orange-500' :
+                                  'bg-blue-500'
+                                }`} title={style.costSource === 'landed' ? 'Landed Sheet' : 'Line List'}></span>
+                              )}
+                              <span className="font-mono text-sm text-gray-700">
+                                {style.landedCost > 0 ? `$${style.landedCost.toFixed(2)}` : '—'}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
                             {formatCurrency(style.totalRevenue)}

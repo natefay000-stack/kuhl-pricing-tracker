@@ -13,9 +13,10 @@ import {
   AlertTriangle,
   Settings,
   GitCompare,
+  Users,
 } from 'lucide-react';
 
-export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'linelist' | 'validation';
+export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'customers' | 'linelist' | 'validation';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -34,6 +35,7 @@ const views = [
   { id: 'costs' as ViewId, label: 'Costs', icon: DollarSign },
   { id: 'pricing' as ViewId, label: 'Pricing', icon: TrendingUp },
   { id: 'products' as ViewId, label: 'Style Master', icon: Package },
+  { id: 'customers' as ViewId, label: 'Customers', icon: Users },
   { id: 'margins' as ViewId, label: 'Margins', icon: Percent },
 ];
 
