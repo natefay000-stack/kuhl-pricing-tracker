@@ -592,8 +592,8 @@ export default function SeasonView({
             const bSales = dataLookups.salesByStyleSeason.get(bKey);
             const aPricing = dataLookups.pricingByStyleSeason.get(aKey);
             const bPricing = dataLookups.pricingByStyleSeason.get(bKey);
-            const aCost = dataLookups.costByStyleSeason.get(aKey);
-            const bCost = dataLookups.costByStyleSeason.get(bKey);
+            const aCost = dataLookups.costsByStyleSeason.get(aKey);
+            const bCost = dataLookups.costsByStyleSeason.get(bKey);
 
             // Count if style has any data in this season
             if (aSales || aPricing || aCost) aVal += 1;

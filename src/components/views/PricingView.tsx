@@ -427,20 +427,18 @@ export default function PricingView({
   // Export pricing data
   const handleExport = () => {
     exportToExcel(
-      topDeltaStyles.slice(0, 100).map(style => ({
+      sortedData.slice(0, 100).map(style => ({
         Style: style.styleNumber,
         Description: style.styleDesc,
-        Category: style.categoryDesc,
-        Division: style.divisionDesc,
+        Category: style.category,
+        Division: style.division,
         'From Season': fromSeason,
         'From Price': style.fromPrice?.toFixed(2) || 'N/A',
         'To Season': toSeason,
         'To Price': style.toPrice?.toFixed(2) || 'N/A',
         'Price Delta $': style.priceDelta?.toFixed(2) || 'N/A',
-        'Delta %': style.deltaPercent?.toFixed(1) || 'N/A',
-        Cost: style.cost?.toFixed(2) || 'N/A',
-        'From Margin %': style.fromMargin?.toFixed(1) || 'N/A',
-        'To Margin %': style.toMargin?.toFixed(1) || 'N/A',
+        'Price % Change': style.pricePercentChange?.toFixed(1) || 'N/A',
+        'Margin %': style.margin?.toFixed(1) || 'N/A',
       })),
       `pricing_analysis_${fromSeason}_to_${toSeason}`
     );
