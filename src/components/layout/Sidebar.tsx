@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 
-export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'customers' | 'linelist' | 'validation';
+export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'customers' | 'linelist' | 'validation' | 'datasources';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -37,6 +37,7 @@ const views = [
   { id: 'products' as ViewId, label: 'Style Master', icon: Package },
   { id: 'customers' as ViewId, label: 'Customers', icon: Users },
   { id: 'margins' as ViewId, label: 'Margins', icon: Percent },
+  { id: 'datasources' as ViewId, label: 'Data Sources', icon: GitCompare },
 ];
 
 export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick }: SidebarProps) {

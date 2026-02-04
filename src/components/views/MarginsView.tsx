@@ -872,6 +872,7 @@ export default function MarginsView({
           Division: style.divisionDesc,
           MSRP: style.msrp.toFixed(2),
           Wholesale: style.wholesalePrice.toFixed(2),
+          'Net Price': style.avgNetPrice.toFixed(2),
           Cost: style.landedCost.toFixed(2),
           'Baseline Margin %': style.baselineMargin.toFixed(1),
           'Weighted Margin %': style.weightedMargin.toFixed(1),
@@ -1411,6 +1412,9 @@ export default function MarginsView({
                       Wholesale
                     </th>
                     <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                      Net Price
+                    </th>
+                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
                       Cost
                     </th>
                     <th
@@ -1490,6 +1494,16 @@ export default function MarginsView({
                               )}
                               <span className="font-mono text-sm text-gray-900">
                                 {style.wholesalePrice > 0 ? `$${style.wholesalePrice.toFixed(2)}` : '—'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {style.avgNetPrice > 0 && (
+                                <span className="w-2 h-2 rounded-full bg-purple-500" title="Sales (calculated from revenue/units)"></span>
+                              )}
+                              <span className="font-mono text-sm text-gray-900">
+                                {style.avgNetPrice > 0 ? `$${style.avgNetPrice.toFixed(2)}` : '—'}
                               </span>
                             </div>
                           </td>

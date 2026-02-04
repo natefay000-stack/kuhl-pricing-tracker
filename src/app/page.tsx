@@ -15,6 +15,7 @@ import StyleMasterView from '@/components/views/StyleMasterView';
 import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
 import CustomerView from '@/components/views/CustomerView';
+import DataSourceMapView from '@/components/views/DataSourceMapView';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
@@ -880,6 +881,10 @@ export default function Home() {
               sales={sales}
               onStyleClick={handleStyleClick}
             />
+          )}
+
+          {activeView === 'datasources' && (
+            <DataSourceMapView />
           )}
         </div>
       </main>
