@@ -621,10 +621,11 @@ export default function LineListView({
     { id: 'all', label: 'All' },
     { id: 'new', label: 'New' },
     { id: 'carryover', label: 'Carryover' },
-    { id: 'topSellers', label: 'Top Sellers' },
-    { id: 'smu', label: 'SMU' },
-    { id: 'kore', label: 'KORE' },
-    { id: 'map', label: 'MAP' },
+    // Hidden until flag data (topSeller/smu/kore/map) is populated in Product model:
+    // { id: 'topSellers', label: 'Top Sellers' },
+    // { id: 'smu', label: 'SMU' },
+    // { id: 'kore', label: 'KORE' },
+    // { id: 'map', label: 'MAP' },
     { id: 'dropped', label: 'Dropped' },
   ];
 
