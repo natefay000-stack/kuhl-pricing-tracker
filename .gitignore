@@ -26,3 +26,10 @@ Thumbs.db
 .claude/
 tsconfig.tsbuildinfo
 .vercel
+
+# Supabase CLI temp files
+supabase/.temp/
+
+# Misc
+.env.vercel
+clear-cache.js
