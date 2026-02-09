@@ -408,7 +408,7 @@ export default function DataSourceMapView() {
           <div>
             <h3 className="text-base font-bold text-blue-900 mb-2">Building the Complete Data Picture</h3>
             <p className="text-sm text-blue-800 leading-relaxed">
-              The red cells at the bottom make the case clear — without a Customer Master from Full Circle, there's no source of truth for discount tiers, territories, sales reps, or payment terms.
+              The red cells at the bottom make the case clear — without a Customer Master from Full Circle, there&apos;s no source of truth for discount tiers, territories, sales reps, or payment terms.
               Uploading a Customer Master export fills every gap in the customer dimension. Combined with the Style Registry (Line List → Style Master backfill),
               every view in the app can connect the dots: who designed it, who bought it, what they paid, what it cost, and what the margin was.
             </p>

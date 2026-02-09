@@ -463,8 +463,8 @@ export default function CustomerView({
               onChange={(e) => setSelectedGender(e.target.value)}
             >
               <option value="">All</option>
-              <option value="Men">Men's</option>
-              <option value="Women">Women's</option>
+              <option value="Men">Men&apos;s</option>
+              <option value="Women">Women&apos;s</option>
               <option value="Unisex">Unisex</option>
             </select>
           </div>
