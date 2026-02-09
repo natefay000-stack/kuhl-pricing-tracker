@@ -281,19 +281,27 @@ export default function MarginsView({
     return Array.from(seasons).sort().filter(s => isRelevantSeason(s));
   }, [sales]);
 
-  // Build cost lookup from costs data
+  // Build cost lookup from costs data — keyed by styleNumber-season for accuracy
   const costLookup = useMemo(() => {
     const lookup = new Map<string, number>();
     costs.forEach(c => {
-      // Use landed cost if available
+      const key = `${c.styleNumber}-${c.season}`;
       if (c.landed > 0) {
-        lookup.set(c.styleNumber, c.landed);
+        lookup.set(key, c.landed);
       } else if (c.fob > 0) {
-        lookup.set(c.styleNumber, c.fob);
+        lookup.set(key, c.fob);
+      }
+      // Also set a style-only fallback (last cost seen)
+      if (!lookup.has(c.styleNumber)) {
+        lookup.set(c.styleNumber, c.landed > 0 ? c.landed : c.fob);
       }
     });
-    // Also get costs from products
+    // Also get costs from products as fallback
     products.forEach(p => {
+      const key = `${p.styleNumber}-${p.season}`;
+      if (!lookup.has(key) && p.cost > 0) {
+        lookup.set(key, p.cost);
+      }
       if (!lookup.has(p.styleNumber) && p.cost > 0) {
         lookup.set(p.styleNumber, p.cost);
       }
@@ -330,7 +338,7 @@ export default function MarginsView({
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = normalizeCustomerType(record.customerType);
-      const landedCost = costLookup.get(record.styleNumber) || 0;
+      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
       const units = record.unitsBooked || 0;
 
       if (!byChannel.has(channel)) {
@@ -408,7 +416,7 @@ export default function MarginsView({
       if (styleLevelSeasonFilter !== 'all' && record.season !== styleLevelSeasonFilter) return;
 
       const channel = normalizeCustomerType(record.customerType);
-      const landedCost = costLookup.get(record.styleNumber) || 0;
+      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
 
       if (!byStyle.has(record.styleNumber)) {
         // Get pricing from products (line list)
@@ -543,7 +551,7 @@ export default function MarginsView({
       const customer = record.customer && record.customer.trim()
         ? record.customer.trim()
         : `Unknown (${type})`;
-      const landedCost = costLookup.get(record.styleNumber) || 0;
+      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
       const units = record.unitsBooked || 0;
 
       if (!byCustomer.has(customer)) {
@@ -584,7 +592,7 @@ export default function MarginsView({
     const byStyle = new Map<string, StyleMargin>();
 
     filteredSales.forEach(record => {
-      const cost = costLookup.get(record.styleNumber) || 0;
+      const cost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
 
       if (!byStyle.has(record.styleNumber)) {
         byStyle.set(record.styleNumber, {
@@ -754,7 +762,7 @@ export default function MarginsView({
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = record.customerType || 'Other';
-      const cost = costLookup.get(record.styleNumber) || 0;
+      const cost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
 
       if (!byChannel.has(channel)) {
         byChannel.set(channel, {
