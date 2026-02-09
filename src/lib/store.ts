@@ -58,7 +58,11 @@ export function loadProducts(): Product[] {
 // Save products to localStorage
 export function saveProducts(products: Product[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  } catch (e) {
+    console.warn('Failed to save products to localStorage:', e);
+  }
 }
 
 // Generate unique ID
