@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { isRelevantSeason } from '@/utils/season';
 import { Search, Download, ChevronRight, Users } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
@@ -41,7 +42,7 @@ export default function CustomerView({
   const allSeasons = useMemo(() => {
     const seasonSet = new Set<string>();
     sales.forEach((s) => s.season && seasonSet.add(s.season));
-    return sortSeasons(Array.from(seasonSet)).filter((s) => /^(24|25|26|27)/.test(s));
+    return sortSeasons(Array.from(seasonSet)).filter((s) => isRelevantSeason(s));
   }, [sales]);
 
   // Default to most recent season

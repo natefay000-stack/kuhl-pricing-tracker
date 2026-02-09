@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { isFutureSeason } from '@/utils/season';
 import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
@@ -214,11 +215,10 @@ export default function LineListView({
     return styles;
   }, [sales]);
 
-  // Check if current season is a future season (27SP or later)
-  const isFutureSeason = useMemo(() => {
+  // Check if current season is a future season (dynamic based on current date)
+  const isSelectedSeasonFuture = useMemo(() => {
     if (selectedSeason === 'ALL') return false;
-    const futureSessions = ['27SP', '27FA', '28SP', '28FA', '29SP', '29FA'];
-    return futureSessions.includes(selectedSeason);
+    return isFutureSeason(selectedSeason);
   }, [selectedSeason]);
 
   // Get styles in previous season for new/dropped detection
@@ -252,7 +252,7 @@ export default function LineListView({
     if (productLineFilter) data = data.filter((d) => d.productLine === productLineFilter);
 
     // Hide styles with no sales (only for historical seasons)
-    if (hideNoSales && !isFutureSeason) {
+    if (hideNoSales && !isSelectedSeasonFuture) {
       data = data.filter((d) => stylesWithSales.has(d.styleNumber));
     }
 
@@ -351,7 +351,7 @@ export default function LineListView({
     currentSeasonStyles,
     seasons,
     hideNoSales,
-    isFutureSeason,
+    isSelectedSeasonFuture,
     stylesWithSales,
   ]);
 
@@ -768,7 +768,7 @@ export default function LineListView({
           </div>
 
           {/* Hide No Sales Toggle - only for historical seasons */}
-          {!isFutureSeason && (
+          {!isSelectedSeasonFuture && (
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Filter</label>
               <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
@@ -791,7 +791,7 @@ export default function LineListView({
       </div>
 
       {/* Stat Cards */}
-      <div className={`grid gap-4 ${isFutureSeason ? 'grid-cols-5' : 'grid-cols-6'}`}>
+      <div className={`grid gap-4 ${isSelectedSeasonFuture ? 'grid-cols-5' : 'grid-cols-6'}`}>
         <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
           <p className="text-3xl font-bold font-mono text-gray-900">{stats.styles.toLocaleString()}</p>
           <p className="text-sm text-gray-500 font-bold uppercase mt-1">Styles</p>
@@ -813,7 +813,7 @@ export default function LineListView({
           <p className="text-sm text-gray-500 font-bold uppercase mt-1">Designers</p>
         </div>
         {/* No Sales - only show for historical seasons */}
-        {!isFutureSeason && (
+        {!isSelectedSeasonFuture && (
           <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
             <div className="flex items-center justify-center gap-2">
               <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600' : 'text-gray-400'}`}>

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
+import { isRelevantSeason } from '@/utils/season';
 import {
   DollarSign,
   TrendingUp,
@@ -277,7 +278,7 @@ export default function MarginsView({
   const availableSeasons = useMemo(() => {
     const seasons = new Set<string>();
     sales.forEach(s => s.season && seasons.add(s.season));
-    return Array.from(seasons).sort().filter(s => /^(24|25|26|27)/.test(s));
+    return Array.from(seasons).sort().filter(s => isRelevantSeason(s));
   }, [sales]);
 
   // Build cost lookup from costs data

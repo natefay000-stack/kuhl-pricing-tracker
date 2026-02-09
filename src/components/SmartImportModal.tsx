@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
+import { generateSeasonOptions } from '@/utils/season';
 import {
   X,
   Upload,
@@ -74,18 +75,8 @@ interface SmartImportModalProps {
   onClose: () => void;
 }
 
-const AVAILABLE_SEASONS = [
-  { value: '28FA', label: 'Fall 2028' },
-  { value: '28SP', label: 'Spring 2028' },
-  { value: '27FA', label: 'Fall 2027' },
-  { value: '27SP', label: 'Spring 2027' },
-  { value: '26FA', label: 'Fall 2026' },
-  { value: '26SP', label: 'Spring 2026' },
-  { value: '25FA', label: 'Fall 2025' },
-  { value: '25SP', label: 'Spring 2025' },
-  { value: '24FA', label: 'Fall 2024' },
-  { value: '24SP', label: 'Spring 2024' },
-];
+// Dynamically generated based on current date — no hardcoded years
+const AVAILABLE_SEASONS = generateSeasonOptions();
 
 const FILE_TYPE_LABELS: Record<FileType, string> = {
   lineList: 'Line List',

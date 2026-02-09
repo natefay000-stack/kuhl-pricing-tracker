@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { isHistoricalSeason as isHistoricalSeasonUtil } from '@/utils/season';
 import {
   AlertTriangle,
   Trash2,
@@ -37,11 +38,9 @@ interface NoSalesHistory {
   lastLineListSeason: string;
 }
 
-// Seasons that are "future" and should be excluded from validation
-const FUTURE_SEASONS = ['27SP', '27FA', '28SP', '28FA'];
-
+// Use dynamic season detection instead of hardcoded arrays
 function isHistoricalSeason(season: string): boolean {
-  return !FUTURE_SEASONS.includes(season);
+  return isHistoricalSeasonUtil(season);
 }
 
 function formatCurrency(value: number): string {

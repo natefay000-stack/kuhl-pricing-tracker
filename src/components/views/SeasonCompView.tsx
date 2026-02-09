@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { isRelevantSeason } from '@/utils/season';
 import { Download, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
@@ -41,7 +42,7 @@ export default function SeasonCompView({
     products.forEach((p) => p.season && seasonSet.add(p.season));
     sales.forEach((s) => s.season && seasonSet.add(s.season));
     return sortSeasons(Array.from(seasonSet))
-      .filter((s) => /^(24|25|26|27)/.test(s));
+      .filter((s) => isRelevantSeason(s));
   }, [products, sales]);
 
   // Active seasons for comparison (selected or last 4)

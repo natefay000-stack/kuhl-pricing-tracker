@@ -52,7 +52,7 @@ export async function GET() {
 
     // Combine metadata with actual counts
     const seasons = Array.from(allSeasonCodes)
-      .filter(code => /^(24|25|26|27|28)\w+$/.test(code)) // Only recent seasons
+      .filter(code => /^\d{2}(SP|FA)$/.test(code)) // Valid season codes only
       .sort((a, b) => b.localeCompare(a)) // Descending
       .map(code => {
         const metadata = metadataByCode.get(code);
