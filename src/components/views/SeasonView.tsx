@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, TrendingUp, TrendingDown, Minus, Search, X } from 'lucide-react';
+import { ArrowUpDown, TrendingUp, TrendingDown, Minus, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
+import { isRelevantSeason } from '@/utils/season';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
 
@@ -87,6 +88,11 @@ export default function SeasonView({
   const [localGenderFilter, setLocalGenderFilter] = useState<string>('');
   const [localCategoryFilter, setLocalCategoryFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<'revenue' | 'units' | 'styles' | 'price' | ''>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+
+  // Reset to page 1 when filters or metric change
+  useEffect(() => { setCurrentPage(1); }, [metric, selectedSeasons, styleNumberFilter, styleNameFilter, selectedDesigner, selectedCustomerType, selectedCustomer, localGenderFilter, localCategoryFilter, sortBy, combineStyles]);
 
   // Toggle a season in the selection
   const toggleSeason = (season: string) => {
@@ -122,10 +128,8 @@ export default function SeasonView({
     pricing.forEach((p) => p.season && allSeasons.add(p.season));
     costs.forEach((c) => c.season && allSeasons.add(c.season));
 
-    // Filter to only show seasons starting with 24, 25, 26, or 27
-    const recentSeasons = Array.from(allSeasons).filter((s) =>
-      s.startsWith('24') || s.startsWith('25') || s.startsWith('26') || s.startsWith('27')
-    );
+    // Filter to only show relevant seasons (current ± a few years)
+    const recentSeasons = Array.from(allSeasons).filter((s) => isRelevantSeason(s));
     return sortSeasons(recentSeasons);
   }, [products, sales, pricing, costs]);
 
@@ -688,6 +692,7 @@ export default function SeasonView({
     setLocalGenderFilter('');
     setLocalCategoryFilter('');
     setSortBy('');
+    setCurrentPage(1);
   };
 
   const hasFilters = selectedSeasons.length > 0 || styleNumberFilter || styleNameFilter || selectedDesigner || selectedCustomerType || selectedCustomer || localGenderFilter || localCategoryFilter || sortBy;
@@ -1034,7 +1039,7 @@ export default function SeasonView({
               </tr>
             </thead>
             <tbody>
-              {sortedData.slice(0, 100).map((row, index) => (
+              {sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row, index) => (
                 <tr
                   key={row.styleNumber}
                   onClick={() => onStyleClick(row.styleNumber)}
@@ -1162,20 +1167,48 @@ export default function SeasonView({
           </table>
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between text-base text-gray-700">
-          <span className="font-semibold">
-            Showing {Math.min(sortedData.length, 100)} of {relevantPivotData.length} styles with {metricButtons.find(m => m.id === metric)?.label} data
-            {filteredStyles.length > relevantPivotData.length && (
-              <span className="text-gray-500 font-normal ml-1">
-                ({filteredStyles.length - relevantPivotData.length} hidden)
+        {/* Footer with Pagination */}
+        {(() => {
+          const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+          const startRow = (currentPage - 1) * pageSize + 1;
+          const endRow = Math.min(currentPage * pageSize, sortedData.length);
+          return (
+            <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between text-base text-gray-700">
+              <span className="font-semibold">
+                Showing {startRow}–{endRow} of {sortedData.length} styles with {metricButtons.find(m => m.id === metric)?.label} data
+                {filteredStyles.length > relevantPivotData.length && (
+                  <span className="text-gray-500 font-normal ml-1">
+                    ({filteredStyles.length - relevantPivotData.length} hidden)
+                  </span>
+                )}
               </span>
-            )}
-          </span>
-          <span className="font-semibold">
-            Sorted by: {sortColumn || seasons[seasons.length - 1]} {sortDir === 'desc' ? '↓' : '↑'}
-          </span>
-        </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="font-semibold text-sm">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+              <span className="font-semibold">
+                Sorted by: {sortColumn || seasons[seasons.length - 1]} {sortDir === 'desc' ? '↓' : '↑'}
+              </span>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
