@@ -3,6 +3,9 @@ import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Prevent static generation at build time — this route reads local files
+export const dynamic = 'force-dynamic';
+
 const DATA_DIR = path.join(process.cwd(), 'data');
 
 // File names
