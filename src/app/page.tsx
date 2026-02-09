@@ -213,12 +213,14 @@ export default function Home() {
         };
 
         try {
-          const dbResponse = await fetch('/api/data');
+          // First: load products, pricing, costs (small datasets) + sales count
+          const dbResponse = await fetch('/api/data?salesPageSize=50000&salesPage=0');
           if (dbResponse.ok) {
             const dbResult = await dbResponse.json();
             if (dbResult.success && dbResult.counts.products > 0) {
               console.log('Loaded from database:', dbResult.counts);
-              setLoadingProgress(70);
+              setLoadingProgress(30);
+
               data = {
                 products: dbResult.data.products || [],
                 sales: dbResult.data.sales || [],
@@ -226,6 +228,44 @@ export default function Home() {
                 costs: dbResult.data.costs || [],
                 salesAggregations: dbResult.salesAggregations || null,
               };
+
+              // If there are more sales pages, load them progressively
+              const totalSales = dbResult.counts.sales || 0;
+              const loadedSales = data.sales.length;
+
+              if (loadedSales < totalSales) {
+                const PAGE_SIZE = 50000;
+                const totalPages = Math.ceil(totalSales / PAGE_SIZE);
+                console.log(`Loading remaining sales: ${loadedSales}/${totalSales} (${totalPages} pages)`);
+
+                // Show UI with what we have, then load remaining sales
+                setProducts(data.products);
+                setPricing(data.pricing);
+                setCosts(data.costs);
+                if (data.salesAggregations) setSalesAggregations(data.salesAggregations);
+                setSales(data.sales);
+
+                for (let page = 1; page < totalPages; page++) {
+                  setLoadingStatus(`Loading sales data (${Math.round(((page) / totalPages) * 100)}%)...`);
+                  setLoadingProgress(30 + Math.round((page / totalPages) * 55));
+
+                  try {
+                    const salesRes = await fetch(`/api/data?salesOnly=true&salesPageSize=${PAGE_SIZE}&salesPage=${page}`);
+                    if (salesRes.ok) {
+                      const salesResult = await salesRes.json();
+                      if (salesResult.sales && salesResult.sales.length > 0) {
+                        data.sales = [...data.sales, ...salesResult.sales];
+                        setSales(data.sales);
+                      }
+                    }
+                  } catch (salesErr) {
+                    console.warn(`Failed to load sales page ${page}:`, salesErr);
+                  }
+                }
+                console.log(`All sales loaded: ${data.sales.length} records`);
+              }
+
+              setLoadingProgress(85);
             }
           }
         } catch (dbErr) {

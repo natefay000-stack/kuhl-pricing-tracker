@@ -1,49 +1,102 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 // Allow longer timeout for large data loads
-export const maxDuration = 60; // 60 seconds
+export const maxDuration = 300; // 5 minutes (Vercel Pro) — Hobby caps at 60s
 export const dynamic = 'force-dynamic';
 
-// Channel aggregation for charts
-interface ChannelAggregation {
-  channel: string;
-  season: string;
-  revenue: number;
-  units: number;
-}
+const SALES_SELECT = {
+  styleNumber: true,
+  styleDesc: true,
+  season: true,
+  seasonType: true,
+  divisionDesc: true,
+  categoryDesc: true,
+  gender: true,
+  customerType: true,
+  customer: true,
+  unitsBooked: true,
+  unitsOpen: true,
+  revenue: true,
+  shipped: true,
+  cost: true,
+  wholesalePrice: true,
+  msrp: true,
+} as const;
 
-// Category aggregation
-interface CategoryAggregation {
-  category: string;
+function transformSale(s: {
+  styleNumber: string;
+  styleDesc: string | null;
   season: string;
-  revenue: number;
-  units: number;
-}
-
-// Gender aggregation
-interface GenderAggregation {
-  gender: string;
-  season: string;
-  revenue: number;
-  units: number;
-}
-
-// Customer aggregation
-interface CustomerAggregation {
-  customer: string;
-  customerType: string;
-  season: string;
-  revenue: number;
-  units: number;
+  seasonType: string | null;
+  divisionDesc: string | null;
+  categoryDesc: string | null;
+  gender: string | null;
+  customerType: string | null;
+  customer: string | null;
+  unitsBooked: number | null;
+  unitsOpen: number | null;
+  revenue: number | null;
+  shipped: number | null;
+  cost: number | null;
+  wholesalePrice: number | null;
+  msrp: number | null;
+}) {
+  return {
+    styleNumber: s.styleNumber,
+    styleDesc: s.styleDesc || '',
+    season: s.season,
+    seasonType: s.seasonType || 'Main',
+    customer: s.customer || '',
+    customerType: s.customerType || '',
+    divisionDesc: s.divisionDesc || '',
+    categoryDesc: s.categoryDesc || '',
+    gender: s.gender || '',
+    unitsBooked: s.unitsBooked || 0,
+    unitsOpen: s.unitsOpen || 0,
+    revenue: s.revenue || 0,
+    shipped: s.shipped || 0,
+    cost: s.cost || 0,
+    wholesalePrice: s.wholesalePrice || 0,
+    msrp: s.msrp || 0,
+  };
 }
 
 // GET - Load all data from database
-export async function GET() {
+// ?salesOnly=true&salesPage=N&salesPageSize=M  → returns just one page of sales
+// ?salesPageSize=M                              → returns products/pricing/costs + first page of sales
+// (no params)                                   → returns everything (may timeout on large datasets)
+export async function GET(request: NextRequest) {
   try {
-    // Load products, pricing, costs normally (smaller datasets)
-    // For sales, we'll aggregate server-side to reduce data size
-    const [products, pricing, costs, salesRaw] = await Promise.all([
+    const { searchParams } = new URL(request.url);
+    const salesPage = parseInt(searchParams.get('salesPage') || '0');
+    const salesPageSize = parseInt(searchParams.get('salesPageSize') || '0');
+    const salesOnly = searchParams.get('salesOnly') === 'true';
+
+    // ── Sales-only mode: return a single page of sales ──────────
+    if (salesOnly && salesPageSize > 0) {
+      const [salesChunk, totalSales] = await Promise.all([
+        prisma.sale.findMany({
+          select: SALES_SELECT,
+          skip: salesPage * salesPageSize,
+          take: salesPageSize,
+        }),
+        prisma.sale.count(),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        salesOnly: true,
+        page: salesPage,
+        pageSize: salesPageSize,
+        totalSales,
+        totalPages: Math.ceil(totalSales / salesPageSize),
+        sales: salesChunk.map(transformSale),
+      });
+    }
+
+    // ── Full mode: products + pricing + costs + first page of sales ─
+    const [products, pricing, costs, salesCount] = await Promise.all([
       prisma.product.findMany({
         orderBy: [{ season: 'desc' }, { styleNumber: 'asc' }],
       }),
@@ -53,121 +106,96 @@ export async function GET() {
       prisma.cost.findMany({
         orderBy: [{ season: 'desc' }, { styleNumber: 'asc' }],
       }),
-      // Get sales with only needed fields for aggregation
-      prisma.sale.findMany({
-        select: {
-          styleNumber: true,
-          styleDesc: true,
-          season: true,
-          seasonType: true,
-          divisionDesc: true,
-          categoryDesc: true,
-          gender: true,
-          customerType: true,
-          customer: true,
-          unitsBooked: true,
-          unitsOpen: true,
-          revenue: true,
-          shipped: true,
-          cost: true,
-          wholesalePrice: true,
-          msrp: true,
-        },
+      prisma.sale.count(),
+    ]);
+
+    // Load first page of sales (or all if no pagination requested)
+    const salesToLoad = salesPageSize > 0 ? Math.min(salesPageSize, salesCount) : salesCount;
+    const BATCH = 50000;
+    const salesRaw: ReturnType<typeof transformSale>[] = [];
+
+    for (let offset = 0; offset < salesToLoad; offset += BATCH) {
+      const batch = await prisma.sale.findMany({
+        select: SALES_SELECT,
+        skip: offset,
+        take: Math.min(BATCH, salesToLoad - offset),
+      });
+      salesRaw.push(...batch.map(transformSale));
+    }
+
+    // Build aggregations using Prisma groupBy (efficient, no need to load all rows)
+    const [channelAgg, categoryAgg, genderAgg, customerAgg] = await Promise.all([
+      prisma.sale.groupBy({
+        by: ['season', 'customerType'],
+        _sum: { revenue: true, unitsBooked: true },
+      }),
+      prisma.sale.groupBy({
+        by: ['season', 'categoryDesc'],
+        _sum: { revenue: true, unitsBooked: true },
+      }),
+      prisma.sale.groupBy({
+        by: ['season', 'divisionDesc'],
+        _sum: { revenue: true, unitsBooked: true },
+      }),
+      prisma.sale.groupBy({
+        by: ['season', 'customer', 'customerType'],
+        _sum: { revenue: true, unitsBooked: true },
       }),
     ]);
 
-    // Build channel, category, gender, and customer aggregations from raw data
-    const channelAggMap = new Map<string, ChannelAggregation>();
-    const categoryAggMap = new Map<string, CategoryAggregation>();
-    const genderAggMap = new Map<string, GenderAggregation>();
-    const customerAggMap = new Map<string, CustomerAggregation>();
+    // Transform aggregations to expected format
+    const salesByChannel = channelAgg
+      .filter(r => r.customerType)
+      .map(r => ({
+        channel: r.customerType || '',
+        season: r.season,
+        revenue: r._sum.revenue || 0,
+        units: r._sum.unitsBooked || 0,
+      }));
 
-    for (const s of salesRaw) {
-      const revenue = s.revenue || 0;
-      const units = s.unitsBooked || 0;
+    const salesByCategory = categoryAgg.map(r => ({
+      category: r.categoryDesc || 'Other',
+      season: r.season,
+      revenue: r._sum.revenue || 0,
+      units: r._sum.unitsBooked || 0,
+    }));
 
-      // Channel aggregation (by season + customerType)
-      if (s.customerType) {
-        const channelKey = `${s.season}-${s.customerType}`;
-        const channelExisting = channelAggMap.get(channelKey);
-        if (channelExisting) {
-          channelExisting.revenue += revenue;
-          channelExisting.units += units;
-        } else {
-          channelAggMap.set(channelKey, {
-            channel: s.customerType,
-            season: s.season,
-            revenue: revenue,
-            units: units,
-          });
-        }
-      }
-
-      // Category aggregation (by season + category)
-      const category = s.categoryDesc || 'Other';
-      const categoryKey = `${s.season}-${category}`;
-      const categoryExisting = categoryAggMap.get(categoryKey);
-      if (categoryExisting) {
-        categoryExisting.revenue += revenue;
-        categoryExisting.units += units;
-      } else {
-        categoryAggMap.set(categoryKey, {
-          category: category,
-          season: s.season,
-          revenue: revenue,
-          units: units,
-        });
-      }
-
-      // Gender aggregation (derive from divisionDesc)
-      const divisionLower = (s.divisionDesc || '').toLowerCase();
+    // Derive gender from divisionDesc
+    const genderMap = new Map<string, { gender: string; season: string; revenue: number; units: number }>();
+    for (const r of genderAgg) {
+      const div = (r.divisionDesc || '').toLowerCase();
       let gender = 'Unknown';
-      if (divisionLower.includes("men's") && !divisionLower.includes("women's")) {
-        gender = "Men's";
-      } else if (divisionLower.includes("women's") || divisionLower.includes("woman")) {
-        gender = "Women's";
-      } else if (divisionLower.includes("unisex") || divisionLower.includes("accessories")) {
-        gender = "Unisex";
-      }
-      const genderKey = `${s.season}-${gender}`;
-      const genderExisting = genderAggMap.get(genderKey);
-      if (genderExisting) {
-        genderExisting.revenue += revenue;
-        genderExisting.units += units;
-      } else {
-        genderAggMap.set(genderKey, {
-          gender: gender,
-          season: s.season,
-          revenue: revenue,
-          units: units,
-        });
-      }
+      if (div.includes("men's") && !div.includes("women's")) gender = "Men's";
+      else if (div.includes("women's") || div.includes("woman")) gender = "Women's";
+      else if (div.includes("unisex") || div.includes("accessories")) gender = "Unisex";
 
-      // Customer aggregation (by season + customer)
-      if (s.customer) {
-        const customerKey = `${s.season}-${s.customer}`;
-        const customerExisting = customerAggMap.get(customerKey);
-        if (customerExisting) {
-          customerExisting.revenue += revenue;
-          customerExisting.units += units;
-        } else {
-          customerAggMap.set(customerKey, {
-            customer: s.customer,
-            customerType: s.customerType || '',
-            season: s.season,
-            revenue: revenue,
-            units: units,
-          });
-        }
+      const key = `${r.season}-${gender}`;
+      const existing = genderMap.get(key);
+      if (existing) {
+        existing.revenue += r._sum.revenue || 0;
+        existing.units += r._sum.unitsBooked || 0;
+      } else {
+        genderMap.set(key, {
+          gender,
+          season: r.season,
+          revenue: r._sum.revenue || 0,
+          units: r._sum.unitsBooked || 0,
+        });
       }
     }
+    const salesByGender = Array.from(genderMap.values());
 
-    const salesByChannel = Array.from(channelAggMap.values());
-    const salesByCategory = Array.from(categoryAggMap.values());
-    const salesByGender = Array.from(genderAggMap.values());
-    const salesByCustomer = Array.from(customerAggMap.values());
+    const salesByCustomer = customerAgg
+      .filter(r => r.customer)
+      .map(r => ({
+        customer: r.customer || '',
+        customerType: r.customerType || '',
+        season: r.season,
+        revenue: r._sum.revenue || 0,
+        units: r._sum.unitsBooked || 0,
+      }));
 
-    // Transform to match expected format
+    // Transform products
     const transformedProducts = products.map((p) => ({
       id: p.id,
       styleNumber: p.styleNumber,
@@ -197,33 +225,6 @@ export async function GET() {
       sellingSeasons: p.sellingSeasons || '',
       htsCode: p.htsCode || '',
       styleColorNotes: p.styleColorNotes || '',
-    }));
-
-    // Return raw sales records (no aggregation) for proper filtering
-    const transformedSales = salesRaw.map((s, idx) => ({
-      id: `sale-${idx}`,
-      styleNumber: s.styleNumber,
-      styleDesc: s.styleDesc || '',
-      colorCode: '',
-      colorDesc: '',
-      season: s.season,
-      seasonType: s.seasonType || 'Main',
-      customer: s.customer || '',
-      customerType: s.customerType || '',
-      salesRep: '',
-      divisionDesc: s.divisionDesc || '',
-      categoryDesc: s.categoryDesc || '',
-      gender: s.gender || '',
-      unitsBooked: s.unitsBooked || 0,
-      unitsOpen: s.unitsOpen || 0,
-      revenue: s.revenue || 0,
-      shipped: s.shipped || 0,
-      cost: s.cost || 0,
-      wholesalePrice: s.wholesalePrice || 0,
-      msrp: s.msrp || 0,
-      netUnitPrice: 0,
-      orderType: '',
-      customerCount: 1,
     }));
 
     const transformedPricing = pricing.map((p) => ({
@@ -265,17 +266,16 @@ export async function GET() {
       success: true,
       counts: {
         products: products.length,
-        sales: salesRaw.length,
+        sales: salesCount, // Total sales count (may be more than returned)
         pricing: pricing.length,
         costs: costs.length,
       },
       data: {
         products: transformedProducts,
-        sales: transformedSales,
+        sales: salesRaw,
         pricing: transformedPricing,
         costs: transformedCosts,
       },
-      // Pre-computed aggregations for Sales View charts (from raw data, not style-aggregated)
       salesAggregations: {
         byChannel: salesByChannel,
         byCategory: salesByCategory,
