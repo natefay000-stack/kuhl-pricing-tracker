@@ -22,6 +22,7 @@ import {
   Download,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
+import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 
 interface MarginsViewProps {
   products: Product[];
@@ -153,23 +154,6 @@ const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }
 
 const TARGET_MARGIN = 48; // Default target margin percentage
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
-
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
-}
 
 function getMarginTier(margin: number): 'excellent' | 'target' | 'watch' | 'problem' {
   if (margin >= 55) return 'excellent';
@@ -1008,7 +992,7 @@ export default function MarginsView({
                     {formatPercent(channel.trueMargin)}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {formatCurrency(channel.revenue)} · {channel.revenuePct.toFixed(0)}%
+                    {formatCurrencyShort(channel.revenue)} · {channel.revenuePct.toFixed(0)}%
                   </p>
                 </button>
               );
@@ -1029,7 +1013,7 @@ export default function MarginsView({
                 {formatPercent(channelPerformance.blended.trueMargin)}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {formatCurrency(channelPerformance.blended.revenue)} total
+                {formatCurrencyShort(channelPerformance.blended.revenue)} total
               </p>
             </div>
           </div>
@@ -1122,7 +1106,7 @@ export default function MarginsView({
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
-                          {formatCurrency(channel.revenue)}
+                          {formatCurrencyShort(channel.revenue)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-gray-600">
                           {formatNumber(channel.units)}
@@ -1160,7 +1144,7 @@ export default function MarginsView({
                       <span className="font-bold text-gray-900">BLENDED TOTAL</span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                      {formatCurrency(channelPerformance.blended.revenue)}
+                      {formatCurrencyShort(channelPerformance.blended.revenue)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
                       {formatNumber(channelPerformance.blended.units)}
@@ -1277,7 +1261,7 @@ export default function MarginsView({
                               {customer.customerType}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrency(customer.revenue)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrencyShort(customer.revenue)}</td>
                           <td className="px-4 py-3 text-right font-mono text-gray-600">{formatNumber(customer.units)}</td>
                           <td className="px-4 py-3 text-right font-mono text-gray-900">${customer.avgNetPrice.toFixed(2)}</td>
                           <td className="px-4 py-3 text-right">
@@ -1530,7 +1514,7 @@ export default function MarginsView({
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
-                            {formatCurrency(style.totalRevenue)}
+                            {formatCurrencyShort(style.totalRevenue)}
                           </td>
                           {/* Channel Mix Stacked Horizontal Bar */}
                           <td className="px-4 py-3">
@@ -1601,7 +1585,7 @@ export default function MarginsView({
                                       <div className="space-y-1 text-sm">
                                         <div className="flex justify-between">
                                           <span className="text-gray-600">Revenue:</span>
-                                          <span className="font-mono font-medium">{formatCurrency(mix.revenue)}</span>
+                                          <span className="font-mono font-medium">{formatCurrencyShort(mix.revenue)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span className="text-gray-600">Units:</span>
@@ -1674,7 +1658,7 @@ export default function MarginsView({
               </div>
               <div>
                 <p className="text-2xl font-bold font-mono text-gray-900">
-                  {formatCurrency(stats.totalRevenue)}
+                  {formatCurrencyShort(stats.totalRevenue)}
                 </p>
                 <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
                   Revenue
@@ -1690,7 +1674,7 @@ export default function MarginsView({
               </div>
               <div>
                 <p className="text-2xl font-bold font-mono text-gray-900">
-                  {formatCurrency(stats.totalCogs)}
+                  {formatCurrencyShort(stats.totalCogs)}
                 </p>
                 <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
                   COGS
@@ -1706,7 +1690,7 @@ export default function MarginsView({
               </div>
               <div>
                 <p className="text-2xl font-bold font-mono text-gray-900">
-                  {formatCurrency(stats.totalGross)}
+                  {formatCurrencyShort(stats.totalGross)}
                 </p>
                 <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
                   Gross $
@@ -1876,7 +1860,7 @@ export default function MarginsView({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
-                      {formatCurrency(c.gross)}
+                      {formatCurrencyShort(c.gross)}
                     </td>
                   </tr>
                 ))}
@@ -1914,7 +1898,7 @@ export default function MarginsView({
                       </span>
                     </td>
                     <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
-                      {formatCurrency(c.gross)}
+                      {formatCurrencyShort(c.gross)}
                     </td>
                   </tr>
                 ))}
@@ -1954,7 +1938,7 @@ export default function MarginsView({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
-                        {formatCurrency(g.gross)}
+                        {formatCurrencyShort(g.gross)}
                       </td>
                     </tr>
                   ))}
@@ -2135,13 +2119,13 @@ export default function MarginsView({
                     {style.styleDesc}
                   </td>
                   <td className="px-4 py-4 text-base font-mono font-medium text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.revenue)}
+                    {formatCurrencyShort(style.revenue)}
                   </td>
                   <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
-                    {formatCurrency(style.cogs)}
+                    {formatCurrencyShort(style.cogs)}
                   </td>
                   <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.gross)}
+                    {formatCurrencyShort(style.gross)}
                   </td>
                   <td className="px-4 py-4 text-right border-l border-gray-200">
                     <span className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginColor(style.margin)}`}>

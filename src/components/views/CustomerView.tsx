@@ -7,6 +7,7 @@ import { isRelevantSeason } from '@/utils/season';
 import { Search, Download, ChevronRight, Users } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
+import { formatCurrencyShort, formatNumberShort } from '@/utils/format';
 
 interface CustomerViewProps {
   products: Product[];
@@ -141,20 +142,6 @@ export default function CustomerView({
       topCustomerRevenue: filteredCustomers[0]?.revenue || 0,
     };
   }, [filteredCustomers]);
-
-  // Format currency
-  const formatCurrency = (val: number): string => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) return `$${(val / 1000).toFixed(0)}K`;
-    return `$${val.toLocaleString()}`;
-  };
-
-  // Format number
-  const formatNumber = (val: number): string => {
-    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    return val.toLocaleString();
-  };
 
   // Get customer type color
   const getCustomerTypeColor = (type: string) => {
@@ -488,7 +475,7 @@ export default function CustomerView({
       <div className="grid grid-cols-5 gap-4">
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Total Revenue</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrency(totalStats.revenue)}</div>
+          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.revenue)}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Active Customers</div>
@@ -496,7 +483,7 @@ export default function CustomerView({
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Avg Order Value</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrency(totalStats.avgOrderValue)}</div>
+          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.avgOrderValue)}</div>
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Total Styles</div>
@@ -504,7 +491,7 @@ export default function CustomerView({
         </div>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Top Customer Rev</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrency(totalStats.topCustomerRevenue)}</div>
+          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.topCustomerRevenue)}</div>
         </div>
       </div>
 
@@ -529,7 +516,7 @@ export default function CustomerView({
                 <div key={type}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-semibold text-gray-700">{type}</span>
-                    <span className="text-sm font-bold text-gray-900">{formatCurrency(revenue)}</span>
+                    <span className="text-sm font-bold text-gray-900">{formatCurrencyShort(revenue)}</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-6">
                     <div
@@ -603,7 +590,7 @@ export default function CustomerView({
                       <div key={c.customer} className="flex items-center gap-2 text-sm">
                         <div className="w-3 h-3 rounded" style={{ backgroundColor: colors[idx] }}></div>
                         <span className="text-gray-700 flex-1 truncate max-w-[120px]">{c.customer}</span>
-                        <span className="font-semibold text-gray-900">{formatCurrency(c.revenue)}</span>
+                        <span className="font-semibold text-gray-900">{formatCurrencyShort(c.revenue)}</span>
                       </div>
                     ))}
                   </div>
@@ -659,16 +646,16 @@ export default function CustomerView({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right text-base font-semibold text-gray-900">
-                        {formatCurrency(customer.revenue)}
+                        {formatCurrencyShort(customer.revenue)}
                       </td>
                       <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
-                        {formatNumber(customer.units)}
+                        {formatNumberShort(customer.units)}
                       </td>
                       <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
                         {customer.styles.size}
                       </td>
                       <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
-                        {formatCurrency(customer.revenue / customer.orders)}
+                        {formatCurrencyShort(customer.revenue / customer.orders)}
                       </td>
                     </tr>
                   ))}
@@ -715,11 +702,11 @@ export default function CustomerView({
                   <>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Revenue</div>
-                      <div className="text-2xl font-black text-gray-900">{formatCurrency(customerData.revenue)}</div>
+                      <div className="text-2xl font-black text-gray-900">{formatCurrencyShort(customerData.revenue)}</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Units</div>
-                      <div className="text-2xl font-black text-gray-900">{formatNumber(customerData.units)}</div>
+                      <div className="text-2xl font-black text-gray-900">{formatNumberShort(customerData.units)}</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Styles Ordered</div>
@@ -727,7 +714,7 @@ export default function CustomerView({
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Avg Order</div>
-                      <div className="text-2xl font-black text-gray-900">{formatCurrency(customerData.revenue / customerData.orders)}</div>
+                      <div className="text-2xl font-black text-gray-900">{formatCurrencyShort(customerData.revenue / customerData.orders)}</div>
                     </div>
                   </>
                 );
@@ -778,10 +765,10 @@ export default function CustomerView({
                     {customerCategoryData.map((cat) => (
                       <tr key={cat.category} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-base font-bold text-gray-900">{cat.category}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(cat.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumber(cat.units)}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(cat.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(cat.units)}</td>
                         <td className="px-6 py-4 text-right text-gray-700">{cat.styles}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrency(cat.revPerStyle)}</td>
+                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(cat.revPerStyle)}</td>
                         <td className="px-6 py-4 text-right text-gray-700">{cat.pctOfTotal.toFixed(1)}%</td>
                       </tr>
                     ))}
@@ -852,7 +839,7 @@ export default function CustomerView({
                               <div className="w-4 h-4 rounded" style={{ backgroundColor: genderColors[g.gender] || '#9ca3af' }}></div>
                               <span className="text-sm font-medium text-gray-700 w-20">{g.gender}</span>
                               <span className="text-sm font-bold text-gray-900">
-                                {formatCurrency(g.revenue)} ({totalRevenue > 0 ? ((g.revenue / totalRevenue) * 100).toFixed(0) : 0}%)
+                                {formatCurrencyShort(g.revenue)} ({totalRevenue > 0 ? ((g.revenue / totalRevenue) * 100).toFixed(0) : 0}%)
                               </span>
                             </div>
                           ))}
@@ -880,10 +867,10 @@ export default function CustomerView({
                       {customerGenderData.map((g) => (
                         <tr key={g.gender} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-base font-bold text-gray-900">{g.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(g.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumber(g.units)}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(g.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(g.units)}</td>
                           <td className="px-6 py-4 text-right text-gray-700">{g.styles}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatCurrency(g.revPerStyle)}</td>
+                          <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(g.revPerStyle)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -910,8 +897,8 @@ export default function CustomerView({
                     {customerColorData.slice(0, 20).map((color) => (
                       <tr key={color.color} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-base font-bold text-gray-900">{color.color}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(color.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumber(color.units)}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(color.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(color.units)}</td>
                         <td className="px-6 py-4 text-right text-gray-700">{color.styles}</td>
                         <td className="px-6 py-4 text-right text-gray-700">{color.pctOfTotal.toFixed(1)}%</td>
                       </tr>
@@ -967,8 +954,8 @@ export default function CustomerView({
                           <td className="px-6 py-4 text-sm text-gray-700 max-w-[200px] truncate">{style.styleDesc}</td>
                           <td className="px-6 py-4 text-sm text-gray-700">{style.category}</td>
                           <td className="px-6 py-4 text-sm text-gray-700">{style.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(style.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumber(style.units)}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(style.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(style.units)}</td>
                           <td className="px-6 py-4 text-right text-gray-700">${style.price.toFixed(0)}</td>
                         </tr>
                       ))}
@@ -996,10 +983,10 @@ export default function CustomerView({
                     {customerSeasonData.map((s) => (
                       <tr key={s.season} className="hover:bg-gray-50">
                         <td className="px-6 py-4 font-mono text-base font-bold text-gray-900">{s.season}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(s.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumber(s.units)}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(s.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(s.units)}</td>
                         <td className="px-6 py-4 text-right text-gray-700">{s.styles}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrency(s.revPerStyle)}</td>
+                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(s.revPerStyle)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1036,10 +1023,10 @@ export default function CustomerView({
                       {customerCategoryData.map((cat) => (
                         <tr key={cat.category} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-base font-bold text-gray-900">{cat.category}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrency(cat.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumber(cat.units)}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(cat.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(cat.units)}</td>
                           <td className="px-6 py-4 text-right text-gray-700">
-                            {cat.units > 0 ? formatCurrency(cat.revenue / cat.units) : '—'}
+                            {cat.units > 0 ? formatCurrencyShort(cat.revenue / cat.units) : '—'}
                           </td>
                         </tr>
                       ))}

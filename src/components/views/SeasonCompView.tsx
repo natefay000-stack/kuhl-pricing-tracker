@@ -7,6 +7,7 @@ import { isRelevantSeason } from '@/utils/season';
 import { Download, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
+import { formatCurrencyShort } from '@/utils/format';
 
 interface SeasonCompViewProps {
   products: Product[];
@@ -238,20 +239,6 @@ export default function SeasonCompView({
     return Math.round(((current - previous) / previous) * 100);
   };
 
-  // Format currency
-  const formatCurrency = (val: number): string => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) return `$${(val / 1000).toFixed(0)}K`;
-    return `$${val.toLocaleString()}`;
-  };
-
-  // Format number
-  const formatNumber = (val: number): string => {
-    if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    return val.toLocaleString();
-  };
-
   // Calculate revenue per style
   const getRevenuePerStyle = (data: { styles: number; revenue: number }): number => {
     if (data.styles === 0) return 0;
@@ -296,7 +283,7 @@ export default function SeasonCompView({
       return { type: 'success', text: 'Fewer styles, more revenue - efficient!' };
     }
     if (rpsPrev > 0 && rpsNow > rpsPrev * 1.25) {
-      return { type: 'success', text: `High performer: ${formatCurrency(rpsNow)}/style` };
+      return { type: 'success', text: `High performer: ${formatCurrencyShort(rpsNow)}/style` };
     }
     if (rpsPrev > 0 && rpsNow < rpsPrev * 0.75) {
       return { type: 'warning', text: '$/style declining significantly' };
@@ -569,7 +556,7 @@ export default function SeasonCompView({
               {/* Primary Metric: Total Revenue */}
               <div className="mb-4">
                 <div className="text-4xl font-black text-gray-900">
-                  {isPlanning ? '—' : formatCurrency(data.revenue)}
+                  {isPlanning ? '—' : formatCurrencyShort(data.revenue)}
                 </div>
                 <div className="text-sm font-bold text-gray-500 uppercase tracking-wide mt-1">Total Revenue</div>
                 {/* Fixed height for comparison to maintain alignment */}
@@ -608,7 +595,7 @@ export default function SeasonCompView({
                 </div>
                 <div>
                   <div className="text-2xl font-black text-gray-900">
-                    {isPlanning ? '—' : formatCurrency(revenuePerStyle)}
+                    {isPlanning ? '—' : formatCurrencyShort(revenuePerStyle)}
                   </div>
                   <div className="text-sm font-medium text-gray-500">Rev / Style</div>
                   {/* Fixed height for consistency */}
@@ -795,11 +782,11 @@ export default function SeasonCompView({
                                 )}
                               </div>
                               <div className={`text-sm font-semibold ${isPlanning ? 'text-purple-500' : 'text-gray-500'}`}>
-                                {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                                {isPlanning ? 'planned' : formatCurrencyShort(data.revenue)}
                               </div>
                               {!isPlanning && data.styles > 0 ? (
                                 <div className="text-xs font-medium text-blue-600">
-                                  {formatCurrency(data.revenue / data.styles)}/style
+                                  {formatCurrencyShort(data.revenue / data.styles)}/style
                                 </div>
                               ) : (
                                 <div className="text-xs font-medium text-transparent">—</div>
@@ -826,11 +813,11 @@ export default function SeasonCompView({
                             </div>
                           ) : breakdownMetric === 'revenue' ? (
                             <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-gray-900'}`}>
-                              {isPlanning ? '—' : formatCurrency(data.revenue)}
+                              {isPlanning ? '—' : formatCurrencyShort(data.revenue)}
                             </div>
                           ) : (
                             <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : data.styles > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
-                              {!isPlanning && data.styles > 0 ? formatCurrency(data.revenue / data.styles) : '—'}
+                              {!isPlanning && data.styles > 0 ? formatCurrencyShort(data.revenue / data.styles) : '—'}
                             </div>
                           )}
                         </td>
@@ -890,11 +877,11 @@ export default function SeasonCompView({
                             )}
                           </div>
                           <div className={`text-sm font-bold ${isPlanning ? 'text-purple-600' : 'text-gray-700'}`}>
-                            {isPlanning ? 'planned' : formatCurrency(data.revenue)}
+                            {isPlanning ? 'planned' : formatCurrencyShort(data.revenue)}
                           </div>
                           {!isPlanning && data.styles > 0 ? (
                             <div className="text-xs font-bold text-blue-700">
-                              {formatCurrency(data.revenue / data.styles)}/style
+                              {formatCurrencyShort(data.revenue / data.styles)}/style
                             </div>
                           ) : (
                             <div className="text-xs font-bold text-transparent">—</div>
@@ -921,11 +908,11 @@ export default function SeasonCompView({
                         </div>
                       ) : breakdownMetric === 'revenue' ? (
                         <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-gray-900'}`}>
-                          {isPlanning ? '—' : formatCurrency(data.revenue)}
+                          {isPlanning ? '—' : formatCurrencyShort(data.revenue)}
                         </div>
                       ) : (
                         <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : data.styles > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
-                          {!isPlanning && data.styles > 0 ? formatCurrency(data.revenue / data.styles) : '—'}
+                          {!isPlanning && data.styles > 0 ? formatCurrencyShort(data.revenue / data.styles) : '—'}
                         </div>
                       )}
                     </td>
@@ -982,7 +969,7 @@ export default function SeasonCompView({
                   {category}
                 </div>
                 <div className="text-2xl font-black text-gray-900">
-                  {rpsNow > 0 ? formatCurrency(rpsNow) : '—'}
+                  {rpsNow > 0 ? formatCurrencyShort(rpsNow) : '—'}
                 </div>
                 {change !== 0 && rpsPrev > 0 && prevYearSeason && (
                   <div className={`text-sm font-bold mt-1 ${

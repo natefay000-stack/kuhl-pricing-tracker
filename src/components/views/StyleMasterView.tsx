@@ -10,6 +10,7 @@ import {
   Circle,
   Package,
 } from 'lucide-react';
+import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 
 interface StyleMasterViewProps {
   products: Product[];
@@ -57,29 +58,6 @@ const CHANNEL_LABELS: Record<string, string> = {
   'EC': 'E-commerce',
   'KI': 'KÜHL Internal',
 };
-
-function formatCurrency(value: number | null): string {
-  if (value === null || value === 0) return '—';
-  return `$${value.toFixed(2)}`;
-}
-
-function formatCurrencyShort(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
-
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
-}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';

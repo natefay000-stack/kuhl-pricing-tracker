@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isHistoricalSeason as isHistoricalSeasonUtil } from '@/utils/season';
+import { formatCurrencyShort, formatNumber } from '@/utils/format';
 import {
   AlertTriangle,
   Trash2,
@@ -43,15 +44,6 @@ function isHistoricalSeason(season: string): boolean {
   return isHistoricalSeasonUtil(season);
 }
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
-}
 
 export default function ValidationView({
   products,
@@ -308,7 +300,7 @@ export default function ValidationView({
             {stats.missingCount}
           </div>
           <div className="text-sm text-amber-600 mt-1">
-            {formatCurrency(stats.totalMissingRevenue)} WH revenue
+            {formatCurrencyShort(stats.totalMissingRevenue)} WH revenue
           </div>
         </div>
 
@@ -391,7 +383,7 @@ export default function ValidationView({
                         </td>
                         <td className="px-4 py-3 text-base text-gray-700 truncate max-w-[200px]">{item.styleDesc}</td>
                         <td className="px-4 py-3 text-right font-mono text-base font-bold text-amber-700">
-                          {formatCurrency(item.whRevenue)}
+                          {formatCurrencyShort(item.whRevenue)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-base text-gray-700">
                           {formatNumber(item.totalUnits)}

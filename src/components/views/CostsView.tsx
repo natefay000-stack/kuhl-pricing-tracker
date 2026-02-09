@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Product, PricingRecord, CostRecord, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { formatCurrency, formatPercentRaw, formatNumber } from '@/utils/format';
 import {
   DollarSign,
   TrendingUp,
@@ -35,16 +36,6 @@ interface CostsViewProps {
 
 type SortField = 'styleNumber' | 'styleName' | 'revenue' | 'units' | 'factory' | 'coo' | 'fob' | 'landed' | 'wholesale' | 'msrp' | 'margin' | 'designTeam';
 type ViewMode = 'table' | 'byFactory' | 'byCountry' | 'byTeam';
-
-function formatCurrency(value: number | null | undefined): string {
-  if (value === null || value === undefined || value === 0) return '—';
-  return `$${value.toFixed(2)}`;
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined || isNaN(value) || !isFinite(value)) return '—';
-  return `${(value * 100).toFixed(1)}%`;
-}
 
 // Calculate margin: (Wholesale - Landed) / Wholesale
 function calculateMargin(wholesale: number, landed: number): number | null {
@@ -80,10 +71,6 @@ function formatRevenue(value: number): string {
     return `$${(value / 1000).toFixed(1)}K`;
   }
   return `$${value.toFixed(0)}`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
 }
 
 export default function CostsView({
@@ -771,7 +758,7 @@ export default function CostsView({
             <Percent className="w-6 h-6 text-emerald-500" />
           </div>
           <div className={`text-3xl font-display font-bold ${getMarginColorClass(summary.avgMargin)}`}>
-            {formatPercent(summary.avgMargin)}
+            {formatPercentRaw(summary.avgMargin)}
           </div>
         </div>
 
@@ -1009,7 +996,7 @@ export default function CostsView({
                     </td>
                     <td className="px-4 py-4 text-right border-l-2 border-gray-400">
                       <span className={`font-mono text-base font-bold px-3 py-1 rounded ${getMarginBgClass(cost.margin)} ${getMarginColorClass(cost.margin)}`}>
-                        {formatPercent(cost.margin)}
+                        {formatPercentRaw(cost.margin)}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-base text-gray-700 border-l border-gray-200">{cost.designTeam || '—'}</td>
@@ -1082,7 +1069,7 @@ export default function CostsView({
                   <div>
                     <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
-                      {formatPercent(item.avgMargin)}
+                      {formatPercentRaw(item.avgMargin)}
                     </div>
                   </div>
                 </div>
@@ -1124,7 +1111,7 @@ export default function CostsView({
                   <div>
                     <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
-                      {formatPercent(item.avgMargin)}
+                      {formatPercentRaw(item.avgMargin)}
                     </div>
                   </div>
                 </div>
@@ -1166,7 +1153,7 @@ export default function CostsView({
                   <div>
                     <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
-                      {formatPercent(item.avgMargin)}
+                      {formatPercentRaw(item.avgMargin)}
                     </div>
                   </div>
                 </div>

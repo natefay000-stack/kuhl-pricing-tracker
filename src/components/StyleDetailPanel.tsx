@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { formatCurrencyShort } from '@/utils/format';
 
 interface StyleDetailPanelProps {
   styleNumber: string;
@@ -127,11 +128,6 @@ export default function StyleDetailPanel({
     KI: 'KÜHL Internal',
   };
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-    return `$${value.toFixed(2)}`;
-  };
-
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 animate-slide-up">
       {/* Backdrop */}
@@ -221,7 +217,7 @@ export default function StyleDetailPanel({
                         {s.units.toLocaleString()} units
                       </span>
                       <span className="text-xs text-gray-400 ml-2">
-                        / {formatCurrency(s.revenue)}
+                        / {formatCurrencyShort(s.revenue)}
                       </span>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
 import { SourceLegend } from '@/components/SourceBadge';
+import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 
 interface DashboardViewProps {
   products: Product[];
@@ -13,24 +14,6 @@ interface DashboardViewProps {
   selectedDivision: string;
   selectedCategory: string;
   onStyleClick: (styleNumber: string) => void;
-}
-
-function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
-}
-
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
 }
 
 export default function DashboardView({
@@ -253,7 +236,7 @@ export default function DashboardView({
             </div>
             <div>
               <p className="text-3xl font-bold font-mono text-gray-900">
-                {formatCurrency(stats.totalRevenue)}
+                {formatCurrencyShort(stats.totalRevenue)}
               </p>
               <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
                 Revenue
@@ -332,7 +315,7 @@ export default function DashboardView({
                     />
                   </div>
                   <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
-                    {formatCurrency(revenue)}
+                    {formatCurrencyShort(revenue)}
                   </div>
                 </div>
               );
@@ -367,7 +350,7 @@ export default function DashboardView({
                   {formatPercent(percent)}
                 </div>
                 <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
-                  {formatCurrency(revenue)}
+                  {formatCurrencyShort(revenue)}
                 </div>
               </div>
             ))}
@@ -515,7 +498,7 @@ export default function DashboardView({
                     {formatNumber(style.units)}
                   </td>
                   <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
-                    {formatCurrency(style.revenue)}
+                    {formatCurrencyShort(style.revenue)}
                   </td>
                   <td className="px-4 py-4 text-right border-l border-gray-200">
                     <span

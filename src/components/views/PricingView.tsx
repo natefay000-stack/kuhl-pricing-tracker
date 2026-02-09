@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
+import { formatCurrency, formatDelta, formatNumber } from '@/utils/format';
 
 interface PricingViewProps {
   products: Product[];
@@ -44,27 +45,6 @@ interface StylePricing {
   fromSource: PriceSource | null;
   toSource: PriceSource | null;
   costEstimated: boolean; // True if cost was estimated at 50% of wholesale
-}
-
-function formatCurrency(value: number | null): string {
-  if (value === null) return '—';
-  return `$${value.toFixed(2)}`;
-}
-
-function formatDelta(value: number | null): string {
-  if (value === null) return '—';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}$${value.toFixed(2)}`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null) return '—';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(1)}%`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
 }
 
 function SourceIndicator({ source }: { source: PriceSource | null }) {

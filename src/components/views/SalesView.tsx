@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { SalesRecord, Product, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
+import { formatCurrencyShort, formatNumber } from '@/utils/format';
 import {
   Banknote,
   ShoppingCart,
@@ -81,16 +82,6 @@ interface ActiveFilters {
   category: string;
   gender: string;
   customer: string;
-}
-
-function formatCurrency(value: number): string {
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString();
 }
 
 // Derive gender from divisionDesc (e.g., "Men's Tops" -> "Men's", "Women's Bottoms" -> "Women's")
@@ -700,7 +691,7 @@ export default function SalesView({
               <span className="text-sm font-bold text-cyan-700 uppercase tracking-wide">Revenue</span>
               <Banknote className="w-6 h-6 text-cyan-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.totalRevenue)}</div>
+            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrencyShort(summary.totalRevenue)}</div>
             {summary.revenueChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.revenueChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.revenueChange >= 0 ? '+' : ''}{summary.revenueChange.toFixed(1)}%
@@ -752,7 +743,7 @@ export default function SalesView({
               <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Avg Order</span>
               <Receipt className="w-6 h-6 text-amber-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.avgOrder)}</div>
+            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrencyShort(summary.avgOrder)}</div>
             {summary.avgOrderChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.avgOrderChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.avgOrderChange >= 0 ? '+' : ''}{summary.avgOrderChange.toFixed(1)}%
@@ -802,7 +793,7 @@ export default function SalesView({
                     {item.sharePercent?.toFixed(0)}%
                   </span>
                   <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
-                    {formatCurrency(item.revenue)}
+                    {formatCurrencyShort(item.revenue)}
                   </span>
                 </button>
               ))
@@ -837,7 +828,7 @@ export default function SalesView({
                     />
                   </div>
                   <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
-                    {formatCurrency(item.revenue)}
+                    {formatCurrencyShort(item.revenue)}
                   </span>
                 </button>
               ))
@@ -871,7 +862,7 @@ export default function SalesView({
                   </span>
                   <span className="text-sm text-gray-700 truncate max-w-[200px] font-medium">{item.customer}</span>
                 </div>
-                <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrency(item.revenue)}</span>
+                <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrencyShort(item.revenue)}</span>
               </button>
             ))
           )}
@@ -991,7 +982,7 @@ export default function SalesView({
                     {formatNumber(style.units)}
                   </td>
                   <td className="px-4 py-4 text-right font-mono text-base font-bold text-gray-900 border-l border-gray-200">
-                    {formatCurrency(style.revenue)}
+                    {formatCurrencyShort(style.revenue)}
                   </td>
                   <td className="px-4 py-4 text-right font-mono text-base text-gray-700 border-l border-gray-200">{style.customerCount}</td>
                 </tr>

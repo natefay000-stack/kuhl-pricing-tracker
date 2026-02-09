@@ -7,6 +7,7 @@ import { isFutureSeason } from '@/utils/season';
 import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
+import { formatCurrency, formatPercent } from '@/utils/format';
 
 // Gender detection from division description
 function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex' {
@@ -582,9 +583,6 @@ export default function LineListView({
     XLSX.utils.book_append_sheet(wb, ws, `Line List ${selectedSeason}`);
     XLSX.writeFile(wb, `KUHL_LineList_${selectedSeason}.xlsx`);
   };
-
-  const formatCurrency = (val: number) => (val > 0 ? `$${val.toFixed(2)}` : '—');
-  const formatPercent = (val: number) => (val > 0 ? `${val.toFixed(1)}%` : '—');
 
   const getCellValue = (row: EnrichedProduct & { colorCount?: number }, key: string): React.ReactNode => {
     // Handle rolled-up color columns
