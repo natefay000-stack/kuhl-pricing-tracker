@@ -16,6 +16,7 @@ import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
 import CustomerView from '@/components/views/CustomerView';
 import DataSourceMapView from '@/components/views/DataSourceMapView';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
@@ -764,127 +765,151 @@ export default function Home() {
         {/* View Content */}
         <div className="min-h-[calc(100vh-112px)]">
           {activeView === 'dashboard' && (
-            <DashboardView
-              products={products}
-              sales={sales}
-              costs={costs}
-              selectedSeason={selectedSeason}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Dashboard">
+              <DashboardView
+                products={products}
+                sales={sales}
+                costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'season' && (
-            <SeasonView
-              products={products}
-              sales={sales}
-              pricing={pricing}
-              costs={costs}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Season View">
+              <SeasonView
+                products={products}
+                sales={sales}
+                pricing={pricing}
+                costs={costs}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'seasoncomp' && (
-            <SeasonCompView
-              products={products}
-              sales={sales}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Season Comparison">
+              <SeasonCompView
+                products={products}
+                sales={sales}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'sales' && (
-            <SalesView
-              products={products}
-              sales={sales}
-              pricing={pricing}
-              costs={costs}
-              salesAggregations={salesAggregations}
-              selectedSeason={selectedSeason}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Sales">
+              <SalesView
+                products={products}
+                sales={sales}
+                pricing={pricing}
+                costs={costs}
+                salesAggregations={salesAggregations}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'costs' && (
-            <CostsView
-              products={products}
-              pricing={pricing}
-              costs={costs}
-              sales={sales}
-              selectedSeason={selectedSeason}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Costs">
+              <CostsView
+                products={products}
+                pricing={pricing}
+                costs={costs}
+                sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'pricing' && (
-            <PricingView
-              products={products}
-              pricing={pricing}
-              costs={costs}
-              sales={sales}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Pricing">
+              <PricingView
+                products={products}
+                pricing={pricing}
+                costs={costs}
+                sales={sales}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'products' && (
-            <StyleMasterView
-              products={products}
-              sales={sales}
-              pricing={pricing}
-              costs={costs}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-            />
+            <ErrorBoundary viewName="Style Master">
+              <StyleMasterView
+                products={products}
+                sales={sales}
+                pricing={pricing}
+                costs={costs}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'margins' && (
-            <MarginsView
-              products={products}
-              sales={sales}
-              costs={costs}
-              selectedSeason={selectedSeason}
-              selectedDivision={selectedDivision}
-              selectedCategory={selectedCategory}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Margins">
+              <MarginsView
+                products={products}
+                sales={sales}
+                costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'customers' && (
-            <CustomerView
-              products={products}
-              sales={sales}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Customers">
+              <CustomerView
+                products={products}
+                sales={sales}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'linelist' && (
-            <LineListView
-              products={products}
-              sales={sales}
-              pricing={pricing}
-              costs={costs}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Line List">
+              <LineListView
+                products={products}
+                sales={sales}
+                pricing={pricing}
+                costs={costs}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'validation' && (
-            <ValidationView
-              products={products}
-              sales={sales}
-              onStyleClick={handleStyleClick}
-            />
+            <ErrorBoundary viewName="Validation">
+              <ValidationView
+                products={products}
+                sales={sales}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
           )}
 
           {activeView === 'datasources' && (
-            <DataSourceMapView />
+            <ErrorBoundary viewName="Data Sources">
+              <DataSourceMapView />
+            </ErrorBoundary>
           )}
         </div>
       </main>
