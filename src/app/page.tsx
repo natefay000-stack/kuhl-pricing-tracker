@@ -581,27 +581,132 @@ export default function Home() {
       });
     }
 
-    // For costs: replace all costs with new data
+    // For costs: merge with priority — Landed Cost (priority 1) > Standard Cost (priority 2)
     if (data.costs && data.costs.length > 0) {
       const newCosts = data.costs as unknown as CostRecord[];
-      setCosts(newCosts);
+      const importSource = newCosts[0]?.costSource || 'landed_cost';
+
+      // Find all seasons in the imported data
+      const seasonsInFile = new Set<string>();
+      newCosts.forEach(c => c.season && seasonsInFile.add(c.season));
+      console.log(`Importing ${importSource} costs for seasons:`, Array.from(seasonsInFile));
+
+      let finalCosts: CostRecord[];
+
+      if (importSource === 'landed_cost') {
+        // Landed Cost is priority 1 — always wins
+        // For matching seasons: replace ALL existing cost records (both landed and standard)
+        const costsToKeep = costs.filter(c => !seasonsInFile.has(c.season));
+        finalCosts = [...costsToKeep, ...newCosts];
+      } else {
+        // Standard Cost is priority 2 — only fills gaps, never overwrites landed_cost
+        // Keep existing landed_cost records, replace only standard_cost (or add new)
+        const costsToKeep = costs.filter(c => {
+          if (!seasonsInFile.has(c.season)) return true; // Different season, keep
+          if (c.costSource === 'landed_cost') return true; // Landed cost = higher priority, keep
+          return false; // Same season, standard_cost or no source — replace
+        });
+
+        // From the new standard cost data, exclude styles that already have a landed_cost record
+        const landedKeys = new Set(
+          costsToKeep
+            .filter(c => c.costSource === 'landed_cost' && seasonsInFile.has(c.season))
+            .map(c => `${c.styleNumber}-${c.season}`)
+        );
+        const newCostsFiltered = newCosts.filter(c => !landedKeys.has(`${c.styleNumber}-${c.season}`));
+
+        finalCosts = [...costsToKeep, ...newCostsFiltered];
+        console.log(`Standard Cost import: ${newCosts.length} records, ${newCosts.length - newCostsFiltered.length} skipped (landed_cost exists), ${newCostsFiltered.length} applied`);
+      }
+
+      setCosts(finalCosts);
 
       // Persist to database
       try {
+        if (importSource === 'landed_cost') {
+          // Landed cost: delete all existing for these seasons, then insert
+          for (const season of Array.from(seasonsInFile)) {
+            console.log(`Deleting all costs for season: ${season} (landed_cost import)`);
+            await fetch('/api/data/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'costs',
+                season,
+                data: [],
+                fileName: `costs_clear_${season}`,
+                replaceExisting: true,
+              }),
+            });
+          }
+        } else {
+          // Standard cost: only delete existing standard_cost records for these seasons
+          // (We can't selectively delete by costSource via the current API, so delete all
+          //  non-landed records for these seasons and re-insert the kept ones + new ones)
+          for (const season of Array.from(seasonsInFile)) {
+            console.log(`Deleting costs for season: ${season} (standard_cost import)`);
+            await fetch('/api/data/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'costs',
+                season,
+                data: [],
+                fileName: `costs_clear_${season}`,
+                replaceExisting: true,
+              }),
+            });
+          }
+          // Re-insert the kept landed_cost records for these seasons
+          const landedToReinsert = costs.filter(
+            c => seasonsInFile.has(c.season) && c.costSource === 'landed_cost'
+          );
+          if (landedToReinsert.length > 0) {
+            const BATCH_SIZE = 1000;
+            for (let i = 0; i < landedToReinsert.length; i += BATCH_SIZE) {
+              const batch = landedToReinsert.slice(i, i + BATCH_SIZE);
+              await fetch('/api/data/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'costs',
+                  data: batch,
+                  fileName: 'landed_cost_reinsert',
+                  replaceExisting: false,
+                }),
+              });
+            }
+            console.log(`Re-inserted ${landedToReinsert.length} landed_cost records`);
+          }
+        }
+
+        // Insert all the new cost data (already filtered if standard_cost)
+        const costsToInsert = importSource === 'landed_cost'
+          ? data.costs
+          : data.costs.filter((c: Record<string, unknown>) => {
+              const landedKeys = new Set(
+                costs
+                  .filter(ec => ec.costSource === 'landed_cost' && seasonsInFile.has(ec.season))
+                  .map(ec => `${ec.styleNumber}-${ec.season}`)
+              );
+              return !landedKeys.has(`${c.styleNumber}-${c.season}`);
+            });
+
         const BATCH_SIZE = 1000;
-        for (let i = 0; i < data.costs.length; i += BATCH_SIZE) {
-          const batch = data.costs.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < costsToInsert.length; i += BATCH_SIZE) {
+          const batch = costsToInsert.slice(i, i + BATCH_SIZE);
           await fetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'costs',
               data: batch,
-              fileName: 'multi_season_costs_import',
-              replaceExisting: i === 0,
+              fileName: `${importSource}_import`,
+              replaceExisting: false,
             }),
           });
         }
+        console.log(`${importSource} import complete: ${costsToInsert.length} records persisted`);
       } catch (dbErr) {
         console.warn('Could not persist costs to database:', dbErr);
       }
@@ -611,7 +716,7 @@ export default function Home() {
         products,
         sales,
         pricing,
-        costs: newCosts,
+        costs: finalCosts,
       });
     }
 
@@ -780,7 +885,7 @@ export default function Home() {
       />
 
       {/* Main Content */}
-      <main className="flex-1 ml-56 bg-gray-50">
+      <main className="flex-1 ml-56 bg-surface-secondary">
         {/* Header */}
         <AppHeader
           searchQuery={searchQuery}

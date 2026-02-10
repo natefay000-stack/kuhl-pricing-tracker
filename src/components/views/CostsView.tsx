@@ -45,7 +45,7 @@ function calculateMargin(wholesale: number, landed: number): number | null {
 
 // Get margin color class
 function getMarginColorClass(margin: number | null | undefined): string {
-  if (margin === null || margin === undefined) return 'text-gray-400';
+  if (margin === null || margin === undefined) return 'text-text-faint';
   const pct = margin * 100;
   if (pct >= 50) return 'text-emerald-600';
   if (pct >= 45) return 'text-cyan-600';
@@ -54,12 +54,12 @@ function getMarginColorClass(margin: number | null | undefined): string {
 }
 
 function getMarginBgClass(margin: number | null | undefined): string {
-  if (margin === null || margin === undefined) return 'bg-gray-100';
+  if (margin === null || margin === undefined) return 'bg-surface-tertiary';
   const pct = margin * 100;
-  if (pct >= 50) return 'bg-emerald-50';
-  if (pct >= 45) return 'bg-cyan-50';
-  if (pct >= 40) return 'bg-amber-50';
-  return 'bg-red-50';
+  if (pct >= 50) return 'bg-emerald-50 dark:bg-emerald-950';
+  if (pct >= 45) return 'bg-cyan-50 dark:bg-cyan-950';
+  if (pct >= 40) return 'bg-amber-50 dark:bg-amber-950';
+  return 'bg-red-50 dark:bg-red-950';
 }
 
 function formatRevenue(value: number): string {
@@ -114,38 +114,43 @@ export default function CostsView({
   // View mode
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
-  // Get unique values for filters
+  // Get unique values for filters (from both costs AND products)
   const seasons = useMemo(() => {
     const all = new Set<string>();
     costs.forEach((c) => c.season && all.add(c.season));
+    products.forEach((p) => p.season && all.add(p.season));
     return sortSeasons(Array.from(all));
-  }, [costs]);
+  }, [costs, products]);
 
   const factories = useMemo(() => {
     const all = new Set<string>();
     costs.forEach((c) => c.factory && all.add(c.factory));
+    products.forEach((p) => p.factoryName && all.add(p.factoryName));
     return Array.from(all).sort();
-  }, [costs]);
+  }, [costs, products]);
 
   const countries = useMemo(() => {
     const all = new Set<string>();
     costs.forEach((c) => c.countryOfOrigin && all.add(c.countryOfOrigin));
+    products.forEach((p) => p.countryOfOrigin && all.add(p.countryOfOrigin));
     return Array.from(all).sort();
-  }, [costs]);
+  }, [costs, products]);
 
   const designTeams = useMemo(() => {
     const all = new Set<string>();
     costs.forEach((c) => c.designTeam && all.add(c.designTeam));
+    products.forEach((p) => p.divisionDesc && all.add(p.divisionDesc));
     return Array.from(all).sort();
-  }, [costs]);
+  }, [costs, products]);
 
   const developers = useMemo(() => {
     const all = new Set<string>();
     costs.forEach((c) => c.developer && all.add(c.developer));
+    products.forEach((p) => p.techDesignerName && all.add(p.techDesignerName));
     return Array.from(all).sort();
-  }, [costs]);
+  }, [costs, products]);
 
-  // Group costs by Style # + Season and aggregate
+  // Group costs by Style # + Season and aggregate, supplementing with Product data for missing styles
   const filteredCostsWithSales = useMemo(() => {
     // First, group costs by styleNumber + season
     const grouped = new Map<string, {
@@ -161,16 +166,13 @@ export default function CostsView({
       suggestedWholesale: number;
       suggestedMsrp: number;
       count: number;
+      costSource: string; // 'landed_cost' | 'standard_cost' | 'product'
     }>();
 
     costs.forEach((c) => {
-      // Apply filters
+      // Apply filters (except factory/country/team/developer - those are applied after merge)
       if (filterSeason && c.season !== filterSeason) return;
       if (filterStyleNumber && !c.styleNumber.toLowerCase().includes(filterStyleNumber.toLowerCase())) return;
-      if (filterFactory && c.factory !== filterFactory) return;
-      if (filterCountry && c.countryOfOrigin !== filterCountry) return;
-      if (filterTeam && c.designTeam !== filterTeam) return;
-      if (filterDeveloper && c.developer !== filterDeveloper) return;
 
       const key = `${c.styleNumber}-${c.season}`;
       const existing = grouped.get(key);
@@ -186,6 +188,8 @@ export default function CostsView({
         if (!existing.landed && c.landed) existing.landed = c.landed;
         if (!existing.suggestedWholesale && c.suggestedWholesale) existing.suggestedWholesale = c.suggestedWholesale;
         if (!existing.suggestedMsrp && c.suggestedMsrp) existing.suggestedMsrp = c.suggestedMsrp;
+        // Upgrade source if this record is higher priority
+        if (c.costSource === 'landed_cost') existing.costSource = 'landed_cost';
       } else {
         grouped.set(key, {
           styleNumber: c.styleNumber,
@@ -200,13 +204,63 @@ export default function CostsView({
           suggestedWholesale: c.suggestedWholesale || 0,
           suggestedMsrp: c.suggestedMsrp || 0,
           count: 1,
+          costSource: c.costSource || 'standard_cost',
         });
       }
     });
 
+    // Supplement with Product data for styles that have NO cost records
+    products.forEach((p) => {
+      if (filterSeason && p.season !== filterSeason) return;
+      if (filterStyleNumber && !p.styleNumber.toLowerCase().includes(filterStyleNumber.toLowerCase())) return;
+
+      const key = `${p.styleNumber}-${p.season}`;
+      if (grouped.has(key)) {
+        // Already have cost data — but supplement missing fields from product
+        const existing = grouped.get(key)!;
+        if (!existing.landed && p.cost) existing.landed = p.cost;
+        if (!existing.suggestedWholesale && p.price) existing.suggestedWholesale = p.price;
+        if (!existing.suggestedMsrp && p.msrp) existing.suggestedMsrp = p.msrp;
+        if (p.factoryName && existing.factories.size === 0) existing.factories.add(p.factoryName);
+        if (p.countryOfOrigin && existing.countries.size === 0) existing.countries.add(p.countryOfOrigin);
+        if (p.divisionDesc && existing.teams.size === 0) existing.teams.add(p.divisionDesc);
+        return;
+      }
+
+      // No cost record exists — create a synthetic one from product data
+      grouped.set(key, {
+        styleNumber: p.styleNumber,
+        styleName: p.styleDesc || '',
+        season: p.season,
+        factories: new Set(p.factoryName ? [p.factoryName] : []),
+        countries: new Set(p.countryOfOrigin ? [p.countryOfOrigin] : []),
+        teams: new Set(p.divisionDesc ? [p.divisionDesc] : []),
+        developers: new Set(p.techDesignerName ? [p.techDesignerName] : []),
+        fob: 0,
+        landed: p.cost || 0,
+        suggestedWholesale: p.price || 0,
+        suggestedMsrp: p.msrp || 0,
+        count: 1,
+        costSource: 'product',
+      });
+    });
+
+    // Apply factory/country/team/developer filters after merge
+    const filtered = Array.from(grouped.values()).filter((g) => {
+      const factory = g.factories.size === 1 ? Array.from(g.factories)[0] : g.factories.size > 1 ? 'Multiple' : '';
+      const coo = g.countries.size === 1 ? Array.from(g.countries)[0] : g.countries.size > 1 ? 'Multiple' : '';
+      const team = g.teams.size === 1 ? Array.from(g.teams)[0] : g.teams.size > 1 ? 'Multiple' : '';
+      const dev = g.developers.size === 1 ? Array.from(g.developers)[0] : g.developers.size > 1 ? 'Multiple' : '';
+
+      if (filterFactory && factory !== filterFactory) return false;
+      if (filterCountry && coo !== filterCountry) return false;
+      if (filterTeam && team !== filterTeam) return false;
+      if (filterDeveloper && dev !== filterDeveloper) return false;
+      return true;
+    });
+
     // Convert to array with aggregated values
-    return Array.from(grouped.values()).map((g) => {
-      // Look up sales by style+season to ensure we only show sales for THIS season
+    return filtered.map((g) => {
       const salesKey = `${g.styleNumber}-${g.season}`;
       const salesData = salesByStyleSeason[salesKey] || { revenue: 0, units: 0 };
       const margin = calculateMargin(g.suggestedWholesale, g.landed);
@@ -227,9 +281,10 @@ export default function CostsView({
         revenue: salesData.revenue,
         units: salesData.units,
         colorCount: g.count,
+        costSource: g.costSource,
       };
     });
-  }, [costs, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason]);
+  }, [costs, products, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -531,11 +586,11 @@ export default function CostsView({
   if (costs.length === 0) {
     return (
       <div className="p-6">
-        <h2 className="text-4xl font-display font-bold text-gray-900 mb-6">Landed Costs</h2>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+        <h2 className="text-4xl font-display font-bold text-text-primary mb-6">Landed Costs</h2>
+        <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-8 text-center">
           <DollarSign className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-          <p className="text-xl text-amber-800 font-bold">No landed cost data available</p>
-          <p className="text-amber-600 text-base mt-2">
+          <p className="text-xl text-amber-800 dark:text-amber-200 font-bold">No landed cost data available</p>
+          <p className="text-amber-600 dark:text-amber-400 text-base mt-2">
             Make sure the &quot;Landed Request Sheet.xlsx&quot; file is in the data folder and refresh the data.
           </p>
         </div>
@@ -548,7 +603,7 @@ export default function CostsView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-gray-900">
+          <h2 className="text-4xl font-display font-bold text-text-primary">
             Landed Costs
             {(filterSeason || selectedSeason) && (
               <span className="ml-3 text-2xl font-mono text-cyan-600">
@@ -556,7 +611,7 @@ export default function CostsView({
               </span>
             )}
           </h2>
-          <p className="text-base text-gray-500 mt-2">
+          <p className="text-base text-text-muted mt-2">
             FOB, landed costs, and margins from the Landed Request Sheet
             {(filterSeason || selectedSeason) && (
               <span className="ml-2 text-cyan-600 font-medium">
@@ -565,11 +620,11 @@ export default function CostsView({
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-1.5">
+        <div className="flex items-center gap-1 bg-surface rounded-lg border border-border-primary p-1.5">
           <button
             onClick={() => setViewMode('table')}
             className={`px-4 py-2 text-base font-bold rounded-md transition-colors ${
-              viewMode === 'table' ? 'bg-cyan-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              viewMode === 'table' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
             Table
@@ -577,7 +632,7 @@ export default function CostsView({
           <button
             onClick={() => setViewMode('byFactory')}
             className={`px-4 py-2 text-base font-bold rounded-md transition-colors ${
-              viewMode === 'byFactory' ? 'bg-cyan-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              viewMode === 'byFactory' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
             By Factory
@@ -585,7 +640,7 @@ export default function CostsView({
           <button
             onClick={() => setViewMode('byCountry')}
             className={`px-4 py-2 text-base font-bold rounded-md transition-colors ${
-              viewMode === 'byCountry' ? 'bg-cyan-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              viewMode === 'byCountry' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
             By Country
@@ -593,7 +648,7 @@ export default function CostsView({
           <button
             onClick={() => setViewMode('byTeam')}
             className={`px-4 py-2 text-base font-bold rounded-md transition-colors ${
-              viewMode === 'byTeam' ? 'bg-cyan-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              viewMode === 'byTeam' ? 'bg-cyan-600 text-white' : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
             By Team
@@ -602,19 +657,19 @@ export default function CostsView({
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm font-black text-gray-700 uppercase tracking-wide">Filters</span>
-          <div className="flex-1 h-px bg-gray-200"></div>
+          <span className="text-sm font-black text-text-secondary uppercase tracking-wide">Filters</span>
+          <div className="flex-1 h-px bg-border-primary"></div>
         </div>
         <div className="flex flex-wrap gap-5 items-end">
           {/* Season Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Season</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Season</label>
             <select
               value={filterSeason}
               onChange={(e) => { setFilterSeason(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] bg-surface"
             >
               <option value="">All Seasons</option>
               {seasons.map((s) => (
@@ -625,26 +680,26 @@ export default function CostsView({
 
           {/* Style # Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Style #</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Style #</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-faint" />
               <input
                 type="text"
                 value={filterStyleNumber}
                 onChange={(e) => { setFilterStyleNumber(e.target.value); setCurrentPage(1); }}
                 placeholder="Search..."
-                className="pl-11 pr-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px] bg-white"
+                className="pl-11 pr-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px] bg-surface"
               />
             </div>
           </div>
 
           {/* Factory Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Factory</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Factory</label>
             <select
               value={filterFactory}
               onChange={(e) => { setFilterFactory(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Factories</option>
               {factories.map((f) => (
@@ -655,11 +710,11 @@ export default function CostsView({
 
           {/* Country Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Country</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Country</label>
             <select
               value={filterCountry}
               onChange={(e) => { setFilterCountry(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px] bg-surface"
             >
               <option value="">All Countries</option>
               {countries.map((c) => (
@@ -670,11 +725,11 @@ export default function CostsView({
 
           {/* Design Team Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Team</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Team</label>
             <select
               value={filterTeam}
               onChange={(e) => { setFilterTeam(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px] bg-surface"
             >
               <option value="">All Teams</option>
               {designTeams.map((t) => (
@@ -685,11 +740,11 @@ export default function CostsView({
 
           {/* Developer Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Developer</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Developer</label>
             <select
               value={filterDeveloper}
               onChange={(e) => { setFilterDeveloper(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Developers</option>
               {developers.map((d) => (
@@ -705,7 +760,7 @@ export default function CostsView({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-text-muted hover:text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
               Clear
@@ -715,7 +770,7 @@ export default function CostsView({
           {/* Export */}
           <button
             onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors"
           >
             <Download className="w-5 h-5" />
             Export
@@ -725,36 +780,36 @@ export default function CostsView({
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Records</span>
-            <Layers className="w-6 h-6 text-gray-400" />
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Records</span>
+            <Layers className="w-6 h-6 text-text-faint" />
           </div>
-          <div className="text-3xl font-display font-bold text-gray-900">{summary.totalRecords.toLocaleString()}</div>
-          <div className="text-sm text-gray-500 mt-1">{summary.uniqueStyles} styles</div>
+          <div className="text-3xl font-display font-bold text-text-primary">{summary.totalRecords.toLocaleString()}</div>
+          <div className="text-sm text-text-muted mt-1">{summary.uniqueStyles} styles</div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Avg FOB</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Avg FOB</span>
             <DollarSign className="w-6 h-6 text-blue-500" />
           </div>
-          <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.avgFob)}</div>
-          <div className="text-sm text-gray-500 mt-1">factory cost</div>
+          <div className="text-3xl font-display font-bold text-text-primary">{formatCurrency(summary.avgFob)}</div>
+          <div className="text-sm text-text-muted mt-1">factory cost</div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Landed</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Landed</span>
             <DollarSign className="w-6 h-6 text-violet-500" />
           </div>
-          <div className="text-3xl font-display font-bold text-gray-900">{formatCurrency(summary.avgLanded)}</div>
-          <div className="text-sm text-gray-500 mt-1">total cost</div>
+          <div className="text-3xl font-display font-bold text-text-primary">{formatCurrency(summary.avgLanded)}</div>
+          <div className="text-sm text-text-muted mt-1">total cost</div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Margin</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Margin</span>
             <Percent className="w-6 h-6 text-emerald-500" />
           </div>
           <div className={`text-3xl font-display font-bold ${getMarginColorClass(summary.avgMargin)}`}>
@@ -762,28 +817,28 @@ export default function CostsView({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Factories</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Factories</span>
             <Factory className="w-6 h-6 text-orange-500" />
           </div>
-          <div className="text-3xl font-display font-bold text-gray-900">{summary.uniqueFactories}</div>
+          <div className="text-3xl font-display font-bold text-text-primary">{summary.uniqueFactories}</div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Countries</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Countries</span>
             <Globe className="w-6 h-6 text-cyan-500" />
           </div>
-          <div className="text-3xl font-display font-bold text-gray-900">{summary.uniqueCountries}</div>
+          <div className="text-3xl font-display font-bold text-text-primary">{summary.uniqueCountries}</div>
         </div>
 
         {/* Missing Costs Card */}
         <div className={`rounded-xl border-2 p-5 shadow-sm ${
-          summary.missingCosts > 0 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-300'
+          summary.missingCosts > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700'
         }`}>
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Missing</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Missing</span>
             <AlertTriangle className={`w-6 h-6 ${summary.missingCosts > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
           </div>
           <div className={`text-3xl font-display font-bold ${
@@ -791,44 +846,44 @@ export default function CostsView({
           }`}>
             {summary.missingCosts}
           </div>
-          <div className="text-sm text-gray-500 mt-1">
+          <div className="text-sm text-text-muted mt-1">
             of {summary.totalProductStyles} styles
           </div>
         </div>
       </div>
 
       {/* Margin Distribution */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Margin Distribution</h3>
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
+        <h3 className="text-lg font-bold text-text-primary mb-4">Margin Distribution</h3>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-full bg-emerald-500"></span>
-            <span className="text-base font-medium text-gray-600">50%+ ({summary.marginBuckets.excellent})</span>
+            <span className="text-base font-medium text-text-secondary">50%+ ({summary.marginBuckets.excellent})</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-full bg-cyan-500"></span>
-            <span className="text-base font-medium text-gray-600">45-50% ({summary.marginBuckets.good})</span>
+            <span className="text-base font-medium text-text-secondary">45-50% ({summary.marginBuckets.good})</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-full bg-amber-500"></span>
-            <span className="text-base font-medium text-gray-600">40-45% ({summary.marginBuckets.fair})</span>
+            <span className="text-base font-medium text-text-secondary">40-45% ({summary.marginBuckets.fair})</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-full bg-red-500"></span>
-            <span className="text-base font-medium text-gray-600">&lt;40% ({summary.marginBuckets.poor})</span>
+            <span className="text-base font-medium text-text-secondary">&lt;40% ({summary.marginBuckets.poor})</span>
           </div>
         </div>
       </div>
 
       {/* View Content */}
       {viewMode === 'table' && (
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-100 border-b-2 border-gray-300">
+                <tr className="bg-surface-tertiary border-b-2 border-border-strong">
                   <th
-                    className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                    className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                     onClick={() => handleSort('styleNumber')}
                   >
                     <div className="flex items-center gap-1">
@@ -837,7 +892,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                    className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                     onClick={() => handleSort('styleName')}
                   >
                     <div className="flex items-center gap-1">
@@ -845,11 +900,11 @@ export default function CostsView({
                       <ArrowUpDown className="w-4 h-4" />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide border-l border-gray-200">
+                  <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide border-l border-border-primary">
                     Season
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('revenue')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -858,7 +913,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('units')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -867,7 +922,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('factory')}
                   >
                     <div className="flex items-center gap-1">
@@ -876,7 +931,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('coo')}
                   >
                     <div className="flex items-center gap-1">
@@ -885,7 +940,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('fob')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -894,7 +949,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('landed')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -903,7 +958,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('wholesale')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -912,7 +967,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('msrp')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -921,7 +976,7 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l-2 border-gray-400"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l-2 border-border-strong"
                     onClick={() => handleSort('margin')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -930,13 +985,16 @@ export default function CostsView({
                     </div>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                    className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                     onClick={() => handleSort('designTeam')}
                   >
                     <div className="flex items-center gap-1">
                       Team
                       <ArrowUpDown className="w-4 h-4" />
                     </div>
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-bold text-text-muted uppercase tracking-wide border-l border-border-primary">
+                    Src
                   </th>
                 </tr>
               </thead>
@@ -945,61 +1003,78 @@ export default function CostsView({
                   <tr
                     key={`${cost.styleNumber}-${cost.season}-${index}`}
                     onClick={() => onStyleClick(cost.styleNumber)}
-                    className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    } hover:bg-cyan-50`}
+                    className={`border-b border-border-primary cursor-pointer transition-colors ${
+                      index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                    } hover:bg-hover-accent`}
                   >
-                    <td className="px-4 py-4 border-r border-gray-200">
-                      <span className="font-mono text-lg font-bold text-gray-900">
+                    <td className="px-4 py-4 border-r border-border-primary">
+                      <span className="font-mono text-lg font-bold text-text-primary">
                         {cost.styleNumber}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-base text-gray-700 truncate max-w-[200px] border-r border-gray-200">
+                    <td className="px-4 py-4 text-base text-text-secondary truncate max-w-[200px] border-r border-border-primary">
                       {cost.styleName || '—'}
                     </td>
-                    <td className="px-4 py-4 border-l border-gray-200">
+                    <td className="px-4 py-4 border-l border-border-primary">
                       <span className={`text-base font-mono font-semibold px-2.5 py-1 rounded ${
-                        cost.season?.endsWith('SP') ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'
+                        cost.season?.endsWith('SP') ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400' : 'bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-400'
                       }`}>
                         {cost.season}
                       </span>
                     </td>
-                    <td className={`px-4 py-4 text-right font-mono text-base border-l border-gray-200 ${
+                    <td className={`px-4 py-4 text-right font-mono text-base border-l border-border-primary ${
                       cost.revenue === 0
-                        ? 'text-gray-400 italic'
+                        ? 'text-text-faint italic'
                         : cost.revenue >= 100000
                         ? 'text-emerald-600 font-bold'
-                        : 'text-gray-900 font-medium'
+                        : 'text-text-primary font-medium'
                     }`}>
                       {formatRevenue(cost.revenue)}
                     </td>
-                    <td className={`px-4 py-4 text-right font-mono text-base border-l border-gray-200 ${
+                    <td className={`px-4 py-4 text-right font-mono text-base border-l border-border-primary ${
                       cost.units === 0
-                        ? 'text-gray-400 italic'
-                        : 'text-gray-900 font-medium'
+                        ? 'text-text-faint italic'
+                        : 'text-text-primary font-medium'
                     }`}>
                       {cost.units === 0 ? '0' : formatNumber(cost.units)}
                     </td>
-                    <td className="px-4 py-4 text-base text-gray-700 border-l border-gray-200">{cost.factory || '—'}</td>
-                    <td className="px-4 py-4 text-base text-gray-700 border-l border-gray-200">{cost.countryOfOrigin || '—'}</td>
-                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-gray-900 border-l border-gray-200">
+                    <td className="px-4 py-4 text-base text-text-secondary border-l border-border-primary">{cost.factory || '—'}</td>
+                    <td className="px-4 py-4 text-base text-text-secondary border-l border-border-primary">{cost.countryOfOrigin || '—'}</td>
+                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-text-primary border-l border-border-primary">
                       {formatCurrency(cost.fob)}
                     </td>
-                    <td className="px-4 py-4 text-right font-mono text-base font-bold text-gray-900 border-l border-gray-200">
+                    <td className="px-4 py-4 text-right font-mono text-base font-bold text-text-primary border-l border-border-primary">
                       {formatCurrency(cost.landed)}
                     </td>
-                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-gray-900 border-l border-gray-200">
+                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-text-primary border-l border-border-primary">
                       {formatCurrency(cost.suggestedWholesale)}
                     </td>
-                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-gray-900 border-l border-gray-200">
+                    <td className="px-4 py-4 text-right font-mono text-base font-medium text-text-primary border-l border-border-primary">
                       {formatCurrency(cost.suggestedMsrp)}
                     </td>
-                    <td className="px-4 py-4 text-right border-l-2 border-gray-400">
+                    <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                       <span className={`font-mono text-base font-bold px-3 py-1 rounded ${getMarginBgClass(cost.margin)} ${getMarginColorClass(cost.margin)}`}>
                         {formatPercentRaw(cost.margin)}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-base text-gray-700 border-l border-gray-200">{cost.designTeam || '—'}</td>
+                    <td className="px-4 py-4 text-base text-text-secondary border-l border-border-primary">{cost.designTeam || '—'}</td>
+                    <td className="px-3 py-4 text-center border-l border-border-primary">
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                        cost.costSource === 'landed_cost'
+                          ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400'
+                          : cost.costSource === 'standard_cost'
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400'
+                          : 'bg-surface-tertiary text-text-muted dark:bg-gray-800 dark:text-gray-400'
+                      }`} title={
+                        cost.costSource === 'landed_cost'
+                          ? 'Landed Cost Sheet (Priority 1)'
+                          : cost.costSource === 'standard_cost'
+                          ? 'Standard Cost Sheet (Priority 2)'
+                          : 'From Line List'
+                      }>
+                        {cost.costSource === 'landed_cost' ? 'LC' : cost.costSource === 'standard_cost' ? 'SC' : 'LL'}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1007,8 +1082,8 @@ export default function CostsView({
           </div>
 
           {/* Pagination */}
-          <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between">
-            <span className="text-base text-gray-600">
+          <div className="px-5 py-4 bg-surface-tertiary border-t-2 border-border-strong flex items-center justify-between">
+            <span className="text-base text-text-secondary">
               Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, sortedData.length)} of{' '}
               {sortedData.length} records
             </span>
@@ -1016,18 +1091,18 @@ export default function CostsView({
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-5 h-5" />
                 Prev
               </button>
-              <span className="text-base text-gray-600 font-medium">
+              <span className="text-base text-text-secondary font-medium">
                 Page {currentPage} of {totalPages || 1}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
                 <ChevronRight className="w-5 h-5" />
@@ -1039,35 +1114,35 @@ export default function CostsView({
 
       {/* By Factory View */}
       {viewMode === 'byFactory' && (
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">Cost Analysis by Factory</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
+          <div className="bg-surface-secondary px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary">Cost Analysis by Factory</h3>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-secondary">
             {byFactory.map((item) => (
               <button
                 key={item.factory}
                 onClick={() => { setFilterFactory(item.factory); setViewMode('table'); }}
-                className="w-full px-6 py-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                className="w-full px-6 py-5 flex items-center justify-between hover:bg-hover transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <Factory className="w-6 h-6 text-gray-400" />
+                  <Factory className="w-6 h-6 text-text-faint" />
                   <div className="text-left">
-                    <div className="text-lg font-semibold text-gray-900">{item.factory}</div>
-                    <div className="text-base text-gray-500">{item.count} records</div>
+                    <div className="text-lg font-semibold text-text-primary">{item.factory}</div>
+                    <div className="text-base text-text-muted">{item.count} records</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-8 text-right">
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg FOB</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgFob)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg FOB</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgFob)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Landed</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgLanded)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Landed</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgLanded)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
                       {formatPercentRaw(item.avgMargin)}
                     </div>
@@ -1081,35 +1156,35 @@ export default function CostsView({
 
       {/* By Country View */}
       {viewMode === 'byCountry' && (
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">Cost Analysis by Country</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
+          <div className="bg-surface-secondary px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary">Cost Analysis by Country</h3>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-secondary">
             {byCountry.map((item) => (
               <button
                 key={item.country}
                 onClick={() => { setFilterCountry(item.country); setViewMode('table'); }}
-                className="w-full px-6 py-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                className="w-full px-6 py-5 flex items-center justify-between hover:bg-hover transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <Globe className="w-6 h-6 text-gray-400" />
+                  <Globe className="w-6 h-6 text-text-faint" />
                   <div className="text-left">
-                    <div className="text-lg font-semibold text-gray-900">{item.country}</div>
-                    <div className="text-base text-gray-500">{item.count} records</div>
+                    <div className="text-lg font-semibold text-text-primary">{item.country}</div>
+                    <div className="text-base text-text-muted">{item.count} records</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-8 text-right">
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg FOB</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgFob)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg FOB</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgFob)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Landed</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgLanded)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Landed</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgLanded)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
                       {formatPercentRaw(item.avgMargin)}
                     </div>
@@ -1123,35 +1198,35 @@ export default function CostsView({
 
       {/* By Team View */}
       {viewMode === 'byTeam' && (
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">Cost Analysis by Design Team</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
+          <div className="bg-surface-secondary px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary">Cost Analysis by Design Team</h3>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-secondary">
             {byTeam.map((item) => (
               <button
                 key={item.team}
                 onClick={() => { setFilterTeam(item.team); setViewMode('table'); }}
-                className="w-full px-6 py-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                className="w-full px-6 py-5 flex items-center justify-between hover:bg-hover transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <Users className="w-6 h-6 text-gray-400" />
+                  <Users className="w-6 h-6 text-text-faint" />
                   <div className="text-left">
-                    <div className="text-lg font-semibold text-gray-900">{item.team}</div>
-                    <div className="text-base text-gray-500">{item.count} records</div>
+                    <div className="text-lg font-semibold text-text-primary">{item.team}</div>
+                    <div className="text-base text-text-muted">{item.count} records</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-8 text-right">
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg FOB</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgFob)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg FOB</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgFob)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Landed</div>
-                    <div className="font-mono text-lg font-semibold text-gray-900">{formatCurrency(item.avgLanded)}</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Landed</div>
+                    <div className="font-mono text-lg font-semibold text-text-primary">{formatCurrency(item.avgLanded)}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-gray-500 uppercase">Avg Margin</div>
+                    <div className="text-sm font-bold text-text-muted uppercase">Avg Margin</div>
                     <div className={`font-mono text-lg font-semibold ${getMarginColorClass(item.avgMargin)}`}>
                       {formatPercentRaw(item.avgMargin)}
                     </div>

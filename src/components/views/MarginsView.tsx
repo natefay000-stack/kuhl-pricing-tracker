@@ -144,11 +144,11 @@ const CHANNEL_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }> = {
-  'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100' },
-  'BB': { bg: 'bg-red-600', text: 'text-red-700', light: 'bg-red-100' },
-  'KUHL_STORES': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100' },
+  'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100 dark:bg-green-900' },
+  'BB': { bg: 'bg-red-600', text: 'text-red-700', light: 'bg-red-100 dark:bg-red-900' },
+  'KUHL_STORES': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100 dark:bg-blue-900' },
   'EC': { bg: 'bg-purple-600', text: 'text-purple-700', light: 'bg-purple-100' },
-  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100' },
+  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100 dark:bg-amber-900' },
   'KI': { bg: 'bg-cyan-600', text: 'text-cyan-700', light: 'bg-cyan-100' },
 };
 
@@ -165,10 +165,10 @@ function getMarginTier(margin: number): 'excellent' | 'target' | 'watch' | 'prob
 function getMarginColor(margin: number): string {
   const tier = getMarginTier(margin);
   switch (tier) {
-    case 'excellent': return 'bg-emerald-100 text-emerald-700';
-    case 'target': return 'bg-green-100 text-green-700';
-    case 'watch': return 'bg-amber-100 text-amber-700';
-    case 'problem': return 'bg-red-100 text-red-700';
+    case 'excellent': return 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700';
+    case 'target': return 'bg-green-100 dark:bg-green-900 text-green-700';
+    case 'watch': return 'bg-amber-100 dark:bg-amber-900 text-amber-700';
+    case 'problem': return 'bg-red-100 dark:bg-red-900 text-red-700';
   }
 }
 
@@ -904,10 +904,10 @@ export default function MarginsView({
       {/* Header with View Toggle */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-gray-900">
+          <h2 className="text-4xl font-display font-bold text-text-primary">
             Margin Analysis: {selectedSeason || 'All Seasons'}
           </h2>
-          <p className="text-base text-gray-500 mt-2">
+          <p className="text-base text-text-muted mt-2">
             True margin analysis using actual sales prices by channel
           </p>
         </div>
@@ -918,7 +918,7 @@ export default function MarginsView({
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 viewMode === 'channel'
                   ? 'bg-cyan-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
               }`}
             >
               Channel Analysis
@@ -928,7 +928,7 @@ export default function MarginsView({
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 viewMode === 'traditional'
                   ? 'bg-cyan-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
             Traditional View
@@ -967,7 +967,7 @@ export default function MarginsView({
                 .slice(0, 5);
 
               return sortedChannels.map(channel => {
-              const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
+              const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-text-secondary', light: 'bg-surface-tertiary' };
               const isSelected = selectedCustomerType === channel.channel;
 
               return (
@@ -976,22 +976,22 @@ export default function MarginsView({
                   onClick={() => setSelectedCustomerType(isSelected ? null : channel.channel)}
                   className={`rounded-xl border-2 p-4 shadow-sm transition-all text-left ${
                     isSelected
-                      ? `${colors.light} border-gray-300`
-                      : 'bg-white border-gray-200 hover:border-gray-300'
+                      ? `${colors.light} border-border-strong`
+                      : 'bg-surface border-border-primary hover:border-border-strong'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <div className={`w-8 h-8 rounded-lg ${isSelected ? 'bg-white' : colors.light} flex items-center justify-center ${colors.text}`}>
+                    <div className={`w-8 h-8 rounded-lg ${isSelected ? 'bg-surface' : colors.light} flex items-center justify-center ${colors.text}`}>
                       {CHANNEL_ICONS[channel.channel] || <DollarSign className="w-4 h-4" />}
                     </div>
-                    <div className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    <div className="text-xs font-bold text-text-secondary uppercase tracking-wide">
                       {channel.channel}
                     </div>
                   </div>
                   <p className={`text-2xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {formatPercent(channel.trueMargin)}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-text-muted mt-1">
                     {formatCurrencyShort(channel.revenue)} · {channel.revenuePct.toFixed(0)}%
                   </p>
                 </button>
@@ -1002,7 +1002,7 @@ export default function MarginsView({
             {/* Blended Card */}
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-surface/10 flex items-center justify-center">
                   <Percent className="w-4 h-4 text-white" />
                 </div>
                 <div className="text-xs font-bold text-gray-300 uppercase tracking-wide">
@@ -1012,7 +1012,7 @@ export default function MarginsView({
               <p className={`text-2xl font-bold font-mono ${channelPerformance.blended.trueMargin >= TARGET_MARGIN ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {formatPercent(channelPerformance.blended.trueMargin)}
               </p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-text-faint mt-1">
                 {formatCurrencyShort(channelPerformance.blended.revenue)} total
               </p>
             </div>
@@ -1021,8 +1021,8 @@ export default function MarginsView({
           {/* Filters Row */}
           {hasActiveFilters && (
             <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-gray-500">Active filters:</span>
+              <Filter className="w-4 h-4 text-text-muted" />
+              <span className="text-sm text-text-muted">Active filters:</span>
               {selectedCustomerType && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-cyan-100 text-cyan-700 rounded-full text-sm font-medium">
                   {CHANNEL_LABELS[selectedCustomerType] || selectedCustomerType}
@@ -1040,7 +1040,7 @@ export default function MarginsView({
                 </span>
               )}
               {selectedTier && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 rounded-full text-sm font-medium">
                   {selectedTier}
                   <button onClick={() => setSelectedTier(null)} className="hover:text-amber-900">
                     <X className="w-3 h-3" />
@@ -1048,7 +1048,7 @@ export default function MarginsView({
                 </span>
               )}
               {selectedCategoryFilter && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 rounded-full text-sm font-medium">
                   {selectedCategoryFilter}
                   <button onClick={() => setSelectedCategoryFilter(null)} className="hover:text-green-900">
                     <X className="w-3 h-3" />
@@ -1065,33 +1065,33 @@ export default function MarginsView({
           )}
 
           {/* Channel Performance Table */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">Channel Performance</h3>
+          <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-border-primary">
+              <h3 className="text-xl font-bold text-text-primary">Channel Performance</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b-2 border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Landed</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">True Margin</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Rev Mix</th>
+                  <tr className="border-b-2 border-border-primary bg-surface-secondary">
+                    <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Channel</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Revenue</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Units</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Net Price</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Landed</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">True Margin</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Rev Mix</th>
                   </tr>
                 </thead>
                 <tbody>
                   {channelPerformance.channels.map((channel, index) => {
-                    const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-gray-700', light: 'bg-gray-100' };
+                    const colors = CHANNEL_COLORS[channel.channel] || { bg: 'bg-gray-600', text: 'text-text-secondary', light: 'bg-surface-tertiary' };
                     const isSelected = selectedCustomerType === channel.channel;
                     return (
                       <tr
                         key={channel.channel}
                         onClick={() => setSelectedCustomerType(selectedCustomerType === channel.channel ? null : channel.channel)}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                          isSelected ? colors.light : 'hover:bg-gray-50'
+                        className={`border-b border-border-secondary cursor-pointer transition-colors ${
+                          isSelected ? colors.light : 'hover:bg-hover'
                         }`}
                       >
                         <td className="px-4 py-3">
@@ -1100,21 +1100,21 @@ export default function MarginsView({
                               {CHANNEL_ICONS[channel.channel]}
                             </div>
                             <div>
-                              <span className="font-semibold text-gray-900">{channel.channelName}</span>
-                              <span className="text-xs text-gray-500 ml-2">({channel.channel})</span>
+                              <span className="font-semibold text-text-primary">{channel.channelName}</span>
+                              <span className="text-xs text-text-muted ml-2">({channel.channel})</span>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
+                        <td className="px-4 py-3 text-right font-mono font-medium text-text-primary">
                           {formatCurrencyShort(channel.revenue)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-600">
+                        <td className="px-4 py-3 text-right font-mono text-text-secondary">
                           {formatNumber(channel.units)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-900">
+                        <td className="px-4 py-3 text-right font-mono text-text-primary">
                           ${channel.avgNetPrice.toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-gray-600">
+                        <td className="px-4 py-3 text-right font-mono text-text-secondary">
                           ${channel.avgLanded.toFixed(2)}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -1124,13 +1124,13 @@ export default function MarginsView({
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="w-16 h-2 bg-surface-tertiary rounded-full overflow-hidden">
                               <div
                                 className={`h-full ${colors.bg}`}
                                 style={{ width: `${Math.min(channel.revenuePct, 100)}%` }}
                               />
                             </div>
-                            <span className="font-mono text-sm text-gray-600 w-12 text-right">
+                            <span className="font-mono text-sm text-text-secondary w-12 text-right">
                               {channel.revenuePct.toFixed(0)}%
                             </span>
                           </div>
@@ -1139,20 +1139,20 @@ export default function MarginsView({
                     );
                   })}
                   {/* Blended Total Row */}
-                  <tr className="bg-gray-100 font-semibold">
+                  <tr className="bg-surface-tertiary font-semibold">
                     <td className="px-4 py-3">
-                      <span className="font-bold text-gray-900">BLENDED TOTAL</span>
+                      <span className="font-bold text-text-primary">BLENDED TOTAL</span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       {formatCurrencyShort(channelPerformance.blended.revenue)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       {formatNumber(channelPerformance.blended.units)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       ${channelPerformance.blended.avgNetPrice.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-secondary">
                       ${channelPerformance.blended.avgLanded.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -1160,7 +1160,7 @@ export default function MarginsView({
                         {formatPercent(channelPerformance.blended.trueMargin)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       100%
                     </td>
                   </tr>
@@ -1170,25 +1170,25 @@ export default function MarginsView({
           </div>
 
           {/* Customer Breakdown with Filters */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
+          <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-border-primary">
               <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-gray-900">Top Customers by Revenue</h3>
+                <h3 className="text-xl font-bold text-text-primary">Top Customers by Revenue</h3>
                 <div className="flex items-center gap-4">
                   {/* Channel Type Filter Buttons */}
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Channel:</span>
+                    <span className="text-sm text-text-muted">Channel:</span>
                     <button
                       onClick={() => setCustomerTypeFilters([])}
                       className={`px-2 py-1 text-xs font-semibold rounded ${
-                        customerTypeFilters.length === 0 ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        customerTypeFilters.length === 0 ? 'bg-cyan-600 text-white' : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
                       }`}
                     >
                       All
                     </button>
                     {PRIMARY_CHANNELS.map(type => {
                       const isActive = customerTypeFilters.includes(type);
-                      const colors = CHANNEL_COLORS[type] || { bg: 'bg-gray-600', light: 'bg-gray-100' };
+                      const colors = CHANNEL_COLORS[type] || { bg: 'bg-gray-600', light: 'bg-surface-tertiary' };
                       return (
                         <button
                           key={type}
@@ -1200,7 +1200,7 @@ export default function MarginsView({
                             }
                           }}
                           className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${
-                            isActive ? `${colors.bg} text-white` : `${colors.light} text-gray-700 hover:opacity-80`
+                            isActive ? `${colors.bg} text-white` : `${colors.light} text-text-secondary hover:opacity-80`
                           }`}
                         >
                           {CHANNEL_LABELS[type] || type}
@@ -1210,11 +1210,11 @@ export default function MarginsView({
                   </div>
                   {/* Show Top N Selector */}
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Show:</span>
+                    <span className="text-sm text-text-muted">Show:</span>
                     <select
                       value={showTopN}
                       onChange={(e) => setShowTopN(Number(e.target.value))}
-                      className="text-sm border border-gray-300 rounded px-2 py-1"
+                      className="text-sm border border-border-strong rounded px-2 py-1"
                     >
                       <option value={10}>Top 10</option>
                       <option value={25}>Top 25</option>
@@ -1228,42 +1228,42 @@ export default function MarginsView({
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b-2 border-gray-200 bg-gray-50">
-                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</th>
-                    <th className="px-4 py-3 text-left text-sm font-bold text-gray-600 uppercase tracking-wide">Type</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Revenue</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Units</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Avg Net Price</th>
-                    <th className="px-4 py-3 text-right text-sm font-bold text-gray-600 uppercase tracking-wide">Margin</th>
+                  <tr className="border-b-2 border-border-primary bg-surface-secondary">
+                    <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Customer</th>
+                    <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Type</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Revenue</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Units</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Net Price</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
                   {customerBreakdown.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan={6} className="px-4 py-8 text-center text-text-muted">
                         No customers found with selected filters
                       </td>
                     </tr>
                   ) : (
                     customerBreakdown.map((customer, index) => {
-                      const typeColors = CHANNEL_COLORS[customer.customerType] || { bg: 'bg-gray-600', light: 'bg-gray-100', text: 'text-gray-700' };
+                      const typeColors = CHANNEL_COLORS[customer.customerType] || { bg: 'bg-gray-600', light: 'bg-surface-tertiary', text: 'text-text-secondary' };
                       return (
                         <tr
                           key={`${customer.customer}-${index}`}
                           onClick={() => setSelectedCustomer(selectedCustomer === customer.customer ? null : customer.customer)}
-                          className={`border-b border-gray-100 cursor-pointer transition-colors ${
-                            selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-gray-50'
+                          className={`border-b border-border-secondary cursor-pointer transition-colors ${
+                            selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-hover'
                           }`}
                         >
-                          <td className="px-4 py-3 font-medium text-gray-900">{customer.customer}</td>
+                          <td className="px-4 py-3 font-medium text-text-primary">{customer.customer}</td>
                           <td className="px-4 py-3">
                             <span className={`text-xs font-semibold px-2 py-1 rounded ${typeColors.light} ${typeColors.text}`}>
                               {customer.customerType}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-900">{formatCurrencyShort(customer.revenue)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-600">{formatNumber(customer.units)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-900">${customer.avgNetPrice.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-text-primary">{formatCurrencyShort(customer.revenue)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-text-secondary">{formatNumber(customer.units)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-text-primary">${customer.avgNetPrice.toFixed(2)}</td>
                           <td className="px-4 py-3 text-right">
                             <span className={`font-mono font-semibold px-2 py-1 rounded ${getMarginColor(customer.margin)}`}>
                               {formatPercent(customer.margin)}
@@ -1279,12 +1279,12 @@ export default function MarginsView({
           </div>
 
           {/* Style-Level Margin Analysis */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100">
+          <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-border-strong bg-surface-tertiary">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">Style-Level Margin Analysis</h3>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <h3 className="text-xl font-bold text-text-primary">Style-Level Margin Analysis</h3>
+                  <p className="text-sm text-text-muted mt-1">
                     Baseline (wholesale) vs Weighted (actual sales mix) margin comparison
                   </p>
                 </div>
@@ -1295,21 +1295,21 @@ export default function MarginsView({
                   <span className="flex items-center gap-1">
                     <span className="text-red-600">🔴</span> Below baseline
                   </span>
-                  <span className="text-gray-500">
+                  <span className="text-text-muted">
                     {formatNumber(sortedStyleChannelMargins.length)} styles
                   </span>
                 </div>
               </div>
               {/* Season Filter Pills */}
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs text-gray-500 font-medium">Season:</span>
+                <span className="text-xs text-text-muted font-medium">Season:</span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setStyleLevelSeasonFilter('all')}
                     className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
                       styleLevelSeasonFilter === 'all'
                         ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
                     }`}
                   >
                     All Seasons
@@ -1321,7 +1321,7 @@ export default function MarginsView({
                       className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
                         styleLevelSeasonFilter === season
                           ? 'bg-cyan-600 text-white'
-                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
                       }`}
                     >
                       {season}
@@ -1331,31 +1331,31 @@ export default function MarginsView({
               </div>
               {/* Channel Mix Legend */}
               <div className="flex items-center gap-4 mb-3 text-xs">
-                <span className="text-gray-500 font-medium">Channel Mix:</span>
+                <span className="text-text-muted font-medium">Channel Mix:</span>
                 {PRIMARY_CHANNELS.map(ch => {
                   const colors = CHANNEL_COLORS[ch];
                   return (
                     <span key={ch} className="flex items-center gap-1">
                       <span className={`w-3 h-3 rounded ${colors.bg}`}></span>
-                      <span className="text-gray-600">{CHANNEL_LABELS[ch]}</span>
+                      <span className="text-text-secondary">{CHANNEL_LABELS[ch]}</span>
                     </span>
                   );
                 })}
               </div>
               {/* Data Source Legend */}
               <div className="flex items-center gap-4 mb-3 text-xs">
-                <span className="text-gray-500 font-medium">Price Source:</span>
+                <span className="text-text-muted font-medium">Price Source:</span>
                 <span className="flex items-center gap-1">
                   <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-                  <span className="text-gray-600">Line List</span>
+                  <span className="text-text-secondary">Line List</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                  <span className="text-gray-600">Sales</span>
+                  <span className="text-text-secondary">Sales</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-                  <span className="text-gray-600">Landed Sheet</span>
+                  <span className="text-text-secondary">Landed Sheet</span>
                 </span>
               </div>
               {/* Search Input */}
@@ -1366,20 +1366,20 @@ export default function MarginsView({
                     placeholder="Search by style # or description..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border border-border-strong rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   />
-                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-faint hover:text-text-secondary"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>
                 {searchQuery && (
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-text-muted">
                     Found {formatNumber(sortedStyleChannelMargins.length)} matching styles
                   </span>
                 )}
@@ -1388,51 +1388,51 @@ export default function MarginsView({
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b-2 border-gray-300 text-left bg-gray-50">
+                  <tr className="border-b-2 border-border-strong text-left bg-surface-secondary">
                     <th
-                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900"
+                      className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary"
                       onClick={() => handleSort('styleNumber')}
                     >
                       Style <SortIcon field="styleNumber" />
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide">
                       Description
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">
                       MSRP
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">
                       Wholesale
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">
                       Net Price
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">
                       Cost
                     </th>
                     <th
-                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary"
                       onClick={() => handleSort('totalRevenue')}
                     >
                       Revenue <SortIcon field="totalRevenue" />
                     </th>
-                    <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center min-w-[200px]">
+                    <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-center min-w-[200px]">
                       Channel Mix
                     </th>
                     <th
-                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary"
                       onClick={() => handleSort('baselineMargin')}
                     >
                       Baseline <SortIcon field="baselineMargin" />
                     </th>
                     <th
-                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900"
+                      className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary"
                       onClick={() => handleSort('weightedMargin')}
                     >
                       Weighted <SortIcon field="weightedMargin" />
                     </th>
                     <th
-                      className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l-2 border-gray-300"
+                      className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l-2 border-border-strong"
                       onClick={() => handleSort('marginDelta')}
                     >
                       Δ <SortIcon field="marginDelta" />
@@ -1450,16 +1450,16 @@ export default function MarginsView({
                         <tr
                           key={style.styleNumber}
                           onClick={() => toggleStyleExpand(style.styleNumber)}
-                          className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                          } ${isExpanded ? 'bg-cyan-50' : 'hover:bg-cyan-50'}`}
+                          className={`border-b border-border-primary cursor-pointer transition-colors ${
+                            index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                          } ${isExpanded ? 'bg-cyan-50' : 'hover:bg-hover-accent'}`}
                         >
                           <td className="px-4 py-3">
-                            <span className="font-mono text-base font-bold text-gray-900">
+                            <span className="font-mono text-base font-bold text-text-primary">
                               {style.styleNumber}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 max-w-[180px] truncate">
+                          <td className="px-4 py-3 text-sm text-text-secondary max-w-[180px] truncate">
                             {style.styleDesc}
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -1471,7 +1471,7 @@ export default function MarginsView({
                                   'bg-orange-500'
                                 }`} title={style.msrpSource === 'linelist' ? 'Line List' : style.msrpSource === 'sales' ? 'Sales' : 'Landed Sheet'}></span>
                               )}
-                              <span className="font-mono text-sm text-gray-900">
+                              <span className="font-mono text-sm text-text-primary">
                                 {style.msrp > 0 ? `$${style.msrp.toFixed(0)}` : '—'}
                               </span>
                             </div>
@@ -1485,7 +1485,7 @@ export default function MarginsView({
                                   'bg-orange-500'
                                 }`} title={style.wholesaleSource === 'linelist' ? 'Line List' : style.wholesaleSource === 'sales' ? 'Sales' : 'Landed Sheet'}></span>
                               )}
-                              <span className="font-mono text-sm text-gray-900">
+                              <span className="font-mono text-sm text-text-primary">
                                 {style.wholesalePrice > 0 ? `$${style.wholesalePrice.toFixed(2)}` : '—'}
                               </span>
                             </div>
@@ -1495,7 +1495,7 @@ export default function MarginsView({
                               {style.avgNetPrice > 0 && (
                                 <span className="w-2 h-2 rounded-full bg-purple-500" title="Sales (calculated from revenue/units)"></span>
                               )}
-                              <span className="font-mono text-sm text-gray-900">
+                              <span className="font-mono text-sm text-text-primary">
                                 {style.avgNetPrice > 0 ? `$${style.avgNetPrice.toFixed(2)}` : '—'}
                               </span>
                             </div>
@@ -1508,18 +1508,18 @@ export default function MarginsView({
                                   'bg-blue-500'
                                 }`} title={style.costSource === 'landed' ? 'Landed Sheet' : 'Line List'}></span>
                               )}
-                              <span className="font-mono text-sm text-gray-700">
+                              <span className="font-mono text-sm text-text-secondary">
                                 {style.landedCost > 0 ? `$${style.landedCost.toFixed(2)}` : '—'}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-900">
+                          <td className="px-4 py-3 text-right font-mono font-medium text-text-primary">
                             {formatCurrencyShort(style.totalRevenue)}
                           </td>
                           {/* Channel Mix Stacked Horizontal Bar */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="flex h-5 w-full min-w-[150px] rounded overflow-hidden bg-gray-200">
+                              <div className="flex h-5 w-full min-w-[150px] rounded overflow-hidden bg-surface-tertiary">
                                 {PRIMARY_CHANNELS.map(ch => {
                                   const mix = style.channelMix[ch];
                                   if (!mix || mix.pct <= 0) return null;
@@ -1539,7 +1539,7 @@ export default function MarginsView({
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="font-mono text-sm text-gray-600">
+                            <span className="font-mono text-sm text-text-secondary">
                               {formatPercent(style.baselineMargin)}
                             </span>
                           </td>
@@ -1548,7 +1548,7 @@ export default function MarginsView({
                               {formatPercent(style.weightedMargin)}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right border-l-2 border-gray-300">
+                          <td className="px-4 py-3 text-right border-l-2 border-border-strong">
                             <span
                               className={`font-mono font-bold flex items-center justify-end gap-1 ${
                                 style.marginDelta >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -1559,12 +1559,12 @@ export default function MarginsView({
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            <ChevronRight className={`w-5 h-5 text-text-faint transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                           </td>
                         </tr>
                         {/* Expanded Detail Row */}
                         {isExpanded && (
-                          <tr className="bg-gray-100 border-b border-gray-300">
+                          <tr className="bg-surface-tertiary border-b border-border-strong">
                             <td colSpan={8} className="px-6 py-4">
                               <div className="grid grid-cols-4 gap-4">
                                 {PRIMARY_CHANNELS.map(ch => {
@@ -1584,25 +1584,25 @@ export default function MarginsView({
                                       </div>
                                       <div className="space-y-1 text-sm">
                                         <div className="flex justify-between">
-                                          <span className="text-gray-600">Revenue:</span>
+                                          <span className="text-text-secondary">Revenue:</span>
                                           <span className="font-mono font-medium">{formatCurrencyShort(mix.revenue)}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span className="text-gray-600">Units:</span>
+                                          <span className="text-text-secondary">Units:</span>
                                           <span className="font-mono">{formatNumber(mix.units)}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span className="text-gray-600">Avg Net Price:</span>
+                                          <span className="text-text-secondary">Avg Net Price:</span>
                                           <span className="font-mono">${mix.avgNetPrice.toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span className="text-gray-600">Channel Margin:</span>
+                                          <span className="text-text-secondary">Channel Margin:</span>
                                           <span className={`font-mono font-bold ${mix.margin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
                                             {formatPercent(mix.margin)}
                                           </span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span className="text-gray-600">Mix %:</span>
+                                          <span className="text-text-secondary">Mix %:</span>
                                           <span className="font-mono font-medium">{mix.pct.toFixed(1)}%</span>
                                         </div>
                                       </div>
@@ -1610,17 +1610,17 @@ export default function MarginsView({
                                   );
                                 })}
                               </div>
-                              <div className="mt-4 pt-4 border-t border-gray-300 flex items-center gap-6 text-sm">
+                              <div className="mt-4 pt-4 border-t border-border-strong flex items-center gap-6 text-sm">
                                 <div>
-                                  <span className="text-gray-600">Landed Cost:</span>
+                                  <span className="text-text-secondary">Landed Cost:</span>
                                   <span className="font-mono font-medium ml-2">${style.landedCost.toFixed(2)}</span>
                                 </div>
                                 <div>
-                                  <span className="text-gray-600">Wholesale Price:</span>
+                                  <span className="text-text-secondary">Wholesale Price:</span>
                                   <span className="font-mono font-medium ml-2">${style.wholesalePrice.toFixed(2)}</span>
                                 </div>
                                 <div>
-                                  <span className="text-gray-600">Avg Net Price (All Channels):</span>
+                                  <span className="text-text-secondary">Avg Net Price (All Channels):</span>
                                   <span className="font-mono font-medium ml-2">${style.avgNetPrice.toFixed(2)}</span>
                                 </div>
                                 <button
@@ -1640,7 +1640,7 @@ export default function MarginsView({
               </table>
             </div>
             {sortedStyleChannelMargins.length > 50 && (
-              <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 text-center text-base text-gray-600 font-medium">
+              <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center text-base text-text-secondary font-medium">
                 Showing 50 of {formatNumber(sortedStyleChannelMargins.length)} styles
               </div>
             )}
@@ -1651,55 +1651,55 @@ export default function MarginsView({
       {/* Traditional View Stats */}
       {viewMode === 'traditional' && (
         <div className="grid grid-cols-5 gap-4">
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-emerald-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono text-gray-900">
+                <p className="text-2xl font-bold font-mono text-text-primary">
                   {formatCurrencyShort(stats.totalRevenue)}
                 </p>
-                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                   Revenue
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900 flex items-center justify-center">
                 <Package className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono text-gray-900">
+                <p className="text-2xl font-bold font-mono text-text-primary">
                   {formatCurrencyShort(stats.totalCogs)}
                 </p>
-                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                   COGS
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono text-gray-900">
+                <p className="text-2xl font-bold font-mono text-text-primary">
                   {formatCurrencyShort(stats.totalGross)}
                 </p>
-                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                   Gross $
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
                 <Percent className="w-5 h-5 text-purple-600" />
@@ -1708,23 +1708,23 @@ export default function MarginsView({
                 <p className={`text-2xl font-bold font-mono ${stats.overallMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatPercent(stats.overallMargin)}
                 </p>
-                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                   Margin %
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
                 <TrendingUp className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold font-mono text-gray-900">
+                <p className="text-2xl font-bold font-mono text-text-primary">
                   {formatPercent(stats.markup)}
                 </p>
-                <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+                <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                   Markup %
                 </p>
               </div>
@@ -1735,9 +1735,9 @@ export default function MarginsView({
 
       {/* Margin Health Bar - Traditional View Only */}
       {viewMode === 'traditional' && (
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Margin Health</h3>
+      <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+        <div className="px-6 py-4 border-b-2 border-border-primary flex items-center justify-between">
+          <h3 className="text-xl font-bold text-text-primary">Margin Health</h3>
           {(selectedTier || selectedCategoryFilter) && (
             <button
               onClick={clearFilters}
@@ -1788,39 +1788,39 @@ export default function MarginsView({
           <div className="flex justify-between text-sm">
             <button
               onClick={() => handleTierClick('excellent')}
-              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'excellent' ? 'bg-emerald-100' : 'hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'excellent' ? 'bg-emerald-100 dark:bg-emerald-900' : 'hover:bg-surface-tertiary'}`}
             >
               <div className="w-3 h-3 bg-emerald-600 rounded-full" />
-              <span className="font-semibold text-gray-700">55%+</span>
-              <span className="text-gray-500">Excellent</span>
-              <span className="font-mono font-bold text-gray-900">{marginHealth.excellent.count}</span>
+              <span className="font-semibold text-text-secondary">55%+</span>
+              <span className="text-text-muted">Excellent</span>
+              <span className="font-mono font-bold text-text-primary">{marginHealth.excellent.count}</span>
             </button>
             <button
               onClick={() => handleTierClick('target')}
-              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'target' ? 'bg-green-100' : 'hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'target' ? 'bg-green-100 dark:bg-green-900' : 'hover:bg-surface-tertiary'}`}
             >
               <div className="w-3 h-3 bg-green-500 rounded-full" />
-              <span className="font-semibold text-gray-700">45-55%</span>
-              <span className="text-gray-500">Target</span>
-              <span className="font-mono font-bold text-gray-900">{marginHealth.target.count}</span>
+              <span className="font-semibold text-text-secondary">45-55%</span>
+              <span className="text-text-muted">Target</span>
+              <span className="font-mono font-bold text-text-primary">{marginHealth.target.count}</span>
             </button>
             <button
               onClick={() => handleTierClick('watch')}
-              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'watch' ? 'bg-amber-100' : 'hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'watch' ? 'bg-amber-100 dark:bg-amber-900' : 'hover:bg-surface-tertiary'}`}
             >
               <div className="w-3 h-3 bg-amber-500 rounded-full" />
-              <span className="font-semibold text-gray-700">35-45%</span>
-              <span className="text-gray-500">Watch</span>
-              <span className="font-mono font-bold text-gray-900">{marginHealth.watch.count}</span>
+              <span className="font-semibold text-text-secondary">35-45%</span>
+              <span className="text-text-muted">Watch</span>
+              <span className="font-mono font-bold text-text-primary">{marginHealth.watch.count}</span>
             </button>
             <button
               onClick={() => handleTierClick('problem')}
-              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'problem' ? 'bg-red-100' : 'hover:bg-gray-100'}`}
+              className={`flex items-center gap-2 px-3 py-1 rounded-lg transition-colors ${selectedTier === 'problem' ? 'bg-red-100 dark:bg-red-900' : 'hover:bg-surface-tertiary'}`}
             >
               <div className="w-3 h-3 bg-red-500 rounded-full" />
-              <span className="font-semibold text-gray-700">&lt;35%</span>
-              <span className="text-gray-500">Problem</span>
-              <span className="font-mono font-bold text-gray-900">{marginHealth.problem.count}</span>
+              <span className="font-semibold text-text-secondary">&lt;35%</span>
+              <span className="text-text-muted">Problem</span>
+              <span className="font-mono font-bold text-text-primary">{marginHealth.problem.count}</span>
             </button>
           </div>
         </div>
@@ -1831,17 +1831,17 @@ export default function MarginsView({
       {viewMode === 'traditional' && (
       <div className="grid grid-cols-2 gap-6">
         {/* By Category */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">By Category</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+          <div className="px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary">By Category</h3>
           </div>
           <div className="p-4">
             <table className="w-full">
               <thead>
                 <tr className="text-left">
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Category</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Margin</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Gross</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Category</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Margin</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Gross</th>
                 </tr>
               </thead>
               <tbody>
@@ -1849,9 +1849,9 @@ export default function MarginsView({
                   <tr
                     key={c.category}
                     onClick={() => handleCategoryClick(c.category)}
-                    className={`cursor-pointer transition-colors ${selectedCategoryFilter === c.category ? 'bg-cyan-50' : 'hover:bg-gray-50'}`}
+                    className={`cursor-pointer transition-colors ${selectedCategoryFilter === c.category ? 'bg-cyan-50' : 'hover:bg-hover'}`}
                   >
-                    <td className="px-3 py-2 text-base text-gray-700 font-medium truncate max-w-[140px]">
+                    <td className="px-3 py-2 text-base text-text-secondary font-medium truncate max-w-[140px]">
                       {c.category}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -1859,7 +1859,7 @@ export default function MarginsView({
                         {formatPercent(c.margin)}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
+                    <td className="px-3 py-2 text-base font-mono text-text-primary text-right">
                       {formatCurrencyShort(c.gross)}
                     </td>
                   </tr>
@@ -1870,26 +1870,26 @@ export default function MarginsView({
         </div>
 
         {/* By Channel */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900">By Channel</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+          <div className="px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary">By Channel</h3>
           </div>
           <div className="p-4">
             <table className="w-full">
               <thead>
                 <tr className="text-left">
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Margin</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Gross</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Channel</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Margin</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Gross</th>
                 </tr>
               </thead>
               <tbody>
                 {channelMargins.map(c => (
                   <tr
                     key={c.channel}
-                    className="hover:bg-gray-50 transition-colors"
+                    className="hover:bg-hover transition-colors"
                   >
-                    <td className="px-3 py-2 text-base text-gray-700 font-medium">
+                    <td className="px-3 py-2 text-base text-text-secondary font-medium">
                       {c.channelName}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -1897,7 +1897,7 @@ export default function MarginsView({
                         {formatPercent(c.margin)}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
+                    <td className="px-3 py-2 text-base font-mono text-text-primary text-right">
                       {formatCurrencyShort(c.gross)}
                     </td>
                   </tr>
@@ -1915,29 +1915,29 @@ export default function MarginsView({
         {/* By Gender + Bottom Styles */}
         <div className="space-y-6">
           {/* By Gender */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
+          <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-border-primary">
+              <h3 className="text-xl font-bold text-text-primary">By Gender</h3>
             </div>
             <div className="p-4">
               <table className="w-full">
                 <thead>
                   <tr className="text-left">
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Gender</th>
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Margin</th>
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Gross</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Gender</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Margin</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Gross</th>
                   </tr>
                 </thead>
                 <tbody>
                   {genderMargins.map(g => (
-                    <tr key={g.gender} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-2 text-base text-gray-700 font-medium">{g.gender}</td>
+                    <tr key={g.gender} className="hover:bg-hover transition-colors">
+                      <td className="px-3 py-2 text-base text-text-secondary font-medium">{g.gender}</td>
                       <td className="px-3 py-2 text-right">
                         <span className={`text-base font-mono font-semibold px-2 py-0.5 rounded ${getMarginColor(g.margin)}`}>
                           {formatPercent(g.margin)}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-base font-mono text-gray-900 text-right">
+                      <td className="px-3 py-2 text-base font-mono text-text-primary text-right">
                         {formatCurrencyShort(g.gross)}
                       </td>
                     </tr>
@@ -1948,9 +1948,9 @@ export default function MarginsView({
           </div>
 
           {/* Bottom Margin Styles */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-            <div className="px-6 py-4 border-b-2 border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+            <div className="px-6 py-4 border-b-2 border-border-primary">
+              <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
                 <TrendingDown className="w-5 h-5 text-red-500" />
                 Bottom Margin Styles
               </h3>
@@ -1959,9 +1959,9 @@ export default function MarginsView({
               <table className="w-full">
                 <thead>
                   <tr className="text-left">
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Style</th>
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Desc</th>
-                    <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Margin</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Style</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Desc</th>
+                    <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Margin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1969,14 +1969,14 @@ export default function MarginsView({
                     <tr
                       key={s.styleNumber}
                       onClick={() => onStyleClick(s.styleNumber)}
-                      className="hover:bg-red-50 cursor-pointer transition-colors"
+                      className="hover:bg-red-50 hover:dark:bg-red-950 cursor-pointer transition-colors"
                     >
                       <td className="px-3 py-2">
-                        <span className="font-mono font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-sm">
+                        <span className="font-mono font-semibold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded text-sm">
                           {s.styleNumber}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-700 truncate max-w-[120px]">
+                      <td className="px-3 py-2 text-sm text-text-secondary truncate max-w-[120px]">
                         {s.styleDesc}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -1993,9 +1993,9 @@ export default function MarginsView({
         </div>
 
         {/* Top Margin Styles */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b-2 border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+          <div className="px-6 py-4 border-b-2 border-border-primary">
+            <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-500" />
               Top Margin Styles
             </h3>
@@ -2004,9 +2004,9 @@ export default function MarginsView({
             <table className="w-full">
               <thead>
                 <tr className="text-left">
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Style</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide">Desc</th>
-                  <th className="px-3 py-2 text-sm font-bold text-gray-600 uppercase tracking-wide text-right">Margin</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Style</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide">Desc</th>
+                  <th className="px-3 py-2 text-sm font-bold text-text-secondary uppercase tracking-wide text-right">Margin</th>
                 </tr>
               </thead>
               <tbody>
@@ -2014,14 +2014,14 @@ export default function MarginsView({
                   <tr
                     key={s.styleNumber}
                     onClick={() => onStyleClick(s.styleNumber)}
-                    className="hover:bg-emerald-50 cursor-pointer transition-colors"
+                    className="hover:bg-emerald-50 hover:dark:bg-emerald-950 cursor-pointer transition-colors"
                   >
                     <td className="px-3 py-2">
-                      <span className="font-mono font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-sm">
+                      <span className="font-mono font-semibold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded text-sm">
                         {s.styleNumber}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-700 truncate max-w-[160px]">
+                    <td className="px-3 py-2 text-sm text-text-secondary truncate max-w-[160px]">
                       {s.styleDesc}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -2040,14 +2040,14 @@ export default function MarginsView({
 
       {/* Margin By Style Table */}
       {viewMode === 'traditional' && (
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Margin by Style</h3>
+      <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+        <div className="px-6 py-4 border-b-2 border-border-strong bg-surface-tertiary flex items-center justify-between">
+          <h3 className="text-xl font-bold text-text-primary">Margin by Style</h3>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 font-medium">
+            <span className="text-sm text-text-secondary font-medium">
               Target Margin: <span className="font-mono font-bold">{TARGET_MARGIN}%</span>
             </span>
-            <span className="text-sm text-gray-500 font-medium">
+            <span className="text-sm text-text-muted font-medium">
               {formatNumber(sortedStyles.length)} styles
             </span>
           </div>
@@ -2055,50 +2055,50 @@ export default function MarginsView({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b-2 border-gray-300 text-left bg-gray-100">
+              <tr className="border-b-2 border-border-strong text-left bg-surface-tertiary">
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                   onClick={() => handleSort('styleNumber')}
                 >
                   Style <SortIcon field="styleNumber" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                   onClick={() => handleSort('styleDesc')}
                 >
                   Description <SortIcon field="styleDesc" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('revenue')}
                 >
                   Revenue <SortIcon field="revenue" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('cogs')}
                 >
                   COGS <SortIcon field="cogs" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('gross')}
                 >
                   Gross <SortIcon field="gross" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('margin')}
                 >
                   Margin % <SortIcon field="margin" />
                 </th>
                 <th
-                  className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right cursor-pointer hover:text-gray-900 border-l-2 border-gray-400"
+                  className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right cursor-pointer hover:text-text-primary border-l-2 border-border-strong"
                   onClick={() => handleSort('vsTarget')}
                 >
                   vs Target <SortIcon field="vsTarget" />
                 </th>
-                <th className="px-4 py-3 w-10 border-l border-gray-200"></th>
+                <th className="px-4 py-3 w-10 border-l border-border-primary"></th>
               </tr>
             </thead>
             <tbody>
@@ -2106,33 +2106,33 @@ export default function MarginsView({
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
-                  <td className="px-4 py-4 border-r border-gray-200">
-                    <span className="font-mono text-lg font-bold text-gray-900">
+                  <td className="px-4 py-4 border-r border-border-primary">
+                    <span className="font-mono text-lg font-bold text-text-primary">
                       {style.styleNumber}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base text-gray-700 max-w-xs truncate border-r border-gray-200">
+                  <td className="px-4 py-4 text-base text-text-secondary max-w-xs truncate border-r border-border-primary">
                     {style.styleDesc}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-medium text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-medium text-text-primary text-right border-l border-border-primary">
                     {formatCurrencyShort(style.revenue)}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono text-text-secondary text-right border-l border-border-primary">
                     {formatCurrencyShort(style.cogs)}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-bold text-text-primary text-right border-l border-border-primary">
                     {formatCurrencyShort(style.gross)}
                   </td>
-                  <td className="px-4 py-4 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-right border-l border-border-primary">
                     <span className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginColor(style.margin)}`}>
                       {formatPercent(style.margin)}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-right border-l-2 border-gray-400">
+                  <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                     <span
                       className={`text-base font-mono font-bold flex items-center justify-end gap-1 ${
                         style.vsTarget >= 0
@@ -2148,8 +2148,8 @@ export default function MarginsView({
                       )}
                     </span>
                   </td>
-                  <td className="px-4 py-4 border-l border-gray-200">
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  <td className="px-4 py-4 border-l border-border-primary">
+                    <ChevronRight className="w-5 h-5 text-text-faint" />
                   </td>
                 </tr>
               ))}
@@ -2157,7 +2157,7 @@ export default function MarginsView({
           </table>
         </div>
         {sortedStyles.length > 50 && (
-          <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100 text-center text-base text-gray-600 font-medium">
+          <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center text-base text-text-secondary font-medium">
             Showing 50 of {formatNumber(sortedStyles.length)} styles
           </div>
         )}

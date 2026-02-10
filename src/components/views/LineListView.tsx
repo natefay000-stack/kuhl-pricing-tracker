@@ -589,7 +589,7 @@ export default function LineListView({
     if (rollUpStyles && key === 'color') {
       const count = row.colorCount || 1;
       return (
-        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 text-xs font-bold rounded">
           {count} color{count !== 1 ? 's' : ''}
         </span>
       );
@@ -634,8 +634,8 @@ export default function LineListView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-gray-900">Line List</h2>
-          <p className="text-base text-gray-500 mt-2">
+          <h2 className="text-4xl font-display font-bold text-text-primary">Line List</h2>
+          <p className="text-base text-text-muted mt-2">
             Internal product database for {selectedSeason}
           </p>
         </div>
@@ -649,21 +649,21 @@ export default function LineListView({
       </div>
 
       {/* Data Sources Legend */}
-      <SourceLegend sources={['linelist', 'pricing', 'landed', 'sales', 'calculated']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
+      <SourceLegend sources={['linelist', 'pricing', 'landed', 'sales', 'calculated']} className="bg-surface rounded-xl border-2 border-border-primary p-4" />
 
       {/* Filters Row 1 */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-4">
         <div className="flex flex-wrap gap-4 items-end">
           {/* Season */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Season</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Season</label>
             <select
               value={selectedSeason}
               onChange={(e) => {
                 setSelectedSeason(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] font-mono font-bold"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] font-mono font-bold"
             >
               <option value="ALL">ALL</option>
               {seasons.map((s) => (
@@ -674,14 +674,14 @@ export default function LineListView({
 
           {/* Division */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Division</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Division</label>
             <select
               value={divisionFilter}
               onChange={(e) => {
                 setDivisionFilter(e.target.value);
                 setCategoryFilter(''); // Reset category when division changes
               }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
             >
               <option value="">All</option>
               {divisions.map((d) => (
@@ -692,11 +692,11 @@ export default function LineListView({
 
           {/* Category */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Category</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Category</label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
             >
               <option value="">All</option>
               {categories.map((c) => (
@@ -707,11 +707,11 @@ export default function LineListView({
 
           {/* Designer */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Designer</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Designer</label>
             <select
               value={designerFilter}
               onChange={(e) => setDesignerFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
             >
               <option value="">All</option>
               {designers.map((d) => (
@@ -722,11 +722,11 @@ export default function LineListView({
 
           {/* Product Line */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Product Line</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Product Line</label>
             <select
               value={productLineFilter}
               onChange={(e) => setProductLineFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
             >
               <option value="">All</option>
               {productLines.map((pl) => (
@@ -737,20 +737,20 @@ export default function LineListView({
 
           {/* Search */}
           <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Search</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Search</label>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Style #, name, color..."
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
             />
           </div>
 
           {/* Roll Up Styles Toggle */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">View</label>
-            <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">View</label>
+            <label className="flex items-center gap-2 px-4 py-2.5 bg-surface-secondary border-2 border-border-primary rounded-lg cursor-pointer hover:bg-surface-tertiary transition-colors">
               <input
                 type="checkbox"
                 checked={rollUpStyles}
@@ -758,9 +758,9 @@ export default function LineListView({
                   setRollUpStyles(e.target.checked);
                   setCurrentPage(1);
                 }}
-                className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                className="w-4 h-4 rounded border-border-strong text-cyan-600 focus:ring-cyan-500"
               />
-              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              <span className="text-sm font-medium text-text-secondary whitespace-nowrap">
                 Roll up styles
               </span>
             </label>
@@ -769,8 +769,8 @@ export default function LineListView({
           {/* Hide No Sales Toggle - only for historical seasons */}
           {!isSelectedSeasonFuture && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Filter</label>
-              <label className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+              <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Filter</label>
+              <label className="flex items-center gap-2 px-4 py-2.5 bg-surface-secondary border-2 border-border-primary rounded-lg cursor-pointer hover:bg-surface-tertiary transition-colors">
                 <input
                   type="checkbox"
                   checked={hideNoSales}
@@ -778,9 +778,9 @@ export default function LineListView({
                     setHideNoSales(e.target.checked);
                     setCurrentPage(1);
                   }}
-                  className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
+                  className="w-4 h-4 rounded border-border-strong text-cyan-600 focus:ring-cyan-500"
                 />
-                <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                <span className="text-sm font-medium text-text-secondary whitespace-nowrap">
                   Hide no-sales styles
                 </span>
               </label>
@@ -791,47 +791,47 @@ export default function LineListView({
 
       {/* Stat Cards */}
       <div className={`grid gap-4 ${isSelectedSeasonFuture ? 'grid-cols-5' : 'grid-cols-6'}`}>
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-gray-900">{stats.styles.toLocaleString()}</p>
-          <p className="text-sm text-gray-500 font-bold uppercase mt-1">Styles</p>
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
+          <p className="text-3xl font-bold font-mono text-text-primary">{stats.styles.toLocaleString()}</p>
+          <p className="text-sm text-text-muted font-bold uppercase mt-1">Styles</p>
         </div>
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-gray-900">{stats.skus.toLocaleString()}</p>
-          <p className="text-sm text-gray-500 font-bold uppercase mt-1">SKUs</p>
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
+          <p className="text-3xl font-bold font-mono text-text-primary">{stats.skus.toLocaleString()}</p>
+          <p className="text-sm text-text-muted font-bold uppercase mt-1">SKUs</p>
         </div>
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
           <p className="text-3xl font-bold font-mono text-emerald-600">{stats.new.toLocaleString()}</p>
-          <p className="text-sm text-gray-500 font-bold uppercase mt-1">New</p>
+          <p className="text-sm text-text-muted font-bold uppercase mt-1">New</p>
         </div>
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
           <p className="text-3xl font-bold font-mono text-red-600">{stats.dropped.toLocaleString()}</p>
-          <p className="text-sm text-gray-500 font-bold uppercase mt-1">Dropped</p>
+          <p className="text-sm text-text-muted font-bold uppercase mt-1">Dropped</p>
         </div>
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-gray-900">{stats.designers}</p>
-          <p className="text-sm text-gray-500 font-bold uppercase mt-1">Designers</p>
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
+          <p className="text-3xl font-bold font-mono text-text-primary">{stats.designers}</p>
+          <p className="text-sm text-text-muted font-bold uppercase mt-1">Designers</p>
         </div>
         {/* No Sales - only show for historical seasons */}
         {!isSelectedSeasonFuture && (
-          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-200' : 'bg-surface border-border-primary'}`}>
             <div className="flex items-center justify-center gap-2">
-              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600' : 'text-text-faint'}`}>
                 {stats.noSales.toLocaleString()}
               </p>
               {stats.noSales > 0 && hideNoSales && <EyeOff className="w-5 h-5 text-amber-500" />}
             </div>
-            <p className="text-sm text-gray-500 font-bold uppercase mt-1">No Sales</p>
+            <p className="text-sm text-text-muted font-bold uppercase mt-1">No Sales</p>
           </div>
         )}
       </div>
 
       {/* Category Cards */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Categories</span>
+            <span className="text-xs font-bold text-text-muted uppercase tracking-wide">Categories</span>
             {divisionFilter && (
-              <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 px-2 py-0.5 rounded-full font-medium">
                 {getGenderFromDivision(divisionFilter)}&apos;s
               </span>
             )}
@@ -839,7 +839,7 @@ export default function LineListView({
           {categoryFilter && (
             <button
               onClick={() => setCategoryFilter('')}
-              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+              className="text-xs text-text-muted hover:text-text-secondary flex items-center gap-1"
             >
               <X className="w-3 h-3" />
               Clear filter
@@ -854,13 +854,13 @@ export default function LineListView({
             className={`relative p-4 rounded-xl border-2 transition-all text-center ${
               !categoryFilter
                 ? 'border-blue-500 bg-blue-50 shadow-md'
-                : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
             }`}
           >
-            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600' : 'text-gray-900'}`}>
+            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600' : 'text-text-primary'}`}>
               {allCategoryTotals.styles}
             </div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">All</div>
+            <div className="text-xs text-text-muted uppercase tracking-wide mt-1">All</div>
             <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600' : 'text-emerald-500'}`}>
               +{allCategoryTotals.new} new
             </div>
@@ -882,16 +882,16 @@ export default function LineListView({
                 className={`relative p-4 rounded-xl border-2 transition-all text-center ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 shadow-md'
-                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                    : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
                 }`}
               >
-                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600' : 'text-gray-900'}`}>
+                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600' : 'text-text-primary'}`}>
                   {styleCount}
                 </div>
-                <div className="text-xs text-gray-500 uppercase tracking-wide mt-1 truncate" title={cat.name}>
+                <div className="text-xs text-text-muted uppercase tracking-wide mt-1 truncate" title={cat.name}>
                   {cat.name}
                 </div>
-                <div className={`text-xs mt-2 ${newCount > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
+                <div className={`text-xs mt-2 ${newCount > 0 ? 'text-emerald-500' : 'text-text-faint'}`}>
                   {newCount > 0 ? `+${newCount} new` : '—'}
                 </div>
                 {isSelected && (
@@ -904,9 +904,9 @@ export default function LineListView({
       </div>
 
       {/* Quick Filters */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-3">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-600 uppercase mr-2">Quick Filters:</span>
+          <span className="text-sm font-bold text-text-secondary uppercase mr-2">Quick Filters:</span>
           {quickFilterButtons.map((btn) => (
             <button
               key={btn.id}
@@ -917,7 +917,7 @@ export default function LineListView({
               className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
                 quickFilter === btn.id
                   ? 'bg-cyan-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
               }`}
             >
               {btn.label}
@@ -927,9 +927,9 @@ export default function LineListView({
       </div>
 
       {/* Column Groups */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-3">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-600 uppercase mr-2">Columns:</span>
+          <span className="text-sm font-bold text-text-secondary uppercase mr-2">Columns:</span>
           {COLUMN_GROUPS.map((group) => (
             <button
               key={group.id}
@@ -938,7 +938,7 @@ export default function LineListView({
               className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
                 visibleGroups[group.id]
                   ? 'bg-cyan-100 text-cyan-700 border-2 border-cyan-300'
-                  : 'bg-gray-100 text-gray-500 border-2 border-transparent hover:bg-gray-200'
+                  : 'bg-surface-tertiary text-text-muted border-2 border-transparent hover:bg-surface-tertiary'
               } ${group.id === 'core' ? 'cursor-default' : ''}`}
             >
               {group.label}
@@ -948,17 +948,17 @@ export default function LineListView({
       </div>
 
       {/* Data Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100 border-b-2 border-gray-300">
+              <tr className="bg-surface-tertiary border-b-2 border-border-strong">
                 {visibleColumns.map((col, idx) => (
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className={`px-3 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 ${
-                      idx < 2 ? 'sticky left-0 bg-gray-100 z-10' : ''
+                    className={`px-3 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary ${
+                      idx < 2 ? 'sticky left-0 bg-surface-tertiary z-10' : ''
                     }`}
                     style={{
                       minWidth: col.width,
@@ -978,16 +978,16 @@ export default function LineListView({
                 <tr
                   key={`${row.styleNumber}-${row.color}-${rowIdx}`}
                   onClick={() => onStyleClick(row.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    rowIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
                   {visibleColumns.map((col, colIdx) => (
                     <td
                       key={col.key}
                       className={`px-3 py-3 text-sm ${
                         colIdx < 2 ? 'sticky bg-inherit z-10' : ''
-                      } ${col.key === 'styleNumber' ? 'font-mono font-bold text-gray-900' : 'text-gray-700'}`}
+                      } ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'}`}
                       style={{
                         left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : undefined,
                       }}
@@ -1002,26 +1002,26 @@ export default function LineListView({
         </div>
 
         {/* Pagination */}
-        <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-700">
+        <div className="px-5 py-4 bg-surface-tertiary border-t-2 border-border-strong flex items-center justify-between">
+          <span className="text-sm font-semibold text-text-secondary">
             Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)} of {sortedData.length} {rollUpStyles ? 'styles' : 'SKUs'}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg bg-surface border-2 border-border-strong text-text-secondary hover:bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
               Prev
             </button>
-            <span className="text-sm font-mono text-gray-600">
+            <span className="text-sm font-mono text-text-secondary">
               {currentPage} / {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg bg-white border-2 border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg bg-surface border-2 border-border-strong text-text-secondary hover:bg-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
               <ChevronRight className="w-4 h-4" />

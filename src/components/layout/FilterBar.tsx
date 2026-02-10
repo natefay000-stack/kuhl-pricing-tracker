@@ -28,16 +28,16 @@ export default function FilterBar({
   onCategoryChange,
 }: FilterBarProps) {
   return (
-    <div className="h-12 bg-gray-50 border-b border-gray-200 flex items-center gap-4 px-6 sticky top-14 z-20">
+    <div className="h-12 bg-surface-secondary border-b border-border-primary flex items-center gap-4 px-6 sticky top-14 z-20">
       {/* Season filter */}
       <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <label className="text-xs font-medium text-text-muted uppercase tracking-wide">
           Season:
         </label>
         <select
           value={selectedSeason}
           onChange={(e) => onSeasonChange(e.target.value)}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+          className="px-3 py-1.5 text-sm bg-surface border border-border-strong rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
         >
           <option value="">All</option>
           {seasons.map((s) => (
@@ -50,13 +50,13 @@ export default function FilterBar({
 
       {/* Division filter */}
       <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <label className="text-xs font-medium text-text-muted uppercase tracking-wide">
           Division:
         </label>
         <select
           value={selectedDivision}
           onChange={(e) => onDivisionChange(e.target.value)}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+          className="px-3 py-1.5 text-sm bg-surface border border-border-strong rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
         >
           <option value="">All</option>
           {divisions.map((div) => (
@@ -69,13 +69,13 @@ export default function FilterBar({
 
       {/* Category filter */}
       <div className="flex items-center gap-2">
-        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <label className="text-xs font-medium text-text-muted uppercase tracking-wide">
           Category:
         </label>
         <select
           value={selectedCategory}
           onChange={(e) => onCategoryChange(e.target.value)}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+          className="px-3 py-1.5 text-sm bg-surface border border-border-strong rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
         >
           <option value="">All</option>
           {categories.map((cat) => (

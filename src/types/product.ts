@@ -114,6 +114,7 @@ export interface CostRecord {
   margin: number | null;
   designTeam: string;
   developer: string;
+  costSource?: string; // 'landed_cost' (priority 1) or 'standard_cost' (priority 2)
   createdAt?: string;
 }
 

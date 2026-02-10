@@ -139,27 +139,27 @@ export default function ImportModal({ onImport, onClose }: ImportModalProps) {
           {result && (
             <div className="mt-6">
               {result.success && result.products.length > 0 ? (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5" />
                     <div>
-                      <p className="font-medium text-emerald-800">
+                      <p className="font-medium text-emerald-800 dark:text-emerald-200">
                         Ready to import {result.importedCount.toLocaleString()} products
                       </p>
-                      <p className="text-sm text-emerald-600 mt-1">
+                      <p className="text-sm text-emerald-600 dark:text-emerald-300 mt-1">
                         Parsed {result.rowCount.toLocaleString()} rows from file
                       </p>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                     <div>
-                      <p className="font-medium text-red-800">Import Issues</p>
+                      <p className="font-medium text-red-800 dark:text-red-200">Import Issues</p>
                       {result.errors.length > 0 && (
-                        <ul className="text-sm text-red-600 mt-2 space-y-1">
+                        <ul className="text-sm text-red-600 dark:text-red-300 mt-2 space-y-1">
                           {result.errors.slice(0, 5).map((err, i) => (
                             <li key={i}>• {err}</li>
                           ))}

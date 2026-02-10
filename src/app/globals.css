@@ -9,6 +9,43 @@
   --font-display: 'Supreme', system-ui, sans-serif;
   --font-body: 'Supreme', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* Semantic color tokens — light mode */
+  --color-page-bg: #f0f4f8;
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f9fafb;
+  --color-surface-tertiary: #f3f4f6;
+  --color-text-primary: #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+  --color-border-primary: #e5e7eb;
+  --color-border-secondary: #f3f4f6;
+  --color-border-strong: #d1d5db;
+  --color-hover: #f9fafb;
+  --color-hover-accent: #ecfeff;
+  --color-scrollbar-track: #e2e8f0;
+  --color-scrollbar-thumb: #c4b7a6;
+  --color-scrollbar-thumb-hover: #9c7a5a;
+}
+
+.dark {
+  --color-page-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-secondary: #1e293b;
+  --color-surface-tertiary: #334155;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-faint: #64748b;
+  --color-border-primary: #334155;
+  --color-border-secondary: #1e293b;
+  --color-border-strong: #475569;
+  --color-hover: #334155;
+  --color-hover-accent: #164e63;
+  --color-scrollbar-track: #1e293b;
+  --color-scrollbar-thumb: #475569;
+  --color-scrollbar-thumb-hover: #64748b;
 }
 
 * {
@@ -17,8 +54,8 @@
 
 body {
   font-family: var(--font-body);
-  background-color: #f0f4f8;
-  color: #2d2926;
+  background-color: var(--color-page-bg);
+  color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -35,17 +72,17 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: #e2e8f0;
+  background: var(--color-scrollbar-track);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c4b7a6;
+  background: var(--color-scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9c7a5a;
+  background: var(--color-scrollbar-thumb-hover);
 }
 
 /* Table styles */
@@ -55,9 +92,9 @@ h1, h2, h3, h4, h5, h6 {
 
 .pricing-table th {
   @apply font-display font-semibold text-xs uppercase tracking-wider px-4 py-3 border-b-2 whitespace-nowrap;
-  color: rgba(45, 41, 38, 0.7);
-  border-color: rgba(196, 183, 166, 0.5);
-  background-color: #f0f4f8;
+  color: var(--color-text-muted);
+  border-color: var(--color-border-primary);
+  background-color: var(--color-surface-secondary);
   position: sticky;
   top: 0;
   text-align: left;
@@ -73,7 +110,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .pricing-table td {
   @apply px-4 py-3 align-middle;
-  border-bottom: 1px solid rgba(196, 183, 166, 0.3);
+  border-bottom: 1px solid var(--color-border-secondary);
 }
 
 .pricing-table td[class*="text-right"] {
@@ -86,13 +123,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .pricing-table tbody tr:hover td {
-  background-color: rgba(196, 183, 166, 0.1);
+  background-color: var(--color-hover);
 }
 
 .pricing-table tfoot td {
   @apply font-semibold;
-  background-color: rgba(196, 183, 166, 0.2);
-  border-top: 2px solid rgba(196, 183, 166, 0.5);
+  background-color: var(--color-surface-tertiary);
+  border-top: 2px solid var(--color-border-primary);
 }
 
 /* Ensure numbers are tabular for alignment */
@@ -102,7 +139,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Margin indicators */
 .margin-excellent {
-  @apply text-emerald-700 bg-emerald-50;
+  @apply text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400;
 }
 
 .margin-good {
@@ -110,7 +147,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .margin-fair {
-  @apply text-amber-700 bg-amber-50;
+  @apply text-amber-700 bg-amber-50 dark:bg-amber-950 dark:text-amber-400;
 }
 
 .margin-poor {
@@ -122,7 +159,18 @@ input[type="text"],
 input[type="number"],
 input[type="search"],
 select {
-  @apply font-body bg-white border border-kuhl-sand rounded-lg py-2 text-kuhl-stone focus:outline-none focus:ring-2 focus:ring-kuhl-sage/50 focus:border-kuhl-sage transition-all;
+  @apply font-body border rounded-lg py-2 focus:outline-none focus:ring-2 transition-all;
+  background-color: var(--color-surface);
+  border-color: var(--color-border-primary);
+  color: var(--color-text-primary);
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="search"]:focus,
+select:focus {
+  border-color: #0891b2;
+  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.2);
 }
 
 /* Button styles */
@@ -131,16 +179,27 @@ select {
 }
 
 .btn-secondary {
-  @apply font-display font-medium bg-kuhl-sand/50 text-kuhl-stone px-4 py-2 rounded-lg hover:bg-kuhl-sand transition-colors;
+  @apply font-display font-medium px-4 py-2 rounded-lg transition-colors;
+  background-color: var(--color-surface-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-border-primary);
 }
 
 /* Card styles */
 .card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden;
+  @apply rounded-xl shadow-sm overflow-hidden;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-primary);
 }
 
 .card-header {
-  @apply px-6 py-4 border-b border-gray-200 bg-gray-50 font-semibold text-gray-700;
+  @apply px-6 py-4 font-semibold;
+  border-bottom: 1px solid var(--color-border-primary);
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
 }
 
 .card-body {
@@ -149,15 +208,20 @@ select {
 
 /* Data table styling */
 .data-table {
-  @apply w-full border border-gray-200 rounded-lg overflow-hidden;
+  @apply w-full rounded-lg overflow-hidden;
+  border: 1px solid var(--color-border-primary);
 }
 
 .data-table th {
-  @apply bg-gray-100 border-b border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wide;
+  @apply px-4 py-3 text-left text-xs font-bold uppercase tracking-wide;
+  background-color: var(--color-surface-tertiary);
+  border-bottom: 1px solid var(--color-border-primary);
+  color: var(--color-text-muted);
 }
 
 .data-table td {
-  @apply px-4 py-3 border-b border-gray-100;
+  @apply px-4 py-3;
+  border-bottom: 1px solid var(--color-border-secondary);
 }
 
 .data-table tr:last-child td {
@@ -165,12 +229,17 @@ select {
 }
 
 .data-table tbody tr:hover {
-  @apply bg-gray-50;
+  background-color: var(--color-surface-secondary);
 }
 
 /* Data grid - for label/value pairs with borders */
 .data-grid {
-  @apply border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100;
+  @apply rounded-lg overflow-hidden;
+  border: 1px solid var(--color-border-primary);
+}
+
+.data-grid > * + * {
+  border-top: 1px solid var(--color-border-secondary);
 }
 
 .data-grid-row {
@@ -182,28 +251,37 @@ select {
 }
 
 .data-label {
-  @apply px-4 py-3 text-sm font-medium text-gray-500 bg-gray-50 border-r border-gray-100;
+  @apply px-4 py-3 text-sm font-medium;
+  color: var(--color-text-muted);
+  background-color: var(--color-surface-secondary);
+  border-right: 1px solid var(--color-border-secondary);
 }
 
 .data-value {
-  @apply px-4 py-3 text-sm text-gray-900;
+  @apply px-4 py-3 text-sm;
+  color: var(--color-text-primary);
 }
 
 .data-code {
-  @apply font-mono bg-gray-100 px-2 py-0.5 rounded text-center text-sm;
+  @apply font-mono px-2 py-0.5 rounded text-center text-sm;
+  background-color: var(--color-surface-tertiary);
 }
 
 /* Stat card */
 .stat-card {
-  @apply bg-white rounded-xl p-5 border border-kuhl-sand/30 shadow-sm;
+  @apply rounded-xl p-5 shadow-sm;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-primary);
 }
 
 .stat-value {
-  @apply font-display text-3xl font-bold text-kuhl-stone;
+  @apply font-display text-3xl font-bold;
+  color: var(--color-text-primary);
 }
 
 .stat-label {
-  @apply text-sm text-kuhl-stone/60 font-medium uppercase tracking-wide;
+  @apply text-sm font-medium uppercase tracking-wide;
+  color: var(--color-text-muted);
 }
 
 /* Animation utilities */

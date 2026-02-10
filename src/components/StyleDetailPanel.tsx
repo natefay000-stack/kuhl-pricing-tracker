@@ -137,33 +137,33 @@ export default function StyleDetailPanel({
       />
 
       {/* Panel */}
-      <div className="relative bg-white rounded-t-2xl shadow-2xl border-t border-gray-200 max-h-[70vh] overflow-y-auto">
+      <div className="relative bg-surface rounded-t-2xl shadow-2xl border-t border-border-primary max-h-[70vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-surface border-b border-border-primary px-6 py-4 flex items-center justify-between z-10">
           <div>
             <div className="flex items-center gap-3">
-              <span className="font-mono font-bold text-xl text-gray-900 bg-gray-100 px-3 py-1 rounded">
+              <span className="font-mono font-bold text-xl text-text-primary bg-surface-tertiary px-3 py-1 rounded">
                 {styleNumber}
               </span>
-              <h3 className="font-display font-semibold text-xl text-gray-900">
+              <h3 className="font-display font-semibold text-xl text-text-primary">
                 {styleInfo?.styleDesc || 'Unknown Style'}
               </h3>
             </div>
-            <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+            <div className="flex items-center gap-4 mt-2 text-sm text-text-muted">
               {styleInfo?.divisionDesc && (
-                <span>Division: <span className="text-gray-700">{styleInfo.divisionDesc}</span></span>
+                <span>Division: <span className="text-text-secondary">{styleInfo.divisionDesc}</span></span>
               )}
               {styleInfo?.categoryDesc && (
-                <span>Category: <span className="text-gray-700">{styleInfo.categoryDesc}</span></span>
+                <span>Category: <span className="text-text-secondary">{styleInfo.categoryDesc}</span></span>
               )}
               {styleInfo?.designerName && (
-                <span>Designer: <span className="text-gray-700">{styleInfo.designerName}</span></span>
+                <span>Designer: <span className="text-text-secondary">{styleInfo.designerName}</span></span>
               )}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-text-faint hover:text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -172,15 +172,15 @@ export default function StyleDetailPanel({
         {/* Content */}
         <div className="p-6 grid grid-cols-2 gap-6">
           {/* Pricing by Season */}
-          <div className="bg-gray-50 rounded-xl p-5">
-            <h4 className="font-semibold text-gray-900 mb-4">Pricing by Season</h4>
+          <div className="bg-surface-secondary rounded-xl p-5">
+            <h4 className="font-semibold text-text-primary mb-4">Pricing by Season</h4>
             <div className="space-y-3">
               {pricingBySeason.length > 0 ? (
                 pricingBySeason.map((p, index) => (
                   <div key={p.season} className="flex items-center justify-between">
-                    <span className="font-mono text-sm text-gray-600">{p.season}:</span>
+                    <span className="font-mono text-sm text-text-secondary">{p.season}:</span>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium text-gray-900">
+                      <span className="font-mono font-medium text-text-primary">
                         ${p.price.toFixed(2)}
                       </span>
                       {p.change !== null && (
@@ -197,98 +197,98 @@ export default function StyleDetailPanel({
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-400">No pricing data available</p>
+                <p className="text-sm text-text-faint">No pricing data available</p>
               )}
             </div>
           </div>
 
           {/* Sales by Channel */}
-          <div className="bg-gray-50 rounded-xl p-5">
-            <h4 className="font-semibold text-gray-900 mb-4">Sales by Channel</h4>
+          <div className="bg-surface-secondary rounded-xl p-5">
+            <h4 className="font-semibold text-text-primary mb-4">Sales by Channel</h4>
             <div className="space-y-3">
               {salesByChannel.length > 0 ? (
                 salesByChannel.slice(0, 5).map((s) => (
                   <div key={s.channel} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-text-secondary">
                       {channelLabels[s.channel] || s.channel}:
                     </span>
                     <div className="text-right">
-                      <span className="font-mono text-sm text-gray-900">
+                      <span className="font-mono text-sm text-text-primary">
                         {s.units.toLocaleString()} units
                       </span>
-                      <span className="text-xs text-gray-400 ml-2">
+                      <span className="text-xs text-text-faint ml-2">
                         / {formatCurrencyShort(s.revenue)}
                       </span>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-400">No sales data available</p>
+                <p className="text-sm text-text-faint">No sales data available</p>
               )}
             </div>
           </div>
 
           {/* Colors */}
-          <div className="bg-gray-50 rounded-xl p-5">
-            <h4 className="font-semibold text-gray-900 mb-4">Colors</h4>
+          <div className="bg-surface-secondary rounded-xl p-5">
+            <h4 className="font-semibold text-text-primary mb-4">Colors</h4>
             <div className="flex flex-wrap gap-2">
               {salesByColor.length > 0 ? (
                 salesByColor.map((c) => (
                   <div
                     key={c.color}
-                    className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    className="bg-surface border border-border-primary rounded-lg px-3 py-2 text-sm"
                   >
-                    <span className="font-mono font-medium text-gray-900">{c.color}</span>
-                    <span className="text-gray-400 ml-1">{c.percent.toFixed(0)}%</span>
+                    <span className="font-mono font-medium text-text-primary">{c.color}</span>
+                    <span className="text-text-faint ml-1">{c.percent.toFixed(0)}%</span>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-400">No color data available</p>
+                <p className="text-sm text-text-faint">No color data available</p>
               )}
             </div>
           </div>
 
           {/* Cost/Margin */}
-          <div className="bg-gray-50 rounded-xl p-5">
-            <h4 className="font-semibold text-gray-900 mb-4">Cost / Margin</h4>
+          <div className="bg-surface-secondary rounded-xl p-5">
+            <h4 className="font-semibold text-text-primary mb-4">Cost / Margin</h4>
             {costInfo ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Landed Cost:</span>
-                  <span className="font-mono font-medium text-gray-900">
+                  <span className="text-sm text-text-secondary">Landed Cost:</span>
+                  <span className="font-mono font-medium text-text-primary">
                     ${costInfo.cost.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Wholesale:</span>
-                  <span className="font-mono font-medium text-gray-900">
+                  <span className="text-sm text-text-secondary">Wholesale:</span>
+                  <span className="font-mono font-medium text-text-primary">
                     ${costInfo.wholesale.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Margin:</span>
+                  <span className="text-sm text-text-secondary">Margin:</span>
                   <span
                     className={`font-mono font-bold px-2 py-0.5 rounded ${
                       costInfo.margin >= 50
-                        ? 'bg-emerald-100 text-emerald-700'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                         : costInfo.margin >= 40
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-red-100 text-red-700'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
                     }`}
                   >
                     {costInfo.margin.toFixed(1)}%
                   </span>
                 </div>
                 {costInfo.factory && (
-                  <div className="pt-2 border-t border-gray-200">
-                    <span className="text-xs text-gray-400">
+                  <div className="pt-2 border-t border-border-primary">
+                    <span className="text-xs text-text-faint">
                       Factory: {costInfo.factory} ({costInfo.coo})
                     </span>
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-400">No cost data available</p>
+              <p className="text-sm text-text-faint">No cost data available</p>
             )}
           </div>
         </div>

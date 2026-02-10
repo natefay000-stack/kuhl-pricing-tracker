@@ -59,6 +59,7 @@ export interface LandedCostItem {
   designTeam: string;
   developer: string;
   dateRequested: number; // Excel serial date - higher = more recent
+  costSource: 'landed_cost' | 'standard_cost'; // Priority: landed_cost > standard_cost
 }
 
 export interface ImportedSalesItem {
@@ -233,37 +234,81 @@ export function parseLandedSheetXLSX(buffer: ArrayBuffer): LandedCostItem[] {
     ? 'LDP Requests'
     : workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
+  const isLDPSheet = sheetName === 'LDP Requests';
 
-  // Start from row 11 (0-indexed row 10) where data begins
-  const rows = XLSX.utils.sheet_to_json(sheet, { range: 10, defval: '' }) as Record<string, unknown>[];
+  // LDP Requests sheets have data starting at row 11 (0-indexed row 10)
+  // Standard cost files have headers in row 1
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    range: isLDPSheet ? 10 : undefined,
+    defval: '',
+  }) as Record<string, unknown>[];
+
+  console.log(`Parsing cost file: sheet="${sheetName}", isLDP=${isLDPSheet}, rows=${rows.length}`);
+  if (rows.length > 0) {
+    console.log('Cost file columns:', Object.keys(rows[0]));
+  }
+
+  // Detect if this is a Cost History sheet (has 'Total Cost', 'Std Cost', 'GP %' columns)
+  const sampleHeaders = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const headerLower = sampleHeaders.map(h => h.toLowerCase());
+  const isCostHistory = headerLower.includes('total cost') || headerLower.includes('std cost') || headerLower.includes('gp %');
+
+  if (isCostHistory) {
+    console.log('Detected Cost History sheet format');
+  }
 
   const allCosts = rows
     .filter(row => {
-      const styleNumber = parseString(row['Style #'] || row['Style']);
+      const styleNumber = parseString(
+        getColumn(row, 'Style #', 'Style', 'Style#', 'Style Number')
+      );
       return styleNumber && styleNumber.length > 0;
     })
     .map((row) => {
-      const rawSeason = parseString(row['Season']);
+      const rawSeason = parseString(getColumn(row, 'Season', 'Seas'));
       const season = normalizeSeasonCode(rawSeason);
 
+      // FOB: use FOB, or Total Cost (from Cost History = Fab + Trim + Process)
+      const fob = parseNumber(getColumn(row, 'FOB', 'Total Cost'));
+
+      // Landed: use Landed/LDP, or Std Cost (from Cost History = landed equivalent)
+      const landed = parseNumber(getColumn(row, 'Landed', 'LDP', 'Landed Cost', 'Std Cost'));
+
+      // Wholesale: Suggested Selling Price, Price (from Cost History), or Wholesale
+      const suggestedWholesale = parseNumber(getColumn(row, 'Suggested Selling Price', 'Price', 'Wholesale', 'Sugg Wholesale'));
+
+      // Margin: Margin or GP % (from Cost History)
+      const marginRaw = parseNumber(getColumn(row, 'Margin', 'GP %'));
+
+      // Factory: Factory, Vendor Name, or Vendor Name (Style) from Cost History
+      const factory = parseString(
+        getColumn(row, 'Factory', 'Vendor Name', 'Vendor', 'Vendor Name (Style)', 'Vendor (Style)')
+      );
+
+      // COO: COO, Country Desc, Style COO from Cost History
+      const countryOfOrigin = parseString(
+        getColumn(row, 'COO', 'COO Description', 'Country', 'Country of Origin', 'Country Desc', 'Style COO')
+      );
+
       return {
-        styleNumber: parseString(row['Style #'] || row['Style']),
-        styleName: parseString(row['Style Name'] || row['Description']),
+        styleNumber: parseString(getColumn(row, 'Style #', 'Style', 'Style#', 'Style Number')),
+        styleName: parseString(getColumn(row, 'Style Name', 'Style Desc', 'Description')),
         season,
-        factory: parseString(row['Factory']),
-        countryOfOrigin: parseString(row['COO'] || row['Country']),
-        fob: parseNumber(row['FOB']),
-        landed: parseNumber(row['Landed'] || row['LDP']),
-        dutyCost: parseNumber(row['Duty Cost $'] || row['Duty']),
-        tariffCost: parseNumber(row['Tariff  Cost $'] || row['Tariff Cost $']),
-        freightCost: parseNumber(row['Freight Cost'] || row['Freight']),
-        overheadCost: parseNumber(row['Overhead Cost'] || row['Overhead']),
-        suggestedWholesale: parseNumber(row['Suggested Selling Price'] || row['Wholesale']),
-        suggestedMsrp: parseNumber(row['Suggested MSRP'] || row['MSRP']),
-        margin: parseNumber(row['Margin']),
-        designTeam: parseString(row['Design Team']),
-        developer: parseString(row['Developer/ Designer'] || row['Developer']),
-        dateRequested: parseNumber(row['Date Requested']), // Excel serial date
+        factory,
+        countryOfOrigin,
+        fob,
+        landed,
+        dutyCost: parseNumber(getColumn(row, 'Duty Cost $', 'Duty Cost', 'Duty')),
+        tariffCost: parseNumber(getColumn(row, 'Tariff Cost $', 'Tariff  Cost $', 'Tariff Cost', 'Tariff')),
+        freightCost: parseNumber(getColumn(row, 'Freight Cost', 'Freight')),
+        overheadCost: parseNumber(getColumn(row, 'Overhead Cost', 'Overhead')),
+        suggestedWholesale,
+        suggestedMsrp: parseNumber(getColumn(row, 'Suggested MSRP', 'MSRP', 'Sugg MSRP')),
+        margin: marginRaw,
+        designTeam: parseString(getColumn(row, 'Design Team')),
+        developer: parseString(getColumn(row, 'Developer/ Designer', 'Developer', 'Developer/Designer')),
+        dateRequested: parseNumber(getColumn(row, 'Date Requested')), // Excel serial date
+        costSource: isCostHistory ? 'standard_cost' as const : 'landed_cost' as const,
       };
     });
 

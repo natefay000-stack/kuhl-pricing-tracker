@@ -163,6 +163,7 @@ export async function POST(request: NextRequest) {
             suggestedMsrp: item.suggestedMsrp ? Number(item.suggestedMsrp) : null,
             suggestedWholesale: item.suggestedWholesale ? Number(item.suggestedWholesale) : null,
             margin: item.margin ? Number(item.margin) : null,
+            costSource: item.costSource ? String(item.costSource) : null,
           }));
           await prisma.cost.createMany({ data: batch, skipDuplicates: true });
           count += batch.length;

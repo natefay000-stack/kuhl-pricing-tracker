@@ -518,17 +518,17 @@ export default function SmartImportModal({
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl"
+          className="bg-surface rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+          <div className="px-6 py-4 border-b flex items-center justify-between bg-surface-secondary">
             <h2 className="text-xl font-bold">
               {multiFileState === 'complete' ? 'Import Complete' : 'Import Sales Data'}
             </h2>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              className="p-2 hover:bg-surface-tertiary rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -539,19 +539,19 @@ export default function SmartImportModal({
             {/* Queue State */}
             {multiFileState === 'queue' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-text-secondary">
                   <span className="font-semibold">{multiFiles.length} files</span> detected as Sales Data
                 </p>
 
                 {/* File List */}
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-100">
+                    <thead className="bg-surface-tertiary">
                       <tr>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">File</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700 w-24">Season</th>
-                        <th className="px-4 py-2 text-right font-semibold text-gray-700 w-28">Records</th>
-                        <th className="px-4 py-2 text-center font-semibold text-gray-700 w-24">Status</th>
+                        <th className="px-4 py-2 text-left font-semibold text-text-secondary">File</th>
+                        <th className="px-4 py-2 text-left font-semibold text-text-secondary w-24">Season</th>
+                        <th className="px-4 py-2 text-right font-semibold text-text-secondary w-28">Records</th>
+                        <th className="px-4 py-2 text-center font-semibold text-text-secondary w-24">Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -561,16 +561,16 @@ export default function SmartImportModal({
                             <div className="flex items-center gap-2">
                               <FileSpreadsheet className="w-4 h-4 text-cyan-600 flex-shrink-0" />
                               <span className="font-medium truncate">{item.filename}</span>
-                              <span className="text-xs text-gray-400">{item.fileSize}</span>
+                              <span className="text-xs text-text-faint">{item.fileSize}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3">
                             {item.season ? (
-                              <span className="px-2 py-1 bg-cyan-100 text-cyan-800 text-xs font-semibold rounded">
+                              <span className="px-2 py-1 bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-200 text-xs font-semibold rounded">
                                 {item.season}
                               </span>
                             ) : (
-                              <span className="text-gray-400">—</span>
+                              <span className="text-text-faint">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right font-mono">
@@ -578,7 +578,7 @@ export default function SmartImportModal({
                           </td>
                           <td className="px-4 py-3 text-center">
                             {item.status === 'pending' && (
-                              <span className="text-gray-400">Pending</span>
+                              <span className="text-text-faint">Pending</span>
                             )}
                             {item.status === 'detecting' && (
                               <Loader2 className="w-4 h-4 mx-auto text-cyan-500 animate-spin" />
@@ -596,7 +596,7 @@ export default function SmartImportModal({
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-gray-50 font-semibold">
+                    <tfoot className="bg-surface-secondary font-semibold">
                       <tr className="border-t-2">
                         <td className="px-4 py-3">TOTAL</td>
                         <td className="px-4 py-3"></td>
@@ -611,12 +611,12 @@ export default function SmartImportModal({
 
                 {/* Replace Mode Warning */}
                 {multiFileReadyCount > 0 && (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-amber-800">REPLACE MODE</p>
-                        <p className="text-sm text-amber-700 mt-1">
+                        <p className="font-semibold text-amber-800 dark:text-amber-200">REPLACE MODE</p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
                           This will delete all existing sales data for these seasons ({multiFileSeasons.join(', ')}) and import fresh.
                         </p>
                       </div>
@@ -626,9 +626,9 @@ export default function SmartImportModal({
 
                 {/* Error Display */}
                 {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                  <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-700">{error}</p>
+                    <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                   </div>
                 )}
               </div>
@@ -637,12 +637,12 @@ export default function SmartImportModal({
             {/* Importing State */}
             {multiFileState === 'importing' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-600 mb-4">Importing...</p>
+                <p className="text-sm text-text-secondary mb-4">Importing...</p>
 
                 {/* Progress List */}
                 <div className="space-y-2">
                   {multiFiles.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-surface-secondary rounded-lg">
                       <div className="w-6 flex-shrink-0">
                         {item.status === 'complete' && (
                           <CheckCircle className="w-5 h-5 text-green-500" />
@@ -651,7 +651,7 @@ export default function SmartImportModal({
                           <Loader2 className="w-5 h-5 text-cyan-500 animate-spin" />
                         )}
                         {item.status === 'ready' && (
-                          <Clock className="w-5 h-5 text-gray-400" />
+                          <Clock className="w-5 h-5 text-text-faint" />
                         )}
                         {item.status === 'error' && (
                           <AlertCircle className="w-5 h-5 text-red-500" />
@@ -660,7 +660,7 @@ export default function SmartImportModal({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-sm">{item.season}</span>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-text-muted">
                             {item.status === 'complete'
                               ? `${item.importedCount?.toLocaleString()} records`
                               : item.status === 'importing'
@@ -671,7 +671,7 @@ export default function SmartImportModal({
                           </span>
                         </div>
                         {item.status === 'importing' && (
-                          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                          <div className="w-full bg-surface-tertiary rounded-full h-1.5 mt-1">
                             <div
                               className="bg-cyan-500 h-1.5 rounded-full transition-all duration-300"
                               style={{ width: `${item.progress}%` }}
@@ -689,10 +689,10 @@ export default function SmartImportModal({
             {multiFileState === 'complete' && (
               <div className="text-center py-6">
                 <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
+                <p className="text-lg font-medium text-text-primary mb-2">
                   Import Successful
                 </p>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-text-secondary">
                   Successfully imported {multiFileTotalRecords.toLocaleString()} sales records across {multiFileCompleteCount} seasons
                 </p>
               </div>
@@ -700,12 +700,12 @@ export default function SmartImportModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50">
+          <div className="px-6 py-4 border-t flex justify-end gap-3 bg-surface-secondary">
             {multiFileState === 'queue' && (
               <>
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-4 py-2 text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -740,17 +740,17 @@ export default function SmartImportModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl"
+        className="bg-surface rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b flex items-center justify-between bg-gray-50">
+        <div className="px-6 py-4 border-b flex items-center justify-between bg-surface-secondary">
           <h2 className="text-xl font-bold">
             {state === 'complete' ? 'Import Complete' : 'Import Data'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            className="p-2 hover:bg-surface-tertiary rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -764,7 +764,7 @@ export default function SmartImportModal({
               className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
                 isDragging
                   ? 'border-cyan-500 bg-cyan-50'
-                  : 'border-gray-300 hover:border-gray-400'
+                  : 'border-border-strong hover:border-border-strong'
               }`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -778,11 +778,11 @@ export default function SmartImportModal({
                 className="hidden"
                 onChange={handleFileInputChange}
               />
-              <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-cyan-500' : 'text-gray-400'}`} />
-              <p className="text-lg font-medium text-gray-700 mb-2">
+              <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-cyan-500' : 'text-text-faint'}`} />
+              <p className="text-lg font-medium text-text-secondary mb-2">
                 Drop your Excel file(s) here
               </p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-text-muted mb-4">
                 or click to browse
               </p>
               <button
@@ -791,7 +791,7 @@ export default function SmartImportModal({
               >
                 Select File(s)
               </button>
-              <p className="text-xs text-gray-400 mt-4">
+              <p className="text-xs text-text-faint mt-4">
                 Supports Line List, Sales, Costs, and Pricing files
               </p>
               <p className="text-xs text-cyan-600 mt-1">
@@ -804,10 +804,10 @@ export default function SmartImportModal({
           {state === 'detecting' && (
             <div className="text-center py-8">
               <Loader2 className="w-12 h-12 mx-auto mb-4 text-cyan-500 animate-spin" />
-              <p className="text-lg font-medium text-gray-700">
+              <p className="text-lg font-medium text-text-secondary">
                 Analyzing file...
               </p>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-text-muted mt-2">
                 {selectedFile?.name}
               </p>
             </div>
@@ -817,13 +817,13 @@ export default function SmartImportModal({
           {state === 'confirm' && detection && (
             <div className="space-y-4">
               {/* File Info */}
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-surface-secondary rounded-lg">
                 <FileSpreadsheet className="w-8 h-8 text-cyan-600 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 truncate">
+                  <p className="font-medium text-text-primary truncate">
                     {detection.filename}
                   </p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-text-muted">
                     {detection.fileSize} &middot; {detection.recordCount.toLocaleString()} records
                   </p>
                 </div>
@@ -831,7 +831,7 @@ export default function SmartImportModal({
 
               {/* Detected Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-text-secondary mb-2">
                   File Type
                   {detection.confidence === 'high' && (
                     <span className="ml-2 text-xs text-green-600 font-normal">
@@ -846,7 +846,7 @@ export default function SmartImportModal({
                       className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
                         selectedType === type
                           ? 'border-cyan-500 bg-cyan-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                          : 'border-border-primary hover:border-border-strong'
                       }`}
                     >
                       <input
@@ -861,7 +861,7 @@ export default function SmartImportModal({
                         className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
                           selectedType === type
                             ? 'border-cyan-500'
-                            : 'border-gray-300'
+                            : 'border-border-strong'
                         }`}
                       >
                         {selectedType === type && (
@@ -879,7 +879,7 @@ export default function SmartImportModal({
               {/* Season Selector (for Line List) */}
               {needsSeason && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
                     Season
                     {detection.detectedSeason && detection.detectedSeason === selectedSeason && (
                       <span className="ml-2 text-xs text-green-600 font-normal">
@@ -891,7 +891,7 @@ export default function SmartImportModal({
                     <select
                       value={selectedSeason}
                       onChange={e => setSelectedSeason(e.target.value)}
-                      className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg appearance-none focus:border-cyan-500 focus:outline-none"
+                      className="w-full px-3 py-2 border-2 border-border-strong rounded-lg appearance-none focus:border-cyan-500 focus:outline-none"
                     >
                       {AVAILABLE_SEASONS.map(opt => (
                         <option key={opt.value} value={opt.value}>
@@ -900,7 +900,7 @@ export default function SmartImportModal({
                         </option>
                       ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint pointer-events-none" />
                   </div>
                 </div>
               )}
@@ -908,14 +908,14 @@ export default function SmartImportModal({
               {/* Matched Columns */}
               {detection.matchedColumns.length > 0 && (
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">
+                  <p className="text-sm font-medium text-text-secondary mb-2">
                     Matched Columns ({detection.matchedColumns.length})
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {detection.matchedColumns.map((col, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs rounded"
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200 text-xs rounded"
                       >
                         <CheckCircle className="w-3 h-3" />
                         {col}
@@ -929,7 +929,7 @@ export default function SmartImportModal({
               <div>
                 <button
                   onClick={() => setShowPreview(!showPreview)}
-                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                  className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary"
                 >
                   {showPreview ? (
                     <EyeOff className="w-4 h-4" />
@@ -941,7 +941,7 @@ export default function SmartImportModal({
                 {showPreview && detection.previewRows.length > 0 && (
                   <div className="mt-2 overflow-x-auto">
                     <table className="min-w-full text-xs border rounded">
-                      <thead className="bg-gray-100">
+                      <thead className="bg-surface-tertiary">
                         <tr>
                           {Object.keys(detection.previewRows[0]).slice(0, 6).map((key, i) => (
                             <th key={i} className="px-2 py-1 text-left font-medium truncate max-w-[100px]">
@@ -949,7 +949,7 @@ export default function SmartImportModal({
                             </th>
                           ))}
                           {Object.keys(detection.previewRows[0]).length > 6 && (
-                            <th className="px-2 py-1 text-left font-medium text-gray-400">
+                            <th className="px-2 py-1 text-left font-medium text-text-faint">
                               +{Object.keys(detection.previewRows[0]).length - 6} more
                             </th>
                           )}
@@ -973,9 +973,9 @@ export default function SmartImportModal({
 
               {/* Error Display */}
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                 </div>
               )}
             </div>
@@ -984,16 +984,16 @@ export default function SmartImportModal({
           {/* Importing State */}
           {state === 'importing' && (
             <div className="text-center py-8">
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+              <div className="w-full bg-surface-tertiary rounded-full h-3 mb-4 overflow-hidden">
                 <div
                   className="bg-cyan-500 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${importProgress}%` }}
                 />
               </div>
-              <p className="text-lg font-medium text-gray-700">
+              <p className="text-lg font-medium text-text-secondary">
                 Importing...
               </p>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-text-muted mt-2">
                 {importProgress < 50 ? 'Parsing file...' : importProgress < 80 ? 'Processing records...' : 'Saving data...'}
               </p>
             </div>
@@ -1003,10 +1003,10 @@ export default function SmartImportModal({
           {state === 'complete' && importResult && (
             <div className="text-center py-6">
               <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
-              <p className="text-lg font-medium text-gray-900 mb-2">
+              <p className="text-lg font-medium text-text-primary mb-2">
                 Import Successful
               </p>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-text-secondary">
                 {importResult.summary}
               </p>
             </div>
@@ -1014,11 +1014,11 @@ export default function SmartImportModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t flex justify-end gap-3 bg-gray-50">
+        <div className="px-6 py-4 border-t flex justify-end gap-3 bg-surface-secondary">
           {state === 'drop' && (
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              className="px-4 py-2 text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
             >
               Cancel
             </button>
@@ -1028,7 +1028,7 @@ export default function SmartImportModal({
             <>
               <button
                 onClick={handleReset}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                className="px-4 py-2 text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
               >
                 Back
               </button>

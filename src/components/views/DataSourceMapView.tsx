@@ -8,50 +8,50 @@ export default function DataSourceMapView() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-display font-bold text-gray-900 tracking-tight">
+        <h1 className="text-4xl font-display font-bold text-text-primary tracking-tight">
           KÜHL <span className="text-blue-600">Data Source Map</span>
         </h1>
-        <p className="text-base text-gray-500 mt-2">
+        <p className="text-base text-text-muted mt-2">
           Where each field comes from across all data sources. Blue = primary source of truth. Green = secondary/fallback source.
         </p>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-6 bg-white rounded-xl border-2 border-gray-200 p-5">
+      <div className="flex flex-wrap gap-6 bg-surface rounded-xl border-2 border-border-primary p-5">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-7 rounded-md bg-blue-100 border-2 border-blue-600 flex items-center justify-center">
+          <div className="w-8 h-7 rounded-md bg-blue-100 dark:bg-blue-900 border-2 border-blue-600 flex items-center justify-center">
             <CheckCircle className="w-4 h-4 text-blue-600" />
           </div>
-          <span className="text-sm font-semibold text-gray-700">1st Source of Truth</span>
+          <span className="text-sm font-semibold text-text-secondary">1st Source of Truth</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-7 rounded-md bg-emerald-100 border-2 border-emerald-600 flex items-center justify-center">
+          <div className="w-8 h-7 rounded-md bg-emerald-100 dark:bg-emerald-900 border-2 border-emerald-600 flex items-center justify-center">
             <CheckCircle className="w-4 h-4 text-emerald-600" />
           </div>
-          <span className="text-sm font-semibold text-gray-700">2nd Source (Fallback)</span>
+          <span className="text-sm font-semibold text-text-secondary">2nd Source (Fallback)</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-7 rounded-md bg-gray-100 border border-gray-300 flex items-center justify-center">
-            <Circle className="w-4 h-4 text-gray-400" />
+          <div className="w-8 h-7 rounded-md bg-surface-tertiary border border-border-strong flex items-center justify-center">
+            <Circle className="w-4 h-4 text-text-faint" />
           </div>
-          <span className="text-sm font-semibold text-gray-700">Has Data</span>
+          <span className="text-sm font-semibold text-text-secondary">Has Data</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-7 rounded-md bg-white border border-gray-300 flex items-center justify-center">
+          <div className="w-8 h-7 rounded-md bg-surface border border-border-strong flex items-center justify-center">
             <XCircle className="w-4 h-4 text-gray-300" />
           </div>
-          <span className="text-sm font-semibold text-gray-700">No Data</span>
+          <span className="text-sm font-semibold text-text-secondary">No Data</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-7 rounded-md bg-red-100 border-2 border-red-500 flex items-center justify-center">
+          <div className="w-8 h-7 rounded-md bg-red-100 dark:bg-red-900 border-2 border-red-500 flex items-center justify-center">
             <AlertTriangle className="w-4 h-4 text-red-500" />
           </div>
-          <span className="text-sm font-semibold text-gray-700">No Source of Truth</span>
+          <span className="text-sm font-semibold text-text-secondary">No Source of Truth</span>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
+      <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -325,27 +325,27 @@ export default function DataSourceMapView() {
 
               {/* Section: Derived / Margin */}
               <SectionRow title="Derived / Margin" />
-              <tr className="border-b border-gray-200">
-                <td className="px-6 py-3 text-sm font-semibold text-gray-900 font-mono">
+              <tr className="border-b border-border-primary">
+                <td className="px-6 py-3 text-sm font-semibold text-text-primary font-mono">
                   Margin %
                 </td>
-                <td colSpan={6} className="px-6 py-3 text-sm text-gray-600 italic">
+                <td colSpan={6} className="px-6 py-3 text-sm text-text-secondary italic">
                   Calculated: (Net Price − Landed Cost) ÷ Net Price — requires Sales + Landed Sheet
                 </td>
               </tr>
-              <tr className="border-b border-gray-200">
-                <td className="px-6 py-3 text-sm font-semibold text-gray-900 font-mono">
+              <tr className="border-b border-border-primary">
+                <td className="px-6 py-3 text-sm font-semibold text-text-primary font-mono">
                   Gross Profit
                 </td>
-                <td colSpan={6} className="px-6 py-3 text-sm text-gray-600 italic">
+                <td colSpan={6} className="px-6 py-3 text-sm text-text-secondary italic">
                   Calculated: Revenue − (Landed Cost × Units) — requires Sales + Landed Sheet
                 </td>
               </tr>
-              <tr className="border-b border-gray-200">
-                <td className="px-6 py-3 text-sm font-semibold text-gray-900 font-mono">
+              <tr className="border-b border-border-primary">
+                <td className="px-6 py-3 text-sm font-semibold text-text-primary font-mono">
                   Rev / Style
                 </td>
-                <td colSpan={6} className="px-6 py-3 text-sm text-gray-600 italic">
+                <td colSpan={6} className="px-6 py-3 text-sm text-text-secondary italic">
                   Calculated: Total Revenue ÷ Distinct Style Count — from Sales only
                 </td>
               </tr>
@@ -425,8 +425,8 @@ export default function DataSourceMapView() {
 // Helper Components
 function SectionRow({ title }: { title: string }) {
   return (
-    <tr className="bg-gray-100">
-      <td colSpan={7} className="px-6 py-2 text-xs font-bold text-gray-700 uppercase tracking-wider">
+    <tr className="bg-surface-tertiary">
+      <td colSpan={7} className="px-6 py-2 text-xs font-bold text-text-secondary uppercase tracking-wider">
         {title}
       </td>
     </tr>
@@ -440,8 +440,8 @@ interface CellData {
 
 function DataRow({ field, cells }: { field: string; cells: CellData[] }) {
   return (
-    <tr className="border-b border-gray-200 hover:bg-gray-50">
-      <td className="px-6 py-3 text-sm font-semibold text-gray-900 font-mono">
+    <tr className="border-b border-border-primary hover:bg-hover">
+      <td className="px-6 py-3 text-sm font-semibold text-text-primary font-mono">
         {field}
       </td>
       {cells.map((cell, idx) => (
@@ -465,11 +465,11 @@ function DataRow({ field, cells }: { field: string; cells: CellData[] }) {
 
 function Cell({ type }: { type: 'primary' | 'secondary' | 'has' | 'none' | 'gap' }) {
   const styles = {
-    primary: 'bg-blue-100 border-2 border-blue-600 text-blue-600',
-    secondary: 'bg-emerald-100 border-2 border-emerald-600 text-emerald-600',
-    has: 'bg-gray-100 border border-gray-300 text-gray-400',
-    none: 'bg-white border border-gray-300 text-gray-300',
-    gap: 'bg-red-100 border-2 border-red-500 text-red-500',
+    primary: 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-600 text-blue-600',
+    secondary: 'bg-emerald-100 dark:bg-emerald-900 border-2 border-emerald-600 text-emerald-600',
+    has: 'bg-surface-tertiary border border-border-strong text-text-faint',
+    none: 'bg-surface border border-border-strong text-gray-300',
+    gap: 'bg-red-100 dark:bg-red-900 border-2 border-red-500 text-red-500',
   };
 
   const icons = {

@@ -216,77 +216,77 @@ export default function DashboardView({
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-4xl font-display font-bold text-gray-900">
+        <h2 className="text-4xl font-display font-bold text-text-primary">
           Season Dashboard: {selectedSeason || 'All'}
         </h2>
-        <p className="text-base text-gray-500 mt-2">
+        <p className="text-base text-text-muted mt-2">
           Overview of sales performance and key metrics
         </p>
       </div>
 
       {/* Data Sources Legend */}
-      <SourceLegend sources={['sales', 'landed', 'linelist']} className="bg-white rounded-xl border border-gray-200 p-4" />
+      <SourceLegend sources={['sales', 'landed', 'linelist']} className="bg-surface rounded-xl border border-border-primary p-4" />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-5">
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
+        <div className="bg-surface rounded-xl border border-border-strong p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
               <DollarSign className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 {formatCurrencyShort(stats.totalRevenue)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Revenue
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
+        <div className="bg-surface rounded-xl border border-border-strong p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
               <Package className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 {formatNumber(stats.totalUnits)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Units
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
+        <div className="bg-surface rounded-xl border border-border-strong p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
               <TrendingUp className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 {formatPercent(stats.margin)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Margin
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-300 p-6 shadow-sm">
+        <div className="bg-surface rounded-xl border border-border-strong p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
               <Layers className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 {formatNumber(stats.uniqueStyles)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Styles
               </p>
             </div>
@@ -297,9 +297,9 @@ export default function DashboardView({
       {/* Two Column Row */}
       <div className="grid grid-cols-2 gap-6">
         {/* By Category */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Category</h3>
+        <div className="bg-surface rounded-xl border border-border-strong shadow-sm">
+          <div className="px-6 py-4 border-b border-border-strong">
+            <h3 className="text-xl font-bold text-text-primary">By Category</h3>
           </div>
           <div className="p-6 space-y-4">
             {salesByCategory.map(([category, revenue]) => {
@@ -307,14 +307,14 @@ export default function DashboardView({
               const width = (revenue / maxRevenue) * 100;
               return (
                 <div key={category} className="flex items-center gap-4">
-                  <div className="w-32 text-base text-gray-700 truncate font-medium">{category}</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                  <div className="w-32 text-base text-text-secondary truncate font-medium">{category}</div>
+                  <div className="flex-1 bg-surface-tertiary rounded-full h-3 overflow-hidden">
                     <div
                       className="bg-cyan-500 h-full rounded-full transition-all"
                       style={{ width: `${width}%` }}
                     />
                   </div>
-                  <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
+                  <div className="w-20 text-right text-base font-mono font-semibold text-text-primary">
                     {formatCurrencyShort(revenue)}
                   </div>
                 </div>
@@ -324,9 +324,9 @@ export default function DashboardView({
         </div>
 
         {/* By Gender */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
+        <div className="bg-surface rounded-xl border border-border-strong shadow-sm">
+          <div className="px-6 py-4 border-b border-border-strong">
+            <h3 className="text-xl font-bold text-text-primary">By Gender</h3>
           </div>
           <div className="p-6 space-y-4">
             {salesByGender.map(({ gender, revenue, percent }) => (
@@ -340,16 +340,16 @@ export default function DashboardView({
                 >
                   {gender}
                 </div>
-                <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div className="flex-1 bg-surface-tertiary rounded-full h-3 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{ width: `${percent}%`, backgroundColor: genderColors[gender] || '#6b7280' }}
                   />
                 </div>
-                <div className="w-16 text-right text-base font-mono text-gray-500">
+                <div className="w-16 text-right text-base font-mono text-text-muted">
                   {formatPercent(percent)}
                 </div>
-                <div className="w-20 text-right text-base font-mono font-semibold text-gray-900">
+                <div className="w-20 text-right text-base font-mono font-semibold text-text-primary">
                   {formatCurrencyShort(revenue)}
                 </div>
               </div>
@@ -359,9 +359,9 @@ export default function DashboardView({
       </div>
 
       {/* Costs Summary */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-300">
-          <h3 className="text-xl font-bold text-gray-900">
+      <div className="bg-surface rounded-xl border border-border-strong shadow-sm">
+        <div className="px-6 py-4 border-b border-border-strong">
+          <h3 className="text-xl font-bold text-text-primary">
             Cost Analysis {selectedSeason ? `(${selectedSeason})` : '(All Seasons)'}
           </h3>
         </div>
@@ -369,30 +369,30 @@ export default function DashboardView({
           <div className="grid grid-cols-4 gap-6">
             {/* Styles with Costs */}
             <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 {formatNumber(costStats.totalStyles)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Styles with Costs
               </p>
             </div>
 
             {/* Avg FOB */}
             <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 ${costStats.avgFob.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Avg FOB
               </p>
             </div>
 
             {/* Avg Landed */}
             <div className="text-center">
-              <p className="text-3xl font-bold font-mono text-gray-900">
+              <p className="text-3xl font-bold font-mono text-text-primary">
                 ${costStats.avgLanded.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Avg Landed
               </p>
             </div>
@@ -406,7 +406,7 @@ export default function DashboardView({
               }`}>
                 {formatPercent(costStats.avgMargin)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide mt-1">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Avg Margin
               </p>
             </div>
@@ -414,30 +414,30 @@ export default function DashboardView({
 
           {/* Margin Distribution */}
           {costStats.totalStyles > 0 && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm font-bold text-gray-600 uppercase tracking-wide mb-3">
+            <div className="mt-6 pt-6 border-t border-border-primary">
+              <p className="text-sm font-bold text-text-secondary uppercase tracking-wide mb-3">
                 Margin Distribution
               </p>
               <div className="flex gap-4">
-                <div className="flex-1 bg-emerald-50 rounded-lg p-3 text-center">
+                <div className="flex-1 bg-emerald-50 dark:bg-emerald-950 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold font-mono text-emerald-700">
                     {costStats.marginBuckets.excellent}
                   </p>
                   <p className="text-xs font-semibold text-emerald-600 mt-1">50%+ Excellent</p>
                 </div>
-                <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
+                <div className="flex-1 bg-amber-50 dark:bg-amber-950 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold font-mono text-amber-700">
                     {costStats.marginBuckets.good}
                   </p>
                   <p className="text-xs font-semibold text-amber-600 mt-1">45-50% Good</p>
                 </div>
-                <div className="flex-1 bg-orange-50 rounded-lg p-3 text-center">
+                <div className="flex-1 bg-orange-50 dark:bg-orange-950 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold font-mono text-orange-700">
                     {costStats.marginBuckets.fair}
                   </p>
                   <p className="text-xs font-semibold text-orange-600 mt-1">40-45% Fair</p>
                 </div>
-                <div className="flex-1 bg-red-50 rounded-lg p-3 text-center">
+                <div className="flex-1 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold font-mono text-red-700">
                     {costStats.marginBuckets.poor}
                   </p>
@@ -450,31 +450,31 @@ export default function DashboardView({
       </div>
 
       {/* Top Styles Table */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-300 bg-gray-100 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Top Styles</h3>
-          <span className="text-sm text-gray-500 font-medium">Click row for details</span>
+      <div className="bg-surface rounded-xl border border-border-strong shadow-sm">
+        <div className="px-6 py-4 border-b border-border-strong bg-surface-tertiary flex items-center justify-between">
+          <h3 className="text-xl font-bold text-text-primary">Top Styles</h3>
+          <span className="text-sm text-text-muted font-medium">Click row for details</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b-2 border-gray-300 text-left bg-gray-100">
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
+              <tr className="border-b-2 border-border-strong text-left bg-surface-tertiary">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide border-r border-border-primary">
                   Style
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide border-r border-border-primary">
                   Description
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   Units
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   Revenue
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   Margin
                 </th>
-                <th className="px-4 py-3 w-10 border-l border-gray-200"></th>
+                <th className="px-4 py-3 w-10 border-l border-border-primary"></th>
               </tr>
             </thead>
             <tbody>
@@ -482,39 +482,39 @@ export default function DashboardView({
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
-                  <td className="px-4 py-4 border-r border-gray-200">
-                    <span className="font-mono text-lg font-bold text-gray-900">
+                  <td className="px-4 py-4 border-r border-border-primary">
+                    <span className="font-mono text-lg font-bold text-text-primary">
                       {style.styleNumber}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base text-gray-700 max-w-xs truncate border-r border-gray-200">
+                  <td className="px-4 py-4 text-base text-text-secondary max-w-xs truncate border-r border-border-primary">
                     {style.styleDesc}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-medium text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-medium text-text-primary text-right border-l border-border-primary">
                     {formatNumber(style.units)}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-bold text-text-primary text-right border-l border-border-primary">
                     {formatCurrencyShort(style.revenue)}
                   </td>
-                  <td className="px-4 py-4 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-right border-l border-border-primary">
                     <span
                       className={`text-base font-mono font-bold px-3 py-1 rounded ${
                         style.margin >= 50
-                          ? 'bg-emerald-100 text-emerald-700'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400'
                           : style.margin >= 40
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-red-100 text-red-700'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400'
                       }`}
                     >
                       {formatPercent(style.margin)}
                     </span>
                   </td>
-                  <td className="px-4 py-4 border-l border-gray-200">
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  <td className="px-4 py-4 border-l border-border-primary">
+                    <ChevronRight className="w-5 h-5 text-text-faint" />
                   </td>
                 </tr>
               ))}

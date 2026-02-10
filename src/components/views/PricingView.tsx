@@ -61,7 +61,7 @@ function SourceIndicator({ source }: { source: PriceSource | null }) {
       );
     case 'sales':
       return (
-        <span className="text-gray-500 ml-1 text-sm font-bold" title="Source: Sales">●</span>
+        <span className="text-text-muted ml-1 text-sm font-bold" title="Source: Sales">●</span>
       );
     default:
       return null;
@@ -429,25 +429,25 @@ export default function PricingView({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-gray-900">
+          <h2 className="text-4xl font-display font-bold text-text-primary">
             Pricing Analysis
           </h2>
-          <p className="text-base text-gray-500 mt-2">
+          <p className="text-base text-text-muted mt-2">
             Compare price changes between seasons and analyze margins
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Season Compare Selector */}
-          <div className="flex items-center gap-3 bg-white rounded-xl border-2 border-gray-200 p-4">
+          <div className="flex items-center gap-3 bg-surface rounded-xl border-2 border-border-primary p-4">
           <div>
-            <label className="block text-sm font-bold text-gray-600 uppercase tracking-wide mb-1">
+            <label className="block text-sm font-bold text-text-secondary uppercase tracking-wide mb-1">
               From
             </label>
             <select
               value={fromSeason}
               onChange={(e) => setFromSeason(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border-2 border-gray-200 rounded-lg text-base font-mono font-semibold focus:outline-none focus:border-cyan-500"
+              className="px-3 py-2 bg-surface-secondary border-2 border-border-primary rounded-lg text-base font-mono font-semibold focus:outline-none focus:border-cyan-500"
             >
               <option value="">Select...</option>
               {availableSeasons.map(s => (
@@ -455,15 +455,15 @@ export default function PricingView({
               ))}
             </select>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-400 mt-6" />
+          <ArrowRight className="w-5 h-5 text-text-faint mt-6" />
           <div>
-            <label className="block text-sm font-bold text-gray-600 uppercase tracking-wide mb-1">
+            <label className="block text-sm font-bold text-text-secondary uppercase tracking-wide mb-1">
               To
             </label>
             <select
               value={toSeason}
               onChange={(e) => setToSeason(e.target.value)}
-              className="px-3 py-2 bg-gray-50 border-2 border-gray-200 rounded-lg text-base font-mono font-semibold focus:outline-none focus:border-cyan-500"
+              className="px-3 py-2 bg-surface-secondary border-2 border-border-primary rounded-lg text-base font-mono font-semibold focus:outline-none focus:border-cyan-500"
             >
               <option value="">Select...</option>
               {availableSeasons.map(s => (
@@ -483,84 +483,84 @@ export default function PricingView({
       </div>
 
       {/* Data Sources Legend */}
-      <SourceLegend sources={['pricing', 'linelist', 'sales', 'landed']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
+      <SourceLegend sources={['pricing', 'linelist', 'sales', 'landed']} className="bg-surface rounded-xl border-2 border-border-primary p-4" />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
               <Layers className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
+              <p className="text-2xl font-bold font-mono text-text-primary">
                 {formatNumber(stats.totalStyles)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Styles
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
               <p className="text-2xl font-bold font-mono text-emerald-600">
                 {formatNumber(stats.priceIncreases)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Price Up
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
               <DollarSign className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
               <p className="text-2xl font-bold font-mono text-emerald-600">
                 +${stats.avgIncrease.toFixed(2)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Avg Increase
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900 flex items-center justify-center">
               <TrendingDown className="w-5 h-5 text-red-600" />
             </div>
             <div>
               <p className="text-2xl font-bold font-mono text-red-600">
                 {formatNumber(stats.priceDecreases)}
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Price Down
               </p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
               <Percent className="w-5 h-5 text-purple-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono text-gray-900">
+              <p className="text-2xl font-bold font-mono text-text-primary">
                 {stats.avgMargin.toFixed(1)}%
               </p>
-              <p className="text-sm text-gray-500 font-bold uppercase tracking-wide">
+              <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Avg Margin
               </p>
             </div>
@@ -569,19 +569,19 @@ export default function PricingView({
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5 shadow-sm">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm font-black text-gray-700 uppercase tracking-wide">Filters</span>
-          <div className="flex-1 h-px bg-gray-200"></div>
+          <span className="text-sm font-black text-text-secondary uppercase tracking-wide">Filters</span>
+          <div className="flex-1 h-px bg-surface-tertiary"></div>
         </div>
         <div className="flex flex-wrap gap-5 items-end">
           {/* Division Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Division</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Division</label>
             <select
               value={filterDivision}
               onChange={(e) => setFilterDivision(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[180px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[180px] bg-surface"
             >
               <option value="">All Divisions</option>
               {divisions.map((d) => (
@@ -592,11 +592,11 @@ export default function PricingView({
 
           {/* Category Filter */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Category</label>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Category</label>
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -609,7 +609,7 @@ export default function PricingView({
           {(filterDivision || filterCategory) && (
             <button
               onClick={() => { setFilterDivision(''); setFilterCategory(''); }}
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-text-muted hover:text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
             >
               Clear
             </button>
@@ -618,45 +618,45 @@ export default function PricingView({
       </div>
 
       {/* Pricing Grid */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm">
-        <div className="px-6 py-4 border-b-2 border-gray-300 bg-gray-100 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Pricing Grid</h3>
-          <span className="text-sm text-gray-500 font-medium">
+      <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm">
+        <div className="px-6 py-4 border-b-2 border-border-strong bg-surface-tertiary flex items-center justify-between">
+          <h3 className="text-xl font-bold text-text-primary">Pricing Grid</h3>
+          <span className="text-sm text-text-muted font-medium">
             {formatNumber(sortedData.length)} styles • Click row for details
           </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b-2 border-gray-300 text-left bg-gray-100">
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
+              <tr className="border-b-2 border-border-strong text-left bg-surface-tertiary">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide border-r border-border-primary">
                   Style
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide border-r border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide border-r border-border-primary">
                   Description
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   {fromSeason || 'From'} WH
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   {toSeason || 'To'} WH
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center border-l-2 border-gray-400">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-center border-l-2 border-border-strong">
                   WH Δ
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   {fromSeason || 'From'} MSRP
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l border-gray-200">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l border-border-primary">
                   {toSeason || 'To'} MSRP
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-center border-l-2 border-gray-400">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-center border-l-2 border-border-strong">
                   MSRP Δ
                 </th>
-                <th className="px-4 py-3 text-sm font-bold text-gray-700 uppercase tracking-wide text-right border-l-2 border-gray-400">
+                <th className="px-4 py-3 text-sm font-bold text-text-secondary uppercase tracking-wide text-right border-l-2 border-border-strong">
                   Margin
                 </th>
-                <th className="px-4 py-3 w-10 border-l border-gray-200"></th>
+                <th className="px-4 py-3 w-10 border-l border-border-primary"></th>
               </tr>
             </thead>
             <tbody>
@@ -664,82 +664,82 @@ export default function PricingView({
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
-                  <td className="px-4 py-4 border-r border-gray-200">
-                    <span className="font-mono text-lg font-bold text-gray-900">
+                  <td className="px-4 py-4 border-r border-border-primary">
+                    <span className="font-mono text-lg font-bold text-text-primary">
                       {style.styleNumber}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base text-gray-700 max-w-xs truncate border-r border-gray-200">
+                  <td className="px-4 py-4 text-base text-text-secondary max-w-xs truncate border-r border-border-primary">
                     {style.styleDesc}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono text-text-secondary text-right border-l border-border-primary">
                     <span className="inline-flex items-center">
                       {formatCurrency(style.fromPrice)}
                       <SourceIndicator source={style.fromSource} />
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-bold text-text-primary text-right border-l border-border-primary">
                     <span className="inline-flex items-center">
                       {formatCurrency(style.toPrice)}
                       <SourceIndicator source={style.toSource} />
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-center border-l-2 border-gray-400">
+                  <td className="px-4 py-4 text-center border-l-2 border-border-strong">
                     {style.priceDelta !== null && style.priceDelta !== 0 ? (
                       <span
                         className={`text-base font-mono font-bold px-3 py-1 rounded ${
                           style.priceDelta > 0
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-red-100 text-red-700'
+                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
+                            : 'bg-red-100 dark:bg-red-900 text-red-700'
                         }`}
                       >
                         {formatDelta(style.priceDelta)}
                       </span>
                     ) : (
-                      <span className="text-gray-400 text-base">—</span>
+                      <span className="text-text-faint text-base">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-base font-mono text-gray-600 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono text-text-secondary text-right border-l border-border-primary">
                     <span className="inline-flex items-center">
                       {formatCurrency(style.fromMsrp)}
                       <SourceIndicator source={style.fromSource} />
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base font-mono font-bold text-gray-900 text-right border-l border-gray-200">
+                  <td className="px-4 py-4 text-base font-mono font-bold text-text-primary text-right border-l border-border-primary">
                     <span className="inline-flex items-center">
                       {formatCurrency(style.toMsrp)}
                       <SourceIndicator source={style.toSource} />
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-center border-l-2 border-gray-400">
+                  <td className="px-4 py-4 text-center border-l-2 border-border-strong">
                     {style.msrpDelta !== null && style.msrpDelta !== 0 ? (
                       <span
                         className={`text-base font-mono font-bold px-3 py-1 rounded ${
                           style.msrpDelta > 0
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-red-100 text-red-700'
+                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
+                            : 'bg-red-100 dark:bg-red-900 text-red-700'
                         }`}
                       >
                         {formatDelta(style.msrpDelta)}
                       </span>
                     ) : (
-                      <span className="text-gray-400 text-base">—</span>
+                      <span className="text-text-faint text-base">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-right border-l-2 border-gray-400">
+                  <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                     {style.margin !== null ? (
                       <div className="inline-flex items-center gap-1">
                         <span
                           className={`text-base font-mono font-bold px-3 py-1 rounded ${
                             style.margin >= 50
-                              ? 'bg-emerald-100 text-emerald-700'
+                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
                               : style.margin >= 40
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-red-100 text-red-700'
+                              ? 'bg-amber-100 dark:bg-amber-900 text-amber-700'
+                              : 'bg-red-100 dark:bg-red-900 text-red-700'
                           }`}
                         >
                           {style.margin.toFixed(1)}%
@@ -754,22 +754,22 @@ export default function PricingView({
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-400 text-base">—</span>
+                      <span className="text-text-faint text-base">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 border-l border-gray-200">
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                  <td className="px-4 py-4 border-l border-border-primary">
+                    <ChevronRight className="w-5 h-5 text-text-faint" />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 border-t-2 border-gray-300 bg-gray-100">
+        <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">MSRP/Price Source Legend</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">MSRP/Price Source Legend</span>
             {sortedData.length > 50 && (
-              <span className="text-base text-gray-600 font-medium">
+              <span className="text-base text-text-secondary font-medium">
                 Showing 50 of {formatNumber(sortedData.length)} styles
               </span>
             )}
@@ -777,23 +777,23 @@ export default function PricingView({
           <div className="flex flex-wrap gap-6 text-sm">
             <div className="flex items-center gap-2">
               <span className="text-orange-500 text-lg font-bold">◆</span>
-              <span className="text-gray-700">pricebyseason (most accurate)</span>
+              <span className="text-text-secondary">pricebyseason (most accurate)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-blue-500 text-lg">○</span>
-              <span className="text-gray-700">Line List</span>
+              <span className="text-text-secondary">Line List</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 text-lg font-bold">●</span>
-              <span className="text-gray-700">Sales (fallback)</span>
+              <span className="text-text-muted text-lg font-bold">●</span>
+              <span className="text-text-secondary">Sales (fallback)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-purple-500 text-lg font-bold">■</span>
-              <span className="text-gray-700">Landed Sheet</span>
+              <span className="text-text-secondary">Landed Sheet</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-pink-500 text-sm font-bold">▲</span>
-              <span className="text-gray-700">Cost estimated (50% of wholesale)</span>
+              <span className="text-text-secondary">Cost estimated (50% of wholesale)</span>
             </div>
           </div>
         </div>

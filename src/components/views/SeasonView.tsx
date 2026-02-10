@@ -710,8 +710,8 @@ export default function SeasonView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-gray-900">Season View</h2>
-          <p className="text-base text-gray-500 mt-2">
+          <h2 className="text-4xl font-display font-bold text-text-primary">Season View</h2>
+          <p className="text-base text-text-muted mt-2">
             Compare performance across seasons
           </p>
         </div>
@@ -722,14 +722,14 @@ export default function SeasonView({
           const badge = getSeasonStatusBadge(status);
           return (
             <div className="text-right">
-              <div className="text-sm text-gray-500">Current Shipping Season</div>
+              <div className="text-sm text-text-muted">Current Shipping Season</div>
               <div className="flex items-center justify-end gap-2 mt-1">
-                <span className="text-2xl font-mono font-bold text-gray-900">{currentSeason}</span>
+                <span className="text-2xl font-mono font-bold text-text-primary">{currentSeason}</span>
                 <span className={`text-sm px-2 py-1 rounded ${badge.color}`}>
                   {badge.icon} {badge.label}
                 </span>
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-text-faint mt-1">
                 {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </div>
             </div>
@@ -738,19 +738,19 @@ export default function SeasonView({
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
         <div className="flex flex-wrap gap-4 items-end">
           {/* Season Multi-Select */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
-              <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Seasons</label>
+              <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Seasons</label>
               {/* Quick select buttons */}
               <button
                 onClick={() => selectSeasonType('SP')}
                 className={`text-sm font-semibold px-3 py-1 rounded transition-colors ${
                   seasons.filter((s) => s.endsWith('SP')).every((s) => selectedSeasons.includes(s)) && seasons.filter((s) => s.endsWith('SP')).length > 0
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
+                    : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
                 }`}
               >
                 All Spring
@@ -760,7 +760,7 @@ export default function SeasonView({
                 className={`text-sm font-semibold px-3 py-1 rounded transition-colors ${
                   seasons.filter((s) => s.endsWith('FA')).every((s) => selectedSeasons.includes(s)) && seasons.filter((s) => s.endsWith('FA')).length > 0
                     ? 'bg-orange-100 text-orange-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
                 }`}
               >
                 All Fall
@@ -768,7 +768,7 @@ export default function SeasonView({
               {selectedSeasons.length > 0 && (
                 <button
                   onClick={() => setSelectedSeasons([])}
-                  className="text-sm font-semibold px-3 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="text-sm font-semibold px-3 py-1 rounded bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary"
                 >
                   Clear
                 </button>
@@ -788,8 +788,8 @@ export default function SeasonView({
                           ? 'bg-emerald-500 text-white'
                           : 'bg-orange-500 text-white'
                         : isSpring
-                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                        : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
+                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-orange-50 dark:bg-orange-950 text-orange-700 hover:bg-orange-100'
                     }`}
                   >
                     {season}
@@ -801,41 +801,41 @@ export default function SeasonView({
 
           {/* Style Number Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Style #</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Style #</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-faint" />
               <input
                 type="text"
                 value={styleNumberFilter}
                 onChange={(e) => setStyleNumberFilter(e.target.value)}
                 placeholder="Search..."
-                className="pl-11 pr-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px]"
+                className="pl-11 pr-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px]"
               />
             </div>
           </div>
 
           {/* Style Name Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Style Name</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Style Name</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-faint" />
               <input
                 type="text"
                 value={styleNameFilter}
                 onChange={(e) => setStyleNameFilter(e.target.value)}
                 placeholder="Search..."
-                className="pl-11 pr-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[180px]"
+                className="pl-11 pr-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[180px]"
               />
             </div>
           </div>
 
           {/* Designer Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Designer</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Designer</label>
             <select
               value={selectedDesigner}
               onChange={(e) => setSelectedDesigner(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
             >
               <option value="">All Designers</option>
               {designers.map((d) => (
@@ -846,11 +846,11 @@ export default function SeasonView({
 
           {/* Customer Type Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Channel</label>
             <select
               value={selectedCustomerType}
               onChange={(e) => setSelectedCustomerType(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
             >
               <option value="">All Channels</option>
               {customerTypes.map((ct) => (
@@ -861,11 +861,11 @@ export default function SeasonView({
 
           {/* Customer Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Customer</label>
             <select
               value={selectedCustomer}
               onChange={(e) => setSelectedCustomer(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[200px] max-w-[240px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[200px] max-w-[240px]"
             >
               <option value="">All Customers</option>
               {customers.map((c) => (
@@ -876,11 +876,11 @@ export default function SeasonView({
 
           {/* Gender Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Gender</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Gender</label>
             <select
               value={localGenderFilter}
               onChange={(e) => setLocalGenderFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
             >
               <option value="">All Genders</option>
               {genders.map((g) => (
@@ -891,11 +891,11 @@ export default function SeasonView({
 
           {/* Category Filter */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Category</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Category</label>
             <select
               value={localCategoryFilter}
               onChange={(e) => setLocalCategoryFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px]"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -906,11 +906,11 @@ export default function SeasonView({
 
           {/* Sort By */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Sort By</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Sort By</label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'revenue' | 'units' | 'styles' | 'price' | '')}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
             >
               <option value="">Default</option>
               <option value="revenue">Revenue</option>
@@ -924,7 +924,7 @@ export default function SeasonView({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-cyan-600 hover:text-cyan-700 hover:bg-hover-accent rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
               Clear
@@ -935,7 +935,7 @@ export default function SeasonView({
 
       {/* Metric Toggle + Combine Styles + Source Legend */}
       <div className="flex items-center gap-6">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-2 inline-flex gap-1">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-2 inline-flex gap-1">
           {metricButtons.map((btn) => (
             <button
               key={btn.id}
@@ -943,7 +943,7 @@ export default function SeasonView({
               className={`px-5 py-2.5 text-base font-bold rounded-lg transition-colors ${
                 metric === btn.id
                   ? 'bg-cyan-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  : 'text-text-secondary hover:bg-surface-tertiary'
               }`}
             >
               {btn.label}
@@ -955,7 +955,7 @@ export default function SeasonView({
             className={`px-5 py-2.5 text-base font-bold rounded-lg transition-colors ${
               combineStyles
                 ? 'bg-purple-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
+                : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
             title="Combine style variants (R/X/T suffixes, tall, plus)"
           >
@@ -964,7 +964,7 @@ export default function SeasonView({
         </div>
 
         {/* Source Legend - Priority: pricebyseason > Sales > Line List */}
-        <div className="flex items-center gap-4 text-sm text-gray-500">
+        <div className="flex items-center gap-4 text-sm text-text-muted">
           <span className="font-semibold">MSRP/Price Source:</span>
           <span className="flex items-center gap-1">
             <span className="text-emerald-500">●</span> pricebyseason
@@ -982,13 +982,13 @@ export default function SeasonView({
       </div>
 
       {/* Pivot Table */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100 border-b-2 border-gray-300">
+              <tr className="bg-surface-tertiary border-b-2 border-border-strong">
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 sticky left-0 bg-gray-100 z-10 min-w-[100px] border-r border-gray-200"
+                  className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary sticky left-0 bg-surface-tertiary z-10 min-w-[100px] border-r border-border-primary"
                   onClick={() => handleSort('style')}
                 >
                   <div className="flex items-center gap-1">
@@ -996,7 +996,7 @@ export default function SeasonView({
                     <ArrowUpDown className="w-4 h-4" />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide sticky left-[100px] bg-gray-100 z-10 min-w-[200px] border-r border-gray-200">
+                <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide sticky left-[100px] bg-surface-tertiary z-10 min-w-[200px] border-r border-border-primary">
                   Description
                 </th>
                 {displaySeasons.map((season) => {
@@ -1012,7 +1012,7 @@ export default function SeasonView({
                   return (
                     <th
                       key={season}
-                      className={`px-3 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 min-w-[100px] border-l border-gray-200 ${isCurrent ? 'bg-cyan-50' : 'bg-gray-100'}`}
+                      className={`px-3 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary min-w-[100px] border-l border-border-primary ${isCurrent ? 'bg-cyan-50' : 'bg-surface-tertiary'}`}
                       onClick={() => handleSort(season)}
                     >
                       <div className="flex items-center justify-end gap-1.5">
@@ -1027,7 +1027,7 @@ export default function SeasonView({
                 })}
                 {displaySeasons.length > 1 && (
                   <th
-                    className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 w-28 border-l-2 border-gray-400 bg-gray-100"
+                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary w-28 border-l-2 border-border-strong bg-surface-tertiary"
                     onClick={() => handleSort('delta')}
                   >
                     <div className="flex items-center justify-end gap-1">
@@ -1043,13 +1043,13 @@ export default function SeasonView({
                 <tr
                   key={row.styleNumber}
                   onClick={() => onStyleClick(row.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
-                  <td className={`px-4 py-4 sticky left-0 z-10 border-r border-gray-200 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-cyan-50`}>
+                  <td className={`px-4 py-4 sticky left-0 z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xl font-bold text-gray-900">
+                      <span className="font-mono text-xl font-bold text-text-primary">
                         {row.styleNumber}
                       </span>
                       {row.variantStyles && row.variantStyles.length > 0 && (
@@ -1062,7 +1062,7 @@ export default function SeasonView({
                       )}
                     </div>
                   </td>
-                  <td className={`px-4 py-4 text-lg text-gray-700 truncate max-w-[280px] sticky left-[100px] z-10 border-r border-gray-200 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-cyan-50`}>
+                  <td className={`px-4 py-4 text-lg text-text-secondary truncate max-w-[280px] sticky left-[100px] z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}>
                     {row.styleDesc}
                   </td>
                   {displaySeasons.map((season) => {
@@ -1074,17 +1074,17 @@ export default function SeasonView({
                       if (src === 'linelist') return { symbol: '○', color: 'text-blue-500', title: 'Source: Line List' };
                       if (src === 'sales') return { symbol: '◇', color: 'text-amber-500', title: 'Source: Calculated from Sales' };
                       if (src === 'landed_sheet') return { symbol: '■', color: 'text-purple-500', title: 'Source: Landed Request Sheet' };
-                      if (src.includes('/')) return { symbol: '◆', color: 'text-gray-400', title: `Source: ${src}` };
+                      if (src.includes('/')) return { symbol: '◆', color: 'text-text-faint', title: `Source: ${src}` };
                       return null;
                     };
                     const indicator = source ? getSourceIndicator(source) : null;
                     return (
                       <td
                         key={season}
-                        className="px-4 py-4 text-right text-lg font-mono border-l border-gray-200"
+                        className="px-4 py-4 text-right text-lg font-mono border-l border-border-primary"
                       >
                         {value !== null ? (
-                          <span className="text-gray-900 font-medium inline-flex items-center gap-1">
+                          <span className="text-text-primary font-medium inline-flex items-center gap-1">
                             {formatValue(value, metric)}
                             {indicator && (
                               <span className={`text-xs ${indicator.color}`} title={indicator.title}>
@@ -1099,7 +1099,7 @@ export default function SeasonView({
                     );
                   })}
                   {displaySeasons.length > 1 && (
-                    <td className="px-4 py-4 text-right border-l-2 border-gray-400">
+                    <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                       {row.isNew ? (
                         <span className="text-lg font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded">
                           NEW
@@ -1111,7 +1111,7 @@ export default function SeasonView({
                               ? 'text-emerald-600'
                               : row.delta < 0
                               ? 'text-red-600'
-                              : 'text-gray-400'
+                              : 'text-text-faint'
                           }`}
                         >
                           {row.delta > 0 ? (
@@ -1134,18 +1134,18 @@ export default function SeasonView({
             </tbody>
             {/* Totals Row */}
             <tfoot>
-              <tr className="bg-gray-200 border-t-2 border-gray-400">
-                <td className="px-4 py-4 sticky left-0 bg-gray-200 text-xl font-bold text-gray-800 border-r border-gray-300">
+              <tr className="bg-surface-tertiary border-t-2 border-border-strong">
+                <td className="px-4 py-4 sticky left-0 bg-surface-tertiary text-xl font-bold text-text-primary border-r border-border-strong">
                   TOTALS
                 </td>
-                <td className="px-4 py-4 sticky left-[100px] bg-gray-200 border-r border-gray-300"></td>
+                <td className="px-4 py-4 sticky left-[100px] bg-surface-tertiary border-r border-border-strong"></td>
                 {displaySeasons.map((season) => (
-                  <td key={season} className="px-4 py-4 text-right font-mono text-lg font-bold text-gray-900 border-l border-gray-300">
+                  <td key={season} className="px-4 py-4 text-right font-mono text-lg font-bold text-text-primary border-l border-border-strong">
                     {formatValue(totals.seasonTotals[season], metric)}
                   </td>
                 ))}
                 {displaySeasons.length > 1 && (
-                  <td className="px-4 py-4 text-right border-l-2 border-gray-400">
+                  <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                     {totals.delta !== null && (
                       <span
                         className={`font-mono text-lg font-bold ${
@@ -1153,7 +1153,7 @@ export default function SeasonView({
                             ? 'text-emerald-600'
                             : totals.delta < 0
                             ? 'text-red-600'
-                            : 'text-gray-400'
+                            : 'text-text-faint'
                         }`}
                       >
                         {totals.delta > 0 ? '+' : ''}
@@ -1173,11 +1173,11 @@ export default function SeasonView({
           const startRow = (currentPage - 1) * pageSize + 1;
           const endRow = Math.min(currentPage * pageSize, sortedData.length);
           return (
-            <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between text-base text-gray-700">
+            <div className="px-5 py-4 bg-surface-tertiary border-t-2 border-border-strong flex items-center justify-between text-base text-text-secondary">
               <span className="font-semibold">
                 Showing {startRow}–{endRow} of {sortedData.length} styles with {metricButtons.find(m => m.id === metric)?.label} data
                 {filteredStyles.length > relevantPivotData.length && (
-                  <span className="text-gray-500 font-normal ml-1">
+                  <span className="text-text-muted font-normal ml-1">
                     ({filteredStyles.length - relevantPivotData.length} hidden)
                   </span>
                 )}
@@ -1187,7 +1187,7 @@ export default function SeasonView({
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-surface-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
@@ -1197,7 +1197,7 @@ export default function SeasonView({
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-surface-tertiary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>

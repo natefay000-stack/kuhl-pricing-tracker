@@ -93,6 +93,10 @@ export async function POST(request: NextRequest) {
           seasonCounts[s] = (seasonCounts[s] || 0) + 1;
         }
 
+        // Detect cost source type from the data
+        const costSourceType = landedData.length > 0 ? landedData[0].costSource : 'landed_cost';
+        console.log(`Cost source type: ${costSourceType}`);
+
         const costsAppData = landedData.map((c, index) => ({
           id: `cost-${index}`,
           styleNumber: c.styleNumber,
@@ -112,6 +116,7 @@ export async function POST(request: NextRequest) {
           margin: c.margin,
           designTeam: c.designTeam,
           developer: c.developer,
+          costSource: c.costSource,
         }));
 
         const seasonSummary = Object.entries(seasonCounts)

@@ -146,14 +146,14 @@ export default function CustomerView({
   // Get customer type color
   const getCustomerTypeColor = (type: string) => {
     const colors: Record<string, string> = {
-      BB: 'bg-blue-100 text-blue-700',
+      BB: 'bg-blue-100 dark:bg-blue-900 text-blue-700',
       WH: 'bg-teal-100 text-teal-700',
       EC: 'bg-purple-100 text-purple-700',
       PS: 'bg-orange-100 text-orange-700',
-      KI: 'bg-green-100 text-green-700',
-      WD: 'bg-red-100 text-red-700',
+      KI: 'bg-green-100 dark:bg-green-900 text-green-700',
+      WD: 'bg-red-100 dark:bg-red-900 text-red-700',
     };
-    return colors[type] || 'bg-gray-100 text-gray-700';
+    return colors[type] || 'bg-surface-tertiary text-text-secondary';
   };
 
   // Export current view data
@@ -382,8 +382,8 @@ export default function CustomerView({
     <div className="p-6 space-y-6">
       {/* Search Bar */}
       <div className="max-w-md">
-        <div className="bg-white border-2 border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Search className="w-4 h-4 text-gray-400" />
+        <div className="bg-surface border-2 border-border-primary rounded-xl px-4 py-3 flex items-center gap-3">
+          <Search className="w-4 h-4 text-text-faint" />
           <input
             type="text"
             placeholder="Search customer name..."
@@ -397,8 +397,8 @@ export default function CustomerView({
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black text-gray-900 tracking-tight">Customers</h1>
-          <p className="text-base text-gray-500 mt-1">
+          <h1 className="text-4xl font-black text-text-primary tracking-tight">Customers</h1>
+          <p className="text-base text-text-muted mt-1">
             Analyze customer performance by category, gender, and season
           </p>
         </div>
@@ -412,15 +412,15 @@ export default function CustomerView({
       </div>
 
       {/* Data Sources Legend */}
-      <SourceLegend sources={['sales']} className="bg-white rounded-xl border-2 border-gray-200 p-4" />
+      <SourceLegend sources={['sales']} className="bg-surface rounded-xl border-2 border-border-primary p-4" />
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 p-5">
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
         <div className="flex gap-6 flex-wrap items-end">
           <div>
-            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Season</label>
+            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Season</label>
             <select
-              className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
               value={activeSeason}
               onChange={(e) => setSelectedSeason(e.target.value)}
             >
@@ -430,9 +430,9 @@ export default function CustomerView({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Customer Type</label>
+            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer Type</label>
             <select
-              className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
               value={selectedCustomerType}
               onChange={(e) => setSelectedCustomerType(e.target.value)}
             >
@@ -443,9 +443,9 @@ export default function CustomerView({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Category</label>
+            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Category</label>
             <select
-              className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
             >
@@ -456,9 +456,9 @@ export default function CustomerView({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wide mb-2">Gender</label>
+            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Gender</label>
             <select
-              className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base font-semibold bg-white min-w-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
               value={selectedGender}
               onChange={(e) => setSelectedGender(e.target.value)}
             >
@@ -473,33 +473,33 @@ export default function CustomerView({
 
       {/* Stat Cards */}
       <div className="grid grid-cols-5 gap-4">
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Total Revenue</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.revenue)}</div>
+        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
+          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Total Revenue</div>
+          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.revenue)}</div>
         </div>
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Active Customers</div>
-          <div className="text-3xl font-black text-gray-900">{totalStats.customers}</div>
+        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
+          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Active Customers</div>
+          <div className="text-3xl font-black text-text-primary">{totalStats.customers}</div>
         </div>
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Avg Order Value</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.avgOrderValue)}</div>
+        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
+          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Avg Order Value</div>
+          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.avgOrderValue)}</div>
         </div>
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Total Styles</div>
-          <div className="text-3xl font-black text-gray-900">{totalStats.totalStyles}</div>
+        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
+          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Total Styles</div>
+          <div className="text-3xl font-black text-text-primary">{totalStats.totalStyles}</div>
         </div>
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5">
-          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Top Customer Rev</div>
-          <div className="text-3xl font-black text-gray-900">{formatCurrencyShort(totalStats.topCustomerRevenue)}</div>
+        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
+          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Top Customer Rev</div>
+          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.topCustomerRevenue)}</div>
         </div>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-2 gap-6">
         {/* Revenue by Customer Type Bar Chart */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Revenue by Customer Type</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
+          <h3 className="text-xl font-bold text-text-primary mb-4">Revenue by Customer Type</h3>
           <div className="space-y-3">
             {(() => {
               const typeRevenue = new Map<string, number>();
@@ -515,10 +515,10 @@ export default function CustomerView({
               return sorted.map(([type, revenue]) => (
                 <div key={type}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold text-gray-700">{type}</span>
-                    <span className="text-sm font-bold text-gray-900">{formatCurrencyShort(revenue)}</span>
+                    <span className="text-sm font-semibold text-text-secondary">{type}</span>
+                    <span className="text-sm font-bold text-text-primary">{formatCurrencyShort(revenue)}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-6">
+                  <div className="w-full bg-surface-tertiary rounded-full h-6">
                     <div
                       className={`h-6 rounded-full ${getCustomerTypeColor(type).replace('text-', 'bg-').replace('100', '500')}`}
                       style={{ width: `${(revenue / maxRevenue) * 100}%` }}
@@ -531,8 +531,8 @@ export default function CustomerView({
         </div>
 
         {/* Top 10 Customers Donut Chart */}
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Top 10 Customers - Revenue Share</h3>
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
+          <h3 className="text-xl font-bold text-text-primary mb-4">Top 10 Customers - Revenue Share</h3>
           <div className="flex items-center justify-center gap-8">
             {(() => {
               const top10 = filteredCustomers.slice(0, 10);
@@ -589,8 +589,8 @@ export default function CustomerView({
                     {top10.slice(0, 5).map((c, idx) => (
                       <div key={c.customer} className="flex items-center gap-2 text-sm">
                         <div className="w-3 h-3 rounded" style={{ backgroundColor: colors[idx] }}></div>
-                        <span className="text-gray-700 flex-1 truncate max-w-[120px]">{c.customer}</span>
-                        <span className="font-semibold text-gray-900">{formatCurrencyShort(c.revenue)}</span>
+                        <span className="text-text-secondary flex-1 truncate max-w-[120px]">{c.customer}</span>
+                        <span className="font-semibold text-text-primary">{formatCurrencyShort(c.revenue)}</span>
                       </div>
                     ))}
                   </div>
@@ -605,36 +605,36 @@ export default function CustomerView({
       {!selectedCustomer && (
         <>
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-black text-gray-900">
+            <h2 className="text-2xl font-black text-text-primary">
               All Customers
-              <span className="text-base font-normal text-gray-500 ml-3">
+              <span className="text-base font-normal text-text-muted ml-3">
                 {filteredCustomers.length} customers · Sorted by revenue
               </span>
             </h2>
           </div>
 
-          <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+          <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b-2 border-gray-200">
+                <thead className="bg-surface-secondary border-b-2 border-border-primary">
                   <tr>
-                    <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4 w-12">#</th>
-                    <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Customer</th>
-                    <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Type</th>
-                    <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                    <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                    <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Styles</th>
-                    <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Avg Order</th>
+                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4 w-12">#</th>
+                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Customer</th>
+                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Type</th>
+                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
+                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Avg Order</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border-secondary">
                   {filteredCustomers.slice(0, 50).map((customer, idx) => (
                     <tr
                       key={customer.customer}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="hover:bg-hover cursor-pointer transition-colors"
                       onClick={() => setSelectedCustomer(customer.customer)}
                     >
-                      <td className="px-6 py-4 text-sm text-gray-400">{idx + 1}</td>
+                      <td className="px-6 py-4 text-sm text-text-faint">{idx + 1}</td>
                       <td className="px-6 py-4">
                         <span className="text-base font-bold text-blue-600 hover:underline">
                           {customer.customer}
@@ -645,16 +645,16 @@ export default function CustomerView({
                           {customer.customerType}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-gray-900">
+                      <td className="px-6 py-4 text-right text-base font-semibold text-text-primary">
                         {formatCurrencyShort(customer.revenue)}
                       </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
+                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
                         {formatNumberShort(customer.units)}
                       </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
+                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
                         {customer.styles.size}
                       </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-gray-700">
+                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
                         {formatCurrencyShort(customer.revenue / customer.orders)}
                       </td>
                     </tr>
@@ -670,7 +670,7 @@ export default function CustomerView({
       {selectedCustomer && (
         <div className="space-y-6">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-text-muted">
             <button
               onClick={() => setSelectedCustomer(null)}
               className="text-blue-600 hover:underline font-medium"
@@ -678,15 +678,15 @@ export default function CustomerView({
               Customers
             </button>
             <ChevronRight className="w-4 h-4" />
-            <span className="text-gray-900 font-semibold">{selectedCustomer}</span>
+            <span className="text-text-primary font-semibold">{selectedCustomer}</span>
           </div>
 
           {/* Customer Detail Card */}
-          <div className="bg-white rounded-xl border-2 border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6 pb-6 border-b-2 border-gray-200">
+          <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
+            <div className="flex items-center justify-between mb-6 pb-6 border-b-2 border-border-primary">
               <div>
-                <h2 className="text-3xl font-black text-gray-900">{selectedCustomer}</h2>
-                <p className="text-sm text-gray-500 mt-1">{activeSeason}</p>
+                <h2 className="text-3xl font-black text-text-primary">{selectedCustomer}</h2>
+                <p className="text-sm text-text-muted mt-1">{activeSeason}</p>
               </div>
               <span className={`text-sm font-bold px-4 py-2 rounded-xl ${getCustomerTypeColor(filteredCustomers.find(c => c.customer === selectedCustomer)?.customerType || '')}`}>
                 {filteredCustomers.find(c => c.customer === selectedCustomer)?.customerType}
@@ -700,21 +700,21 @@ export default function CustomerView({
                 if (!customerData) return null;
                 return (
                   <>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Revenue</div>
-                      <div className="text-2xl font-black text-gray-900">{formatCurrencyShort(customerData.revenue)}</div>
+                    <div className="bg-surface-secondary rounded-lg p-4">
+                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Revenue</div>
+                      <div className="text-2xl font-black text-text-primary">{formatCurrencyShort(customerData.revenue)}</div>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Units</div>
-                      <div className="text-2xl font-black text-gray-900">{formatNumberShort(customerData.units)}</div>
+                    <div className="bg-surface-secondary rounded-lg p-4">
+                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Units</div>
+                      <div className="text-2xl font-black text-text-primary">{formatNumberShort(customerData.units)}</div>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Styles Ordered</div>
-                      <div className="text-2xl font-black text-gray-900">{customerData.styles.size}</div>
+                    <div className="bg-surface-secondary rounded-lg p-4">
+                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Styles Ordered</div>
+                      <div className="text-2xl font-black text-text-primary">{customerData.styles.size}</div>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Avg Order</div>
-                      <div className="text-2xl font-black text-gray-900">{formatCurrencyShort(customerData.revenue / customerData.orders)}</div>
+                    <div className="bg-surface-secondary rounded-lg p-4">
+                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Avg Order</div>
+                      <div className="text-2xl font-black text-text-primary">{formatCurrencyShort(customerData.revenue / customerData.orders)}</div>
                     </div>
                   </>
                 );
@@ -723,7 +723,7 @@ export default function CustomerView({
           </div>
 
           {/* Tabs */}
-          <div className="border-b-2 border-gray-200">
+          <div className="border-b-2 border-border-primary">
             <div className="flex gap-0">
               {[
                 { id: 'category', label: 'By Category' },
@@ -737,7 +737,7 @@ export default function CustomerView({
                   className={`px-6 py-3 text-sm font-semibold border-b-2 -mb-0.5 transition-colors ${
                     activeTab === tab.id
                       ? 'text-blue-600 border-blue-600'
-                      : 'text-gray-500 border-transparent hover:text-gray-900'
+                      : 'text-text-muted border-transparent hover:text-text-primary'
                   }`}
                 >
                   {tab.label}
@@ -748,28 +748,28 @@ export default function CustomerView({
 
           {/* Tab Content */}
           {activeTab === 'category' && (
-            <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b-2 border-gray-200">
+                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
                     <tr>
-                      <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Category</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Styles</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Rev/Style</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">% of Total</th>
+                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">% of Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border-secondary">
                     {customerCategoryData.map((cat) => (
-                      <tr key={cat.category} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-base font-bold text-gray-900">{cat.category}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(cat.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(cat.units)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{cat.styles}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(cat.revPerStyle)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{cat.pctOfTotal.toFixed(1)}%</td>
+                      <tr key={cat.category} className="hover:bg-hover">
+                        <td className="px-6 py-4 text-base font-bold text-text-primary">{cat.category}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(cat.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(cat.units)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{cat.styles}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(cat.revPerStyle)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{cat.pctOfTotal.toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -781,8 +781,8 @@ export default function CustomerView({
           {activeTab === 'gender' && (
             <div className="space-y-6">
               {/* Gender Donut Chart */}
-              <div className="bg-white rounded-xl border-2 border-gray-200 p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Revenue by Gender</h3>
+              <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
+                <h3 className="text-lg font-bold text-text-primary mb-4">Revenue by Gender</h3>
                 <div className="flex items-center justify-center gap-12">
                   {(() => {
                     const totalRevenue = customerGenderData.reduce((sum, g) => sum + g.revenue, 0);
@@ -837,8 +837,8 @@ export default function CustomerView({
                           {customerGenderData.map((g) => (
                             <div key={g.gender} className="flex items-center gap-3">
                               <div className="w-4 h-4 rounded" style={{ backgroundColor: genderColors[g.gender] || '#9ca3af' }}></div>
-                              <span className="text-sm font-medium text-gray-700 w-20">{g.gender}</span>
-                              <span className="text-sm font-bold text-gray-900">
+                              <span className="text-sm font-medium text-text-secondary w-20">{g.gender}</span>
+                              <span className="text-sm font-bold text-text-primary">
                                 {formatCurrencyShort(g.revenue)} ({totalRevenue > 0 ? ((g.revenue / totalRevenue) * 100).toFixed(0) : 0}%)
                               </span>
                             </div>
@@ -851,26 +851,26 @@ export default function CustomerView({
               </div>
 
               {/* Gender Table */}
-              <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b-2 border-gray-200">
+                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
                       <tr>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Gender</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Styles</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Rev/Style</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Gender</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border-secondary">
                       {customerGenderData.map((g) => (
-                        <tr key={g.gender} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-base font-bold text-gray-900">{g.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(g.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(g.units)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{g.styles}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(g.revPerStyle)}</td>
+                        <tr key={g.gender} className="hover:bg-hover">
+                          <td className="px-6 py-4 text-base font-bold text-text-primary">{g.gender}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(g.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(g.units)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">{g.styles}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(g.revPerStyle)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -881,26 +881,26 @@ export default function CustomerView({
           )}
 
           {activeTab === 'color' && (
-            <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b-2 border-gray-200">
+                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
                     <tr>
-                      <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Color</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Styles Using</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">% of Total</th>
+                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Color</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles Using</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">% of Total</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border-secondary">
                     {customerColorData.slice(0, 20).map((color) => (
-                      <tr key={color.color} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-base font-bold text-gray-900">{color.color}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(color.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(color.units)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{color.styles}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{color.pctOfTotal.toFixed(1)}%</td>
+                      <tr key={color.color} className="hover:bg-hover">
+                        <td className="px-6 py-4 text-base font-bold text-text-primary">{color.color}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(color.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(color.units)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{color.styles}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{color.pctOfTotal.toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -918,45 +918,45 @@ export default function CustomerView({
                     placeholder="Search by style # or description..."
                     value={styleSearchQuery}
                     onChange={(e) => setStyleSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-2 border-2 border-border-primary rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                   />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
                 </div>
                 {styleSearchQuery && (
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-text-muted">
                     Found {customerStyleData.length} matching styles
                   </span>
                 )}
               </div>
 
-              <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b-2 border-gray-200">
+                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
                       <tr>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Style #</th>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Description</th>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Category</th>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Gender</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Price</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Style #</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Description</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Gender</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Price</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border-secondary">
                       {customerStyleData.slice(0, 25).map((style) => (
                         <tr
                           key={style.styleNumber}
-                          className="hover:bg-gray-50 cursor-pointer"
+                          className="hover:bg-hover cursor-pointer"
                           onClick={() => onStyleClick(style.styleNumber)}
                         >
                           <td className="px-6 py-4 font-mono text-base font-bold text-blue-600">{style.styleNumber}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700 max-w-[200px] truncate">{style.styleDesc}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{style.category}</td>
-                          <td className="px-6 py-4 text-sm text-gray-700">{style.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(style.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(style.units)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">${style.price.toFixed(0)}</td>
+                          <td className="px-6 py-4 text-sm text-text-secondary max-w-[200px] truncate">{style.styleDesc}</td>
+                          <td className="px-6 py-4 text-sm text-text-secondary">{style.category}</td>
+                          <td className="px-6 py-4 text-sm text-text-secondary">{style.gender}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(style.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(style.units)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">${style.price.toFixed(0)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -967,26 +967,26 @@ export default function CustomerView({
           )}
 
           {activeTab === 'trend' && (
-            <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b-2 border-gray-200">
+                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
                     <tr>
-                      <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Season</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Styles</th>
-                      <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Rev/Style</th>
+                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Season</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
+                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border-secondary">
                     {customerSeasonData.map((s) => (
-                      <tr key={s.season} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 font-mono text-base font-bold text-gray-900">{s.season}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(s.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(s.units)}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{s.styles}</td>
-                        <td className="px-6 py-4 text-right text-gray-700">{formatCurrencyShort(s.revPerStyle)}</td>
+                      <tr key={s.season} className="hover:bg-hover">
+                        <td className="px-6 py-4 font-mono text-base font-bold text-text-primary">{s.season}</td>
+                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(s.revenue)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(s.units)}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{s.styles}</td>
+                        <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(s.revPerStyle)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -997,35 +997,35 @@ export default function CustomerView({
 
           {activeTab === 'margin' && (
             <div className="space-y-6">
-              <div className="bg-gray-50 rounded-xl border-2 border-gray-200 p-6">
-                <p className="text-sm text-gray-600 mb-4">
+              <div className="bg-surface-secondary rounded-xl border-2 border-border-primary p-6">
+                <p className="text-sm text-text-secondary mb-4">
                   Margin analysis by category for {selectedCustomer}
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-text-muted">
                   <span className="font-semibold text-blue-600 hover:underline cursor-pointer">
                     → View full margin breakdown in Margins page
                   </span>
                 </p>
               </div>
 
-              <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b-2 border-gray-200">
+                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
                       <tr>
-                        <th className="text-left text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Category</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-gray-600 uppercase tracking-wider px-6 py-4">Avg Price</th>
+                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
+                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Avg Price</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border-secondary">
                       {customerCategoryData.map((cat) => (
-                        <tr key={cat.category} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-base font-bold text-gray-900">{cat.category}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">{formatCurrencyShort(cat.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{formatNumberShort(cat.units)}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">
+                        <tr key={cat.category} className="hover:bg-hover">
+                          <td className="px-6 py-4 text-base font-bold text-text-primary">{cat.category}</td>
+                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(cat.revenue)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(cat.units)}</td>
+                          <td className="px-6 py-4 text-right text-text-secondary">
                             {cat.units > 0 ? formatCurrencyShort(cat.revenue / cat.units) : '—'}
                           </td>
                         </tr>

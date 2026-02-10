@@ -64,11 +64,11 @@ export default function TabNavigation({ activeTab, onTabChange, counts }: TabNav
         {/* Section Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-kuhl-stone/50">
+            <span className="text-xs font-semibold uppercase tracking-wider text-kuhl-stone/50 dark:text-kuhl-cream/50">
               Navigate
             </span>
-            <ChevronRight className="w-3 h-3 text-kuhl-stone/30" />
-            <span className="text-xs font-medium text-kuhl-stone/70">
+            <ChevronRight className="w-3 h-3 text-kuhl-stone/30 dark:text-kuhl-cream/30" />
+            <span className="text-xs font-medium text-kuhl-stone/70 dark:text-kuhl-cream/70">
               Select a view to explore your data
             </span>
           </div>
@@ -86,8 +86,8 @@ export default function TabNavigation({ activeTab, onTabChange, counts }: TabNav
                 className={`
                   relative group text-left p-4 rounded-xl border-2 transition-all duration-200
                   ${isActive
-                    ? 'bg-white border-kuhl-stone shadow-md ring-1 ring-kuhl-stone/10'
-                    : 'bg-white/60 border-kuhl-sand/50 hover:bg-white hover:border-kuhl-sand hover:shadow-sm cursor-pointer'
+                    ? 'bg-surface border-kuhl-stone shadow-md ring-1 ring-kuhl-stone/10'
+                    : 'bg-surface/60 border-kuhl-sand/50 hover:bg-surface hover:border-kuhl-sand hover:shadow-sm cursor-pointer'
                   }
                 `}
               >
@@ -105,28 +105,28 @@ export default function TabNavigation({ activeTab, onTabChange, counts }: TabNav
                       : 'bg-kuhl-sand/30 group-hover:bg-kuhl-sand/50'
                     }
                   `}>
-                    <tab.icon className={`w-5 h-5 ${isActive ? colors.iconText : 'text-kuhl-stone/50 group-hover:text-kuhl-stone/70'}`} />
+                    <tab.icon className={`w-5 h-5 ${isActive ? colors.iconText : 'text-kuhl-stone/50 dark:text-kuhl-cream/50 group-hover:text-kuhl-stone/70 dark:group-hover:text-kuhl-cream/70'}`} />
                   </div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className={`font-display font-semibold text-base ${isActive ? 'text-kuhl-stone' : 'text-kuhl-stone/70 group-hover:text-kuhl-stone'}`}>
+                      <h3 className={`font-display font-semibold text-base ${isActive ? 'text-kuhl-stone dark:text-kuhl-cream' : 'text-kuhl-stone/70 dark:text-kuhl-cream/70 group-hover:text-kuhl-stone dark:group-hover:text-kuhl-cream'}`}>
                         {tab.label}
                       </h3>
                       {tab.count > 0 && (
                         <span className={`
                           text-xs font-mono px-2 py-0.5 rounded-full
                           ${isActive
-                            ? 'bg-kuhl-stone/10 text-kuhl-stone'
-                            : 'bg-kuhl-sand/50 text-kuhl-stone/50 group-hover:text-kuhl-stone/70'
+                            ? 'bg-kuhl-stone/10 text-kuhl-stone dark:text-kuhl-cream'
+                            : 'bg-kuhl-sand/50 text-kuhl-stone/50 dark:text-kuhl-cream/50 group-hover:text-kuhl-stone/70 dark:group-hover:text-kuhl-cream/70'
                           }
                         `}>
                           {tab.count.toLocaleString()}
                         </span>
                       )}
                     </div>
-                    <p className={`text-xs mt-0.5 ${isActive ? 'text-kuhl-stone/60' : 'text-kuhl-stone/40 group-hover:text-kuhl-stone/50'}`}>
+                    <p className={`text-xs mt-0.5 ${isActive ? 'text-kuhl-stone/60 dark:text-kuhl-cream/60' : 'text-kuhl-stone/40 dark:text-kuhl-cream/40 group-hover:text-kuhl-stone/50 dark:group-hover:text-kuhl-cream/50'}`}>
                       {tab.description}
                     </p>
                   </div>
@@ -134,7 +134,7 @@ export default function TabNavigation({ activeTab, onTabChange, counts }: TabNav
                   {/* Arrow indicator for active */}
                   {isActive && (
                     <div className="flex-shrink-0 self-center">
-                      <ChevronRight className="w-4 h-4 text-kuhl-stone/40" />
+                      <ChevronRight className="w-4 h-4 text-kuhl-stone/40 dark:text-kuhl-cream/40" />
                     </div>
                   )}
                 </div>
@@ -142,7 +142,7 @@ export default function TabNavigation({ activeTab, onTabChange, counts }: TabNav
                 {/* Click hint for inactive tabs */}
                 {!isActive && (
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-kuhl-stone/40 bg-white/80 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-kuhl-stone/40 dark:text-kuhl-cream/40 bg-surface/80 px-2 py-0.5 rounded">
                       Click to view
                     </span>
                   </div>

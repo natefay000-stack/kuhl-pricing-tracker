@@ -108,13 +108,13 @@ export function SourceLegend({ sources, className = '' }: SourceLegendProps) {
 
   return (
     <div className={`flex flex-wrap gap-3 items-center ${className}`}>
-      <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Data Sources:</span>
+      <span className="text-xs font-bold text-text-muted uppercase tracking-wide">Data Sources:</span>
       {displaySources.map((source) => {
         const config = SOURCE_CONFIG[source];
         return (
           <div key={source} className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${config.color}`}></span>
-            <span className="text-xs font-medium text-gray-600">{config.label}</span>
+            <span className="text-xs font-medium text-text-secondary">{config.label}</span>
           </div>
         );
       })}

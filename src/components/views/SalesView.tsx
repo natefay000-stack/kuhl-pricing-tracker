@@ -525,22 +525,22 @@ export default function SalesView({
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-4xl font-display font-bold text-gray-900">
+        <h2 className="text-4xl font-display font-bold text-text-primary">
           Sales View{filterSeason ? `: ${filterSeason}` : ''}
         </h2>
-        <p className="text-base text-gray-500 mt-2">Detailed sales analysis with interactive filtering</p>
+        <p className="text-base text-text-muted mt-2">Detailed sales analysis with interactive filtering</p>
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-xl border border-gray-300 p-5 shadow-sm">
+      <div className="bg-surface rounded-xl border border-border-strong p-5 shadow-sm">
         <div className="flex flex-wrap gap-4 items-end">
           {/* Season */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Season</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Season</label>
             <select
               value={filterSeason}
               onChange={(e) => { setFilterSeason(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px] bg-surface"
             >
               <option value="">All Seasons</option>
               {seasons.map((s) => (
@@ -551,11 +551,11 @@ export default function SalesView({
 
           {/* Category */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Category</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Category</label>
             <select
               value={filterCategory}
               onChange={(e) => { setFilterCategory(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Categories</option>
               {categories.map((c) => (
@@ -566,26 +566,26 @@ export default function SalesView({
 
           {/* Style Number */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Style #</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Style #</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-faint" />
               <input
                 type="text"
                 value={filterStyleNumber}
                 onChange={(e) => { setFilterStyleNumber(e.target.value); setCurrentPage(1); }}
                 placeholder="Search..."
-                className="pl-11 pr-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px] bg-white"
+                className="pl-11 pr-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[140px] bg-surface"
               />
             </div>
           </div>
 
           {/* Customer Type */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Channel</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Channel</label>
             <select
               value={filterCustomerType}
               onChange={(e) => { setFilterCustomerType(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Channels</option>
               {customerTypes.map((ct) => (
@@ -596,11 +596,11 @@ export default function SalesView({
 
           {/* Customer */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Customer</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Customer</label>
             <select
               value={filterCustomer}
               onChange={(e) => { setFilterCustomer(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[200px] max-w-[240px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[200px] max-w-[240px] bg-surface"
             >
               <option value="">All Customers</option>
               {customers.map((c) => (
@@ -611,11 +611,11 @@ export default function SalesView({
 
           {/* Sales Rep */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Sales Rep</label>
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Sales Rep</label>
             <select
               value={filterSalesRep}
               onChange={(e) => { setFilterSalesRep(e.target.value); setCurrentPage(1); }}
-              className="px-4 py-2.5 text-base border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-white"
+              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] bg-surface"
             >
               <option value="">All Reps</option>
               {salesReps.map((sr) => (
@@ -628,7 +628,7 @@ export default function SalesView({
           {hasLocalFilters && (
             <button
               onClick={clearLocalFilters}
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors border-2 border-transparent"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-text-muted hover:text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors border-2 border-transparent"
             >
               <X className="w-5 h-5" />
               Clear
@@ -639,12 +639,12 @@ export default function SalesView({
 
       {/* Active Chart Filter Chips */}
       {hasActiveFilters && (
-        <div className="flex items-center gap-3 flex-wrap bg-gray-50 rounded-xl px-5 py-4 border border-gray-300">
-          <span className="text-base font-bold text-gray-600">Filters:</span>
+        <div className="flex items-center gap-3 flex-wrap bg-surface-secondary rounded-xl px-5 py-4 border border-border-strong">
+          <span className="text-base font-bold text-text-secondary">Filters:</span>
           {activeFilters.gender && (
             <button
               onClick={() => setFilter('gender', activeFilters.gender)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full text-base font-semibold hover:bg-blue-200 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-900 text-blue-700 rounded-full text-base font-semibold hover:bg-blue-200 transition-colors"
             >
               Gender: {activeFilters.gender}
               <X className="w-4 h-4" />
@@ -653,7 +653,7 @@ export default function SalesView({
           {activeFilters.category && (
             <button
               onClick={() => setFilter('category', activeFilters.category)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-base font-semibold hover:bg-emerald-200 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 rounded-full text-base font-semibold hover:bg-emerald-200 transition-colors"
             >
               Category: {activeFilters.category}
               <X className="w-4 h-4" />
@@ -662,7 +662,7 @@ export default function SalesView({
           {activeFilters.customer && (
             <button
               onClick={() => setFilter('customer', activeFilters.customer)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-100 text-amber-700 rounded-full text-base font-semibold hover:bg-amber-200 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-100 dark:bg-amber-900 text-amber-700 rounded-full text-base font-semibold hover:bg-amber-200 transition-colors"
             >
               Customer: {activeFilters.customer.length > 20 ? activeFilters.customer.slice(0, 20) + '...' : activeFilters.customer}
               <X className="w-4 h-4" />
@@ -670,7 +670,7 @@ export default function SalesView({
           )}
           <button
             onClick={clearAllFilters}
-            className="text-base text-gray-500 hover:text-gray-700 underline font-medium"
+            className="text-base text-text-muted hover:text-text-secondary underline font-medium"
           >
             Clear All
           </button>
@@ -678,20 +678,20 @@ export default function SalesView({
       )}
 
       {/* Summary Stats */}
-      <div className="bg-white rounded-xl border border-gray-300 p-5 shadow-sm">
+      <div className="bg-surface rounded-xl border border-border-strong p-5 shadow-sm">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-bold text-gray-800">Summary</h3>
+          <h3 className="text-lg font-bold text-text-primary">Summary</h3>
           {summary.comparisonLabel && (
-            <span className="text-sm text-gray-500 font-medium">{summary.comparisonLabel}</span>
+            <span className="text-sm text-text-muted font-medium">{summary.comparisonLabel}</span>
           )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
-          <div className="bg-cyan-50 rounded-xl p-5 border border-cyan-300">
+          <div className="bg-cyan-50 dark:bg-cyan-950 rounded-xl p-5 border border-cyan-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-cyan-700 uppercase tracking-wide">Revenue</span>
               <Banknote className="w-6 h-6 text-cyan-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrencyShort(summary.totalRevenue)}</div>
+            <div className="text-3xl font-display font-bold text-text-primary">{formatCurrencyShort(summary.totalRevenue)}</div>
             {summary.revenueChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.revenueChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.revenueChange >= 0 ? '+' : ''}{summary.revenueChange.toFixed(1)}%
@@ -699,12 +699,12 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-violet-50 rounded-xl p-5 border border-violet-300">
+          <div className="bg-violet-50 dark:bg-violet-950 rounded-xl p-5 border border-violet-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-violet-700 uppercase tracking-wide">Units</span>
               <ShoppingCart className="w-6 h-6 text-violet-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.totalUnits)}</div>
+            <div className="text-3xl font-display font-bold text-text-primary">{formatNumber(summary.totalUnits)}</div>
             {summary.unitsChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.unitsChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.unitsChange >= 0 ? '+' : ''}{summary.unitsChange.toFixed(1)}%
@@ -712,12 +712,12 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-blue-50 rounded-xl p-5 border border-blue-300">
+          <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-5 border border-blue-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-blue-700 uppercase tracking-wide">Customers</span>
               <Users className="w-6 h-6 text-blue-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.uniqueCustomers)}</div>
+            <div className="text-3xl font-display font-bold text-text-primary">{formatNumber(summary.uniqueCustomers)}</div>
             {summary.customersChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.customersChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.customersChange >= 0 ? '+' : ''}{summary.customersChange.toFixed(1)}%
@@ -725,12 +725,12 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-300">
+          <div className="bg-emerald-50 dark:bg-emerald-950 rounded-xl p-5 border border-emerald-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Styles</span>
               <Package className="w-6 h-6 text-emerald-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatNumber(summary.uniqueStyles)}</div>
+            <div className="text-3xl font-display font-bold text-text-primary">{formatNumber(summary.uniqueStyles)}</div>
             {summary.stylesChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.stylesChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.stylesChange >= 0 ? '+' : ''}{summary.stylesChange.toFixed(1)}%
@@ -738,12 +738,12 @@ export default function SalesView({
             )}
           </div>
 
-          <div className="bg-amber-50 rounded-xl p-5 border border-amber-300">
+          <div className="bg-amber-50 dark:bg-amber-950 rounded-xl p-5 border border-amber-300">
             <div className="flex items-start justify-between mb-3">
               <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Avg Order</span>
               <Receipt className="w-6 h-6 text-amber-600" />
             </div>
-            <div className="text-3xl font-display font-bold text-gray-900">{formatCurrencyShort(summary.avgOrder)}</div>
+            <div className="text-3xl font-display font-bold text-text-primary">{formatCurrencyShort(summary.avgOrder)}</div>
             {summary.avgOrderChange !== null && (
               <div className={`text-sm font-semibold mt-2 ${summary.avgOrderChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {summary.avgOrderChange >= 0 ? '+' : ''}{summary.avgOrderChange.toFixed(1)}%
@@ -756,13 +756,13 @@ export default function SalesView({
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* By Gender - Horizontal bar chart */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Gender</h3>
+        <div className="bg-surface rounded-xl border border-border-strong shadow-sm overflow-hidden">
+          <div className="bg-surface-secondary px-6 py-4 border-b border-border-strong">
+            <h3 className="text-xl font-bold text-text-primary">By Gender</h3>
           </div>
           <div className="p-6 space-y-4">
             {byGenderChart.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No gender data available</p>
+              <p className="text-text-muted text-center py-4">No gender data available</p>
             ) : (
               byGenderChart.map((item) => (
                 <button
@@ -770,8 +770,8 @@ export default function SalesView({
                   onClick={() => setFilter('gender', item.key)}
                   className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
                     activeFilters.gender === item.key
-                      ? 'bg-gray-100 ring-2 ring-offset-1'
-                      : 'hover:bg-gray-50'
+                      ? 'bg-surface-tertiary ring-2 ring-offset-1'
+                      : 'hover:bg-hover'
                   }`}
                   style={{
                     ...(activeFilters.gender === item.key && { ['--tw-ring-color' as string]: item.color }),
@@ -783,16 +783,16 @@ export default function SalesView({
                   >
                     {item.key}
                   </span>
-                  <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-6 bg-surface-tertiary rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${item.percent}%`, backgroundColor: item.color }}
                     />
                   </div>
-                  <span className="w-16 text-right font-mono text-sm text-gray-500">
+                  <span className="w-16 text-right font-mono text-sm text-text-muted">
                     {item.sharePercent?.toFixed(0)}%
                   </span>
-                  <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
+                  <span className="w-24 text-right font-mono text-base font-semibold text-text-primary">
                     {formatCurrencyShort(item.revenue)}
                   </span>
                 </button>
@@ -802,13 +802,13 @@ export default function SalesView({
         </div>
 
         {/* By Category */}
-        <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
-            <h3 className="text-xl font-bold text-gray-900">By Category</h3>
+        <div className="bg-surface rounded-xl border border-border-strong shadow-sm overflow-hidden">
+          <div className="bg-surface-secondary px-6 py-4 border-b border-border-strong">
+            <h3 className="text-xl font-bold text-text-primary">By Category</h3>
           </div>
           <div className="p-6 space-y-4">
             {byCategory.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No category data available</p>
+              <p className="text-text-muted text-center py-4">No category data available</p>
             ) : (
               byCategory.map((item) => (
                 <button
@@ -816,18 +816,18 @@ export default function SalesView({
                   onClick={() => setFilter('category', item.key)}
                   className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
                     activeFilters.category === item.key
-                      ? 'bg-emerald-100 ring-2 ring-emerald-500'
-                      : 'hover:bg-gray-50'
+                      ? 'bg-emerald-100 dark:bg-emerald-900 ring-2 ring-emerald-500'
+                      : 'hover:bg-hover'
                   }`}
                 >
-                  <span className="flex-1 text-left text-base text-gray-700 truncate font-medium">{item.key}</span>
-                  <div className="w-36 h-6 bg-gray-100 rounded-full overflow-hidden">
+                  <span className="flex-1 text-left text-base text-text-secondary truncate font-medium">{item.key}</span>
+                  <div className="w-36 h-6 bg-surface-tertiary rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 rounded-full transition-all"
                       style={{ width: `${item.percent}%` }}
                     />
                   </div>
-                  <span className="w-24 text-right font-mono text-base font-semibold text-gray-900">
+                  <span className="w-24 text-right font-mono text-base font-semibold text-text-primary">
                     {formatCurrencyShort(item.revenue)}
                   </span>
                 </button>
@@ -838,13 +838,13 @@ export default function SalesView({
       </div>
 
       {/* Top 10 Customers - Full width */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300">
-          <h3 className="text-xl font-bold text-gray-900">Top 10 Customers</h3>
+      <div className="bg-surface rounded-xl border border-border-strong shadow-sm overflow-hidden">
+        <div className="bg-surface-secondary px-6 py-4 border-b border-border-strong">
+          <h3 className="text-xl font-bold text-text-primary">Top 10 Customers</h3>
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-3">
           {topCustomers.length === 0 ? (
-            <p className="text-gray-500 text-center py-4 col-span-2">No customer data available</p>
+            <p className="text-text-muted text-center py-4 col-span-2">No customer data available</p>
           ) : (
             topCustomers.map((item, index) => (
               <button
@@ -852,17 +852,17 @@ export default function SalesView({
                 onClick={() => setFilter('customer', item.customer)}
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
                   activeFilters.customer === item.customer
-                    ? 'bg-amber-100 ring-2 ring-amber-500'
-                    : 'hover:bg-gray-50'
+                    ? 'bg-amber-100 dark:bg-amber-900 ring-2 ring-amber-500'
+                    : 'hover:bg-hover'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                  <span className="w-7 h-7 rounded-full bg-surface-tertiary flex items-center justify-center text-xs font-bold text-text-secondary">
                     {index + 1}
                   </span>
-                  <span className="text-sm text-gray-700 truncate max-w-[200px] font-medium">{item.customer}</span>
+                  <span className="text-sm text-text-secondary truncate max-w-[200px] font-medium">{item.customer}</span>
                 </div>
-                <span className="font-mono text-sm font-semibold text-gray-900">{formatCurrencyShort(item.revenue)}</span>
+                <span className="font-mono text-sm font-semibold text-text-primary">{formatCurrencyShort(item.revenue)}</span>
               </button>
             ))
           )}
@@ -870,12 +870,12 @@ export default function SalesView({
       </div>
 
       {/* Sales by Style Table */}
-      <div className="bg-white rounded-xl border border-gray-300 shadow-sm overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-300 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-900">Sales by Style</h3>
+      <div className="bg-surface rounded-xl border border-border-strong shadow-sm overflow-hidden">
+        <div className="bg-surface-secondary px-6 py-4 border-b border-border-strong flex items-center justify-between">
+          <h3 className="text-xl font-bold text-text-primary">Sales by Style</h3>
           <button
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors"
           >
             <Download className="w-5 h-5" />
             Export CSV
@@ -885,9 +885,9 @@ export default function SalesView({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-gray-100 border-b-2 border-gray-300">
+              <tr className="bg-surface-tertiary border-b-2 border-border-strong">
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                  className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                   onClick={() => handleSort('styleNumber')}
                 >
                   <div className="flex items-center gap-1">
@@ -896,7 +896,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-r border-gray-200"
+                  className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-r border-border-primary"
                   onClick={() => handleSort('styleDesc')}
                 >
                   <div className="flex items-center gap-1">
@@ -905,7 +905,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('gender')}
                 >
                   <div className="flex items-center gap-1">
@@ -914,7 +914,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('categoryDesc')}
                 >
                   <div className="flex items-center gap-1">
@@ -923,7 +923,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('units')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -932,7 +932,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('revenue')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -941,7 +941,7 @@ export default function SalesView({
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide cursor-pointer hover:text-gray-900 border-l border-gray-200"
+                  className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary border-l border-border-primary"
                   onClick={() => handleSort('customerCount')}
                 >
                   <div className="flex items-center justify-end gap-1">
@@ -956,17 +956,17 @@ export default function SalesView({
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
-                  className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  } hover:bg-cyan-50`}
+                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                  } hover:bg-hover-accent`}
                 >
-                  <td className="px-4 py-4 border-r border-gray-200">
-                    <span className="font-mono text-lg font-bold text-gray-900">
+                  <td className="px-4 py-4 border-r border-border-primary">
+                    <span className="font-mono text-lg font-bold text-text-primary">
                       {style.styleNumber}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base text-gray-700 truncate max-w-[220px] border-r border-gray-200">{style.styleDesc}</td>
-                  <td className="px-4 py-4 border-l border-gray-200">
+                  <td className="px-4 py-4 text-base text-text-secondary truncate max-w-[220px] border-r border-border-primary">{style.styleDesc}</td>
+                  <td className="px-4 py-4 border-l border-border-primary">
                     <span
                       className="text-base font-semibold px-2.5 py-1 rounded"
                       style={{
@@ -977,14 +977,14 @@ export default function SalesView({
                       {style.gender || '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-base text-gray-700 border-l border-gray-200">{style.categoryDesc || '—'}</td>
-                  <td className="px-4 py-4 text-right font-mono text-base font-medium text-gray-900 border-l border-gray-200">
+                  <td className="px-4 py-4 text-base text-text-secondary border-l border-border-primary">{style.categoryDesc || '—'}</td>
+                  <td className="px-4 py-4 text-right font-mono text-base font-medium text-text-primary border-l border-border-primary">
                     {formatNumber(style.units)}
                   </td>
-                  <td className="px-4 py-4 text-right font-mono text-base font-bold text-gray-900 border-l border-gray-200">
+                  <td className="px-4 py-4 text-right font-mono text-base font-bold text-text-primary border-l border-border-primary">
                     {formatCurrencyShort(style.revenue)}
                   </td>
-                  <td className="px-4 py-4 text-right font-mono text-base text-gray-700 border-l border-gray-200">{style.customerCount}</td>
+                  <td className="px-4 py-4 text-right font-mono text-base text-text-secondary border-l border-border-primary">{style.customerCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -992,8 +992,8 @@ export default function SalesView({
         </div>
 
         {/* Pagination */}
-        <div className="px-5 py-4 bg-gray-100 border-t-2 border-gray-300 flex items-center justify-between">
-          <span className="text-base text-gray-600">
+        <div className="px-5 py-4 bg-surface-tertiary border-t-2 border-border-strong flex items-center justify-between">
+          <span className="text-base text-text-secondary">
             Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, sortedStyles.length)} of{' '}
             {sortedStyles.length} styles
           </span>
@@ -1001,18 +1001,18 @@ export default function SalesView({
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="w-5 h-5" />
               Prev
             </button>
-            <span className="text-base text-gray-600 font-medium">
+            <span className="text-base text-text-secondary font-medium">
               Page {currentPage} of {totalPages || 1}
             </span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 px-4 py-2 text-base font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-tertiary rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
               <ChevronRight className="w-5 h-5" />

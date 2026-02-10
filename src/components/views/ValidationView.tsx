@@ -254,17 +254,17 @@ export default function ValidationView({
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-4xl font-display font-bold text-gray-900">Line List Validation</h2>
-        <p className="text-base text-gray-500 mt-2">
+        <h2 className="text-4xl font-display font-bold text-text-primary">Line List Validation</h2>
+        <p className="text-base text-text-muted mt-2">
           Data quality checks for Line List accuracy
         </p>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Health Score</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Health Score</span>
             {stats.healthScore >= 80 ? (
               <CheckCircle className="w-6 h-6 text-green-500" />
             ) : stats.healthScore >= 50 ? (
@@ -281,17 +281,17 @@ export default function ValidationView({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border-2 border-gray-200 p-5">
+        <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">Line List Styles</span>
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Line List Styles</span>
             <Package className="w-6 h-6 text-cyan-600" />
           </div>
-          <div className="text-4xl font-display font-bold text-gray-900">
+          <div className="text-4xl font-display font-bold text-text-primary">
             {formatNumber(stats.totalLineListStyles)}
           </div>
         </div>
 
-        <div className="bg-amber-50 rounded-xl border-2 border-amber-200 p-5">
+        <div className="bg-amber-50 dark:bg-amber-950 rounded-xl border-2 border-amber-200 p-5">
           <div className="flex items-start justify-between mb-3">
             <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Missing</span>
             <AlertTriangle className="w-6 h-6 text-amber-600" />
@@ -304,25 +304,25 @@ export default function ValidationView({
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-xl border-2 border-gray-200 p-5">
+        <div className="bg-surface-secondary rounded-xl border-2 border-border-primary p-5">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-gray-600 uppercase tracking-wide">No Sales</span>
-            <Trash2 className="w-6 h-6 text-gray-500" />
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">No Sales</span>
+            <Trash2 className="w-6 h-6 text-text-muted" />
           </div>
-          <div className="text-4xl font-display font-bold text-gray-700">
+          <div className="text-4xl font-display font-bold text-text-secondary">
             {stats.noSalesCount}
           </div>
-          <div className="text-sm text-gray-500 mt-1">
+          <div className="text-sm text-text-muted mt-1">
             Historical styles
           </div>
         </div>
       </div>
 
       {/* Rule 1: Missing from Line List */}
-      <div className="bg-white rounded-xl border-2 border-amber-200 overflow-hidden">
+      <div className="bg-surface rounded-xl border-2 border-amber-200 overflow-hidden">
         <button
           onClick={() => setExpandMissing(!expandMissing)}
-          className="w-full bg-amber-50 px-6 py-4 border-b-2 border-amber-200 flex items-center justify-between hover:bg-amber-100 transition-colors"
+          className="w-full bg-amber-50 dark:bg-amber-950 px-6 py-4 border-b-2 border-amber-200 flex items-center justify-between hover:bg-amber-100 transition-colors"
         >
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-6 h-6 text-amber-600" />
@@ -360,13 +360,13 @@ export default function ValidationView({
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-gray-100 border-b-2 border-gray-300">
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Style #</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Style Name</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide">WH Revenue</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold text-gray-700 uppercase tracking-wide">Units</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Last Season</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Seasons</th>
+                    <tr className="bg-surface-tertiary border-b-2 border-border-strong">
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Style #</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Style Name</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">WH Revenue</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Units</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Last Season</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Seasons</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -374,26 +374,26 @@ export default function ValidationView({
                       <tr
                         key={item.styleNumber}
                         onClick={() => onStyleClick(item.styleNumber)}
-                        className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        } hover:bg-amber-50`}
+                        className={`border-b border-border-primary cursor-pointer transition-colors ${
+                          index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                        } hover:bg-amber-50 hover:dark:bg-amber-950`}
                       >
                         <td className="px-4 py-3">
-                          <span className="font-mono text-lg font-bold text-gray-900">{item.styleNumber}</span>
+                          <span className="font-mono text-lg font-bold text-text-primary">{item.styleNumber}</span>
                         </td>
-                        <td className="px-4 py-3 text-base text-gray-700 truncate max-w-[200px]">{item.styleDesc}</td>
+                        <td className="px-4 py-3 text-base text-text-secondary truncate max-w-[200px]">{item.styleDesc}</td>
                         <td className="px-4 py-3 text-right font-mono text-base font-bold text-amber-700">
                           {formatCurrencyShort(item.whRevenue)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-base text-gray-700">
+                        <td className="px-4 py-3 text-right font-mono text-base text-text-secondary">
                           {formatNumber(item.totalUnits)}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-sm font-mono font-bold rounded">
+                          <span className="px-2 py-1 bg-surface-tertiary text-text-secondary text-sm font-mono font-bold rounded">
                             {item.lastSeason}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm text-text-muted">
                           {item.seasons.join(', ')}
                         </td>
                       </tr>
@@ -401,7 +401,7 @@ export default function ValidationView({
                   </tbody>
                 </table>
                 {missingFromLineList.length > 50 && (
-                  <div className="text-center py-4 text-gray-500">
+                  <div className="text-center py-4 text-text-muted">
                     Showing 50 of {missingFromLineList.length} styles. Export CSV for full list.
                   </div>
                 )}
@@ -412,18 +412,18 @@ export default function ValidationView({
       </div>
 
       {/* Rule 2: No Sales History */}
-      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+      <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
         <button
           onClick={() => setExpandNoSales(!expandNoSales)}
-          className="w-full bg-gray-50 px-6 py-4 border-b-2 border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
+          className="w-full bg-surface-secondary px-6 py-4 border-b-2 border-border-primary flex items-center justify-between hover:bg-surface-tertiary transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Trash2 className="w-6 h-6 text-gray-500" />
+            <Trash2 className="w-6 h-6 text-text-muted" />
             <div className="text-left">
-              <h3 className="text-xl font-bold text-gray-800">
+              <h3 className="text-xl font-bold text-text-primary">
                 No Sales History
               </h3>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-text-muted">
                 {noSalesHistory.length} historical styles (pre-27SP) have no sales data - consider removing
               </p>
             </div>
@@ -432,13 +432,13 @@ export default function ValidationView({
             {noSalesHistory.length > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); exportNoSalesCSV(); }}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-surface-tertiary rounded-lg transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Export
               </button>
             )}
-            {expandNoSales ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+            {expandNoSales ? <ChevronUp className="w-5 h-5 text-text-muted" /> : <ChevronDown className="w-5 h-5 text-text-muted" />}
           </div>
         </button>
 
@@ -453,12 +453,12 @@ export default function ValidationView({
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-gray-100 border-b-2 border-gray-300">
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Style #</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Style Name</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Category</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Division</th>
-                      <th className="px-4 py-3 text-left text-sm font-bold text-gray-700 uppercase tracking-wide">Last in Line List</th>
+                    <tr className="bg-surface-tertiary border-b-2 border-border-strong">
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Style #</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Style Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Category</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Division</th>
+                      <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Last in Line List</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -466,18 +466,18 @@ export default function ValidationView({
                       <tr
                         key={item.styleNumber}
                         onClick={() => onStyleClick(item.styleNumber)}
-                        className={`border-b border-gray-200 cursor-pointer transition-colors ${
-                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        } hover:bg-gray-100`}
+                        className={`border-b border-border-primary cursor-pointer transition-colors ${
+                          index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
+                        } hover:bg-surface-tertiary`}
                       >
                         <td className="px-4 py-3">
-                          <span className="font-mono text-lg font-bold text-gray-900">{item.styleNumber}</span>
+                          <span className="font-mono text-lg font-bold text-text-primary">{item.styleNumber}</span>
                         </td>
-                        <td className="px-4 py-3 text-base text-gray-700 truncate max-w-[200px]">{item.styleDesc}</td>
-                        <td className="px-4 py-3 text-base text-gray-600">{item.category}</td>
-                        <td className="px-4 py-3 text-base text-gray-600">{item.division}</td>
+                        <td className="px-4 py-3 text-base text-text-secondary truncate max-w-[200px]">{item.styleDesc}</td>
+                        <td className="px-4 py-3 text-base text-text-secondary">{item.category}</td>
+                        <td className="px-4 py-3 text-base text-text-secondary">{item.division}</td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-sm font-mono font-bold rounded">
+                          <span className="px-2 py-1 bg-surface-tertiary text-text-secondary text-sm font-mono font-bold rounded">
                             {item.lastLineListSeason}
                           </span>
                         </td>
@@ -486,7 +486,7 @@ export default function ValidationView({
                   </tbody>
                 </table>
                 {noSalesHistory.length > 50 && (
-                  <div className="text-center py-4 text-gray-500">
+                  <div className="text-center py-4 text-text-muted">
                     Showing 50 of {noSalesHistory.length} styles. Export CSV for full list.
                   </div>
                 )}

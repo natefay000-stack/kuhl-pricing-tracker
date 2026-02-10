@@ -102,7 +102,7 @@ model Pricing {
   @@index([styleNumber])
 }
 
-// Cost data from Landed Request Sheet
+// Cost data from Landed Request Sheet or Standard Cost Sheet
 model Cost {
   id                  String   @id @default(cuid())
   styleNumber         String
@@ -122,6 +122,7 @@ model Cost {
   suggestedMsrp       Float?
   suggestedWholesale  Float?
   margin              Float?
+  costSource          String?  // 'landed_cost' (priority 1) or 'standard_cost' (priority 2)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

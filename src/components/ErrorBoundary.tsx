@@ -40,14 +40,14 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
-          <div className="bg-red-50 border border-red-200 rounded-xl p-8 max-w-lg w-full">
+          <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-8 max-w-lg w-full">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-red-800 mb-2">
+            <h2 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">
               {this.props.viewName
                 ? `Something went wrong in ${this.props.viewName}`
                 : 'Something went wrong'}
             </h2>
-            <p className="text-sm text-red-600 mb-4">
+            <p className="text-sm text-red-600 dark:text-red-300 mb-4">
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button

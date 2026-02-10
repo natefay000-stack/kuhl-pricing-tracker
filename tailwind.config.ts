@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -18,7 +19,24 @@ const config: Config = {
           clay: '#9c7a5a',
           cream: '#f5f2ed',
           slate: '#64748b',
-        }
+        },
+        // Semantic color tokens — auto-switch via CSS custom properties
+        surface: {
+          DEFAULT: 'var(--color-surface)',
+          secondary: 'var(--color-surface-secondary)',
+          tertiary: 'var(--color-surface-tertiary)',
+        },
+        'text-primary': 'var(--color-text-primary)',
+        'text-secondary': 'var(--color-text-secondary)',
+        'text-muted': 'var(--color-text-muted)',
+        'text-faint': 'var(--color-text-faint)',
+        'border-primary': 'var(--color-border-primary)',
+        'border-secondary': 'var(--color-border-secondary)',
+        'border-strong': 'var(--color-border-strong)',
+        hover: {
+          DEFAULT: 'var(--color-hover)',
+          accent: 'var(--color-hover-accent)',
+        },
       },
       fontFamily: {
         display: ['var(--font-display)', 'system-ui', 'sans-serif'],

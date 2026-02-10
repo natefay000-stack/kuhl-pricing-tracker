@@ -68,12 +68,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
     const totalRows = range.e.r - range.s.r; // Approximate row count
 
     // Parse only first 20 rows for detection
+    const startRow = isLDPSheet ? 10 : 0;
     const rows = XLSX.utils.sheet_to_json(sheet, {
       defval: '',
-      range: isLDPSheet ? { s: { r: 10, c: 0 }, e: { r: 30, c: range.e.c } } : { s: { r: 0, c: 0 }, e: { r: 20, c: range.e.c } },
+      range: { s: { r: startRow, c: 0 }, e: { r: startRow + 20, c: range.e.c } },
     }) as Record<string, unknown>[];
 
-    if (rows.length === 0) {
+    // Filter out rows with only empty values or columns named __EMPTY*
+    const cleanedRows = rows.filter(row => {
+      const keys = Object.keys(row).filter(k => !k.startsWith('__EMPTY'));
+      return keys.some(k => row[k] !== '' && row[k] !== null && row[k] !== undefined);
+    });
+
+    if (cleanedRows.length === 0) {
       return NextResponse.json({
         success: false,
         filename: file.name,
@@ -89,8 +96,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
       }, { status: 400 });
     }
 
-    // Get headers from first row
-    const headers = Object.keys(rows[0]);
+    // Get headers from first row (filter out __EMPTY* columns from detection)
+    const allHeaders = Object.keys(cleanedRows[0]);
+    const headers = allHeaders.filter(h => !h.startsWith('__EMPTY'));
 
     // Detect file type from headers
     const detection = detectFileType(headers);
@@ -99,8 +107,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<DetectFil
     const detectedSeason = extractSeasonFromFilename(file.name);
 
     // Get preview rows (first 5) and use approximate total count
-    const previewRows = rows.slice(0, 5);
-    const recordCount = Math.max(totalRows - (isLDPSheet ? 10 : 0), rows.length);
+    const previewRows = cleanedRows.slice(0, 5);
+    const recordCount = Math.max(totalRows - startRow, cleanedRows.length);
 
     console.log(`Detected: ${detection.type} (${detection.confidence}), Season: ${detectedSeason}, Records: ~${recordCount}`);
 

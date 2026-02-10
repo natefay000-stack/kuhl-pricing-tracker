@@ -26,8 +26,13 @@ const COSTS_COLUMNS = [
   'Landed', 'Landed Cost', 'LDP',
   'Duty', 'Duty %', 'Duty Cost', 'Duty Cost $',
   'Freight', 'Freight Cost',
-  'Tariff', 'Tariff Cost', 'Tariff  Cost $',
+  'Tariff', 'Tariff Cost', 'Tariff Cost $', 'Tariff  Cost $',
   'Overhead', 'Overhead Cost',
+  'Suggested MSRP', 'Suggested Selling Price',
+  // Cost History sheet columns
+  'Total Cost', 'Std Cost', 'GP %',
+  'Fab $', 'Trm $', 'Process $',
+  'Cost_Sheet',
 ];
 
 const SALES_COLUMNS = [

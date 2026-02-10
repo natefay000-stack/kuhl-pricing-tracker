@@ -29,9 +29,9 @@ interface SeasonsAdminModalProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'planning', label: 'Planning', icon: Clock, color: 'bg-blue-100 text-blue-700' },
-  { value: 'selling', label: 'Selling', icon: Check, color: 'bg-green-100 text-green-700' },
-  { value: 'complete', label: 'Complete', icon: Archive, color: 'bg-gray-100 text-gray-700' },
+  { value: 'planning', label: 'Planning', icon: Clock, color: 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' },
+  { value: 'selling', label: 'Selling', icon: Check, color: 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300' },
+  { value: 'complete', label: 'Complete', icon: Archive, color: 'bg-surface-tertiary text-text-secondary' },
 ];
 
 function formatCount(count: number): string {
@@ -117,26 +117,26 @@ export default function SeasonsAdminModal({ onClose, onSeasonsUpdated }: Seasons
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-surface rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="px-6 py-4 border-b border-border-primary flex items-center justify-between bg-surface-secondary">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Season Management</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <h2 className="text-2xl font-bold text-text-primary">Season Management</h2>
+            <p className="text-sm text-text-muted mt-1">
               Configure season status and expected data availability
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            className="p-2 hover:bg-surface-tertiary rounded-lg transition-colors"
           >
-            <X className="w-6 h-6 text-gray-500" />
+            <X className="w-6 h-6 text-text-muted" />
           </button>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
             {error}
           </div>
         )}
@@ -150,31 +150,31 @@ export default function SeasonsAdminModal({ onClose, onSeasonsUpdated }: Seasons
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b-2 border-gray-200">
-                  <th className="text-left py-3 px-2 text-sm font-bold text-gray-600 uppercase">Season</th>
-                  <th className="text-left py-3 px-2 text-sm font-bold text-gray-600 uppercase">Status</th>
-                  <th className="text-right py-3 px-2 text-sm font-bold text-gray-600 uppercase">Products</th>
-                  <th className="text-right py-3 px-2 text-sm font-bold text-gray-600 uppercase">Pricing</th>
-                  <th className="text-right py-3 px-2 text-sm font-bold text-gray-600 uppercase">Costs</th>
-                  <th className="text-right py-3 px-2 text-sm font-bold text-gray-600 uppercase">Sales</th>
-                  <th className="text-left py-3 px-2 text-sm font-bold text-gray-600 uppercase">Notes</th>
-                  <th className="text-center py-3 px-2 text-sm font-bold text-gray-600 uppercase">Save</th>
+                <tr className="border-b-2 border-border-primary">
+                  <th className="text-left py-3 px-2 text-sm font-bold text-text-secondary uppercase">Season</th>
+                  <th className="text-left py-3 px-2 text-sm font-bold text-text-secondary uppercase">Status</th>
+                  <th className="text-right py-3 px-2 text-sm font-bold text-text-secondary uppercase">Products</th>
+                  <th className="text-right py-3 px-2 text-sm font-bold text-text-secondary uppercase">Pricing</th>
+                  <th className="text-right py-3 px-2 text-sm font-bold text-text-secondary uppercase">Costs</th>
+                  <th className="text-right py-3 px-2 text-sm font-bold text-text-secondary uppercase">Sales</th>
+                  <th className="text-left py-3 px-2 text-sm font-bold text-text-secondary uppercase">Notes</th>
+                  <th className="text-center py-3 px-2 text-sm font-bold text-text-secondary uppercase">Save</th>
                 </tr>
               </thead>
               <tbody>
                 {seasons.map((season) => (
-                  <tr key={season.code} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr key={season.code} className="border-b border-border-secondary hover:bg-hover">
                     <td className="py-3 px-2">
                       <div>
-                        <span className="font-mono font-bold text-lg text-gray-900">{season.code}</span>
-                        <div className="text-sm text-gray-500">{season.name}</div>
+                        <span className="font-mono font-bold text-lg text-text-primary">{season.code}</span>
+                        <div className="text-sm text-text-muted">{season.name}</div>
                       </div>
                     </td>
                     <td className="py-3 px-2">
                       <select
                         value={season.status}
                         onChange={(e) => updateSeason(season.code, { status: e.target.value as SeasonMetadata['status'] })}
-                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        className="px-3 py-2 border border-border-primary rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-surface"
                       >
                         {STATUS_OPTIONS.map(opt => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -182,22 +182,22 @@ export default function SeasonsAdminModal({ onClose, onSeasonsUpdated }: Seasons
                       </select>
                     </td>
                     <td className="py-3 px-2 text-right">
-                      <span className={`font-mono text-sm ${season.actualCounts?.products > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      <span className={`font-mono text-sm ${season.actualCounts?.products > 0 ? 'text-green-600 font-semibold' : 'text-text-faint'}`}>
                         {season.actualCounts ? formatCount(season.actualCounts.products) : '0'}
                       </span>
                     </td>
                     <td className="py-3 px-2 text-right">
-                      <span className={`font-mono text-sm ${season.actualCounts?.pricing > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      <span className={`font-mono text-sm ${season.actualCounts?.pricing > 0 ? 'text-green-600 font-semibold' : 'text-text-faint'}`}>
                         {season.actualCounts ? formatCount(season.actualCounts.pricing) : '0'}
                       </span>
                     </td>
                     <td className="py-3 px-2 text-right">
-                      <span className={`font-mono text-sm ${season.actualCounts?.costs > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      <span className={`font-mono text-sm ${season.actualCounts?.costs > 0 ? 'text-green-600 font-semibold' : 'text-text-faint'}`}>
                         {season.actualCounts ? formatCount(season.actualCounts.costs) : '0'}
                       </span>
                     </td>
                     <td className="py-3 px-2 text-right">
-                      <span className={`font-mono text-sm ${season.actualCounts?.sales > 0 ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                      <span className={`font-mono text-sm ${season.actualCounts?.sales > 0 ? 'text-green-600 font-semibold' : 'text-text-faint'}`}>
                         {season.actualCounts ? formatCount(season.actualCounts.sales) : '0'}
                       </span>
                     </td>
@@ -207,7 +207,7 @@ export default function SeasonsAdminModal({ onClose, onSeasonsUpdated }: Seasons
                         value={season.notes || ''}
                         onChange={(e) => updateSeason(season.code, { notes: e.target.value })}
                         placeholder="Notes..."
-                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        className="w-full px-2 py-1 text-sm border border-border-primary rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-surface"
                       />
                     </td>
                     <td className="py-3 px-2 text-center">
@@ -233,16 +233,16 @@ export default function SeasonsAdminModal({ onClose, onSeasonsUpdated }: Seasons
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-          <div className="text-sm text-gray-500">
+        <div className="px-6 py-4 border-t border-border-primary bg-surface-secondary flex items-center justify-between">
+          <div className="text-sm text-text-muted">
             <span className="font-medium">Status meanings:</span>{' '}
             <span className="text-blue-600">Planning</span> = No sales expected,{' '}
             <span className="text-green-600">Selling</span> = Active season,{' '}
-            <span className="text-gray-600">Complete</span> = Historical
+            <span className="text-text-secondary">Complete</span> = Historical
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+            className="px-4 py-2 bg-surface-tertiary text-text-secondary font-semibold rounded-lg hover:bg-surface-tertiary/80 transition-colors"
           >
             Close
           </button>
