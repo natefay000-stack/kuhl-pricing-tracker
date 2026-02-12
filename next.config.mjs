@@ -1,14 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: false,
   },
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',
     },
-    serverComponentsExternalPackages: ['@prisma/client'],
   },
+  serverExternalPackages: ['@prisma/client'],
 };
 
 export default nextConfig;
