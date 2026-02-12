@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
+import { SalesAggregations } from '@/app/page';
 import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
@@ -10,6 +11,7 @@ interface DashboardViewProps {
   products: Product[];
   sales: SalesRecord[];
   costs: CostRecord[];
+  salesAggregations?: SalesAggregations | null;
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
@@ -20,11 +22,15 @@ export default function DashboardView({
   products,
   sales,
   costs,
+  salesAggregations,
   selectedSeason,
   selectedDivision,
   selectedCategory,
   onStyleClick,
 }: DashboardViewProps) {
+  // Use raw sales when available, otherwise fall back to aggregations
+  const hasSalesData = sales.length > 0;
+
   // Filter sales by selected filters
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
@@ -35,45 +41,72 @@ export default function DashboardView({
     });
   }, [sales, selectedSeason, selectedDivision, selectedCategory]);
 
-  // Calculate summary stats
+  // Calculate summary stats — use aggregations as fallback when sales haven't loaded
   const stats = useMemo(() => {
-    const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
-    const totalUnits = filteredSales.reduce((sum, s) => sum + (s.unitsBooked || 0), 0);
-    const uniqueStyles = new Set(filteredSales.map((s) => s.styleNumber)).size;
+    if (hasSalesData) {
+      // Full calculation from raw sales
+      const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
+      const totalUnits = filteredSales.reduce((sum, s) => sum + (s.unitsBooked || 0), 0);
+      const uniqueStyles = new Set(filteredSales.map((s) => s.styleNumber)).size;
 
-    // Build cost lookup
-    const costLookup = new Map<string, number>();
-    costs.forEach((c) => {
-      const key = `${c.styleNumber}-${c.season}`;
-      if (c.landed > 0) {
-        costLookup.set(key, c.landed);
-      }
-    });
+      const costLookup = new Map<string, number>();
+      costs.forEach((c) => {
+        const key = `${c.styleNumber}-${c.season}`;
+        if (c.landed > 0) costLookup.set(key, c.landed);
+      });
 
-    // Calculate margin
-    let totalCost = 0;
-    filteredSales.forEach((s) => {
-      const costKey = `${s.styleNumber}-${s.season}`;
-      const unitCost = costLookup.get(costKey) || 0;
-      totalCost += unitCost * s.unitsBooked;
-    });
+      let totalCost = 0;
+      filteredSales.forEach((s) => {
+        const costKey = `${s.styleNumber}-${s.season}`;
+        const unitCost = costLookup.get(costKey) || 0;
+        totalCost += unitCost * s.unitsBooked;
+      });
 
-    const margin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
+      const margin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
+      return { totalRevenue, totalUnits, uniqueStyles, margin };
+    }
 
-    return { totalRevenue, totalUnits, uniqueStyles, margin };
-  }, [filteredSales, costs]);
+    // Fallback: compute from aggregations (available before raw sales load)
+    if (salesAggregations) {
+      const aggs = salesAggregations.byCategory || [];
+      const filtered = aggs.filter((a) => {
+        if (selectedSeason && a.season !== selectedSeason) return false;
+        if (selectedCategory && normalizeCategory(a.category) !== selectedCategory) return false;
+        return true;
+      });
+      const totalRevenue = filtered.reduce((sum, a) => sum + (a.revenue || 0), 0);
+      const totalUnits = filtered.reduce((sum, a) => sum + (a.units || 0), 0);
+      return { totalRevenue, totalUnits, uniqueStyles: 0, margin: 0 };
+    }
 
-  // Sales by category
+    return { totalRevenue: 0, totalUnits: 0, uniqueStyles: 0, margin: 0 };
+  }, [hasSalesData, filteredSales, costs, salesAggregations, selectedSeason, selectedCategory]);
+
+  // Sales by category — use aggregations as fallback
   const salesByCategory = useMemo(() => {
-    const grouped = new Map<string, number>();
-    filteredSales.forEach((s) => {
-      const cat = normalizeCategory(s.categoryDesc) || 'Unknown';
-      grouped.set(cat, (grouped.get(cat) || 0) + (s.revenue || 0));
-    });
-    return Array.from(grouped.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
-  }, [filteredSales]);
+    if (hasSalesData) {
+      const grouped = new Map<string, number>();
+      filteredSales.forEach((s) => {
+        const cat = normalizeCategory(s.categoryDesc) || 'Unknown';
+        grouped.set(cat, (grouped.get(cat) || 0) + (s.revenue || 0));
+      });
+      return Array.from(grouped.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6);
+    }
+    if (salesAggregations) {
+      const grouped = new Map<string, number>();
+      (salesAggregations.byCategory || []).forEach((a) => {
+        if (selectedSeason && a.season !== selectedSeason) return;
+        const cat = normalizeCategory(a.category) || 'Unknown';
+        grouped.set(cat, (grouped.get(cat) || 0) + (a.revenue || 0));
+      });
+      return Array.from(grouped.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6);
+    }
+    return [];
+  }, [hasSalesData, filteredSales, salesAggregations, selectedSeason]);
 
   // Helper to derive gender from divisionDesc
   const getGenderFromDivision = (divisionDesc: string): string => {
@@ -99,28 +132,48 @@ export default function DashboardView({
     return map;
   }, [products]);
 
-  // Sales by gender (Line List priority, fallback to sales divisionDesc)
+  // Sales by gender — use aggregations as fallback
   const salesByGender = useMemo(() => {
-    const grouped = new Map<string, number>();
-    const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
+    if (hasSalesData) {
+      const grouped = new Map<string, number>();
+      const totalRevenue = filteredSales.reduce((sum, s) => sum + (s.revenue || 0), 0);
 
-    filteredSales.forEach((s) => {
-      // Priority: Line List first, then sales divisionDesc
-      let gender = productGenderMap.get(s.styleNumber);
-      if (!gender) {
-        gender = getGenderFromDivision(s.divisionDesc);
-      }
-      grouped.set(gender, (grouped.get(gender) || 0) + (s.revenue || 0));
-    });
+      filteredSales.forEach((s) => {
+        let gender = productGenderMap.get(s.styleNumber);
+        if (!gender) gender = getGenderFromDivision(s.divisionDesc);
+        grouped.set(gender, (grouped.get(gender) || 0) + (s.revenue || 0));
+      });
 
-    return Array.from(grouped.entries())
-      .map(([gender, revenue]) => ({
-        gender,
-        revenue,
-        percent: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [filteredSales, productGenderMap]);
+      return Array.from(grouped.entries())
+        .map(([gender, revenue]) => ({
+          gender,
+          revenue,
+          percent: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
+    }
+
+    // Fallback: use gender aggregations
+    if (salesAggregations) {
+      const grouped = new Map<string, number>();
+      let totalRevenue = 0;
+      (salesAggregations.byGender || []).forEach((a) => {
+        if (selectedSeason && a.season !== selectedSeason) return;
+        const gender = a.gender || 'Unknown';
+        grouped.set(gender, (grouped.get(gender) || 0) + (a.revenue || 0));
+        totalRevenue += a.revenue || 0;
+      });
+      return Array.from(grouped.entries())
+        .map(([gender, revenue]) => ({
+          gender,
+          revenue,
+          percent: totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0,
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
+    }
+
+    return [];
+  }, [hasSalesData, filteredSales, productGenderMap, salesAggregations, selectedSeason]);
 
   // Cost summary stats
   const costStats = useMemo(() => {
