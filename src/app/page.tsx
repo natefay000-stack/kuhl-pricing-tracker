@@ -187,10 +187,51 @@ export default function Home() {
         setLoadingStatus('Checking cache...');
         setLoadingProgress(5);
 
-        // Check lightweight core cache first (no sales — those are always streamed)
+        // ── Helper: load sales progressively from /api/data?salesOnly=true ──
+        const loadSalesProgressively = async () => {
+          const PAGE_SIZE = 50000;
+          let page = 0;
+          let allSales: SalesRecord[] = [];
+          let totalPages = 1;
+          while (page < totalPages) {
+            try {
+              const res = await fetch(`/api/data?salesOnly=true&salesPage=${page}&salesPageSize=${PAGE_SIZE}`);
+              if (!res.ok) break;
+              const result = await res.json();
+              if (!result.success || !result.sales) break;
+              allSales = [...allSales, ...result.sales];
+              totalPages = result.totalPages || 1;
+              setSales(allSales);
+              console.log(`Sales page ${page + 1}/${totalPages}: ${allSales.length} total`);
+              page++;
+            } catch (err) {
+              console.warn('Sales page fetch failed:', err);
+              break;
+            }
+          }
+          return allSales;
+        };
+
+        // ── Helper: try loading sales from snapshot file (local dev) ──
+        const loadSalesFromSnapshot = async (): Promise<boolean> => {
+          try {
+            const res = await fetch('/api/snapshot?file=sales');
+            if (res.ok) {
+              const salesData = await res.json();
+              if (Array.isArray(salesData) && salesData.length > 0) {
+                setSales(salesData);
+                console.log(`Sales from snapshot: ${salesData.length} records`);
+                return true;
+              }
+            }
+          } catch { /* snapshot not available */ }
+          return false;
+        };
+
+        // ── Step 1: Check lightweight core cache ──
         const cached = getCachedCore();
         if (cached) {
-          console.log('Core data from cache, streaming sales...');
+          console.log('Core data from cache, loading sales...');
           setLoadingStatus('Loading from cache...');
           setLoadingProgress(60);
 
@@ -200,38 +241,30 @@ export default function Home() {
           if (cached.inventory) setInventory(cached.inventory);
           if (cached.salesAggregations) setSalesAggregations(cached.salesAggregations);
           if (cached.inventoryAggregations) setInvAggregations(cached.inventoryAggregations);
-          setSales([]); // Sales loaded below
+          setSales([]);
 
           setLoadingProgress(80);
           setIsLoading(false); // Show UI immediately
 
-          // Stream sales in background (always fresh from snapshot)
-          try {
-            setLoadingStatus('Loading sales data...');
-            const salesRes = await fetch('/api/snapshot?file=sales');
-            if (salesRes.ok) {
-              const salesData = await salesRes.json();
-              setSales(salesData || []);
-              console.log(`Sales loaded: ${(salesData || []).length} records`);
-            }
-          } catch (salesErr) {
-            console.warn('Failed to load sales:', salesErr);
+          // Load sales in background — try snapshot first, then progressive API
+          const gotSnapshot = await loadSalesFromSnapshot();
+          if (!gotSnapshot) {
+            await loadSalesProgressively();
           }
           return;
         }
 
-        // No cache — load everything from snapshot API
+        // ── Step 2: No cache — try snapshot API (local dev) ──
         setLoadingStatus('Loading data...');
         setLoadingProgress(10);
-        console.log('No cache, loading from snapshot API...');
+        let coreLoaded = false;
 
         try {
-          // Phase 1: Core data (products, pricing, costs, inventory, aggregations)
           const coreRes = await fetch('/api/snapshot?file=core');
           if (coreRes.ok) {
             const core = await coreRes.json();
-            if (core.success && core.counts.products > 0) {
-              console.log('Core data loaded:', core.counts);
+            if (core.success && core.counts?.products > 0) {
+              console.log('Core data from snapshot:', core.counts);
               setLoadingProgress(70);
 
               const coreProducts = core.data.products || [];
@@ -241,7 +274,6 @@ export default function Home() {
               const coreSalesAgg = core.salesAggregations || null;
               const coreInvAgg = core.inventoryAggregations || null;
 
-              // Show UI immediately with core data
               setProducts(coreProducts);
               setPricing(corePricing);
               setCosts(coreCosts);
@@ -252,94 +284,94 @@ export default function Home() {
 
               setLoadingProgress(80);
               setIsLoading(false);
+              coreLoaded = true;
 
-              // Cache core data for next visit
               setCachedCore({
-                products: coreProducts,
-                pricing: corePricing,
-                costs: coreCosts,
+                products: coreProducts, pricing: corePricing, costs: coreCosts,
                 inventory: coreInventory,
                 salesAggregations: coreSalesAgg || undefined,
                 inventoryAggregations: coreInvAgg || undefined,
               });
 
-              // Phase 2: Stream sales in background
-              console.log('Loading sales data in background...');
-              try {
-                const salesRes = await fetch('/api/snapshot?file=sales');
-                if (salesRes.ok) {
-                  const salesData = await salesRes.json();
-                  setSales(salesData || []);
-                  console.log(`All sales loaded: ${(salesData || []).length} records`);
-                }
-              } catch (salesErr) {
-                console.warn('Failed to load sales data:', salesErr);
-              }
+              // Load sales from snapshot or progressive API
+              const gotSnapshot = await loadSalesFromSnapshot();
+              if (!gotSnapshot) await loadSalesProgressively();
               return;
             }
           }
         } catch (snapshotErr) {
-          console.log('Snapshot not available, trying API:', snapshotErr);
+          console.log('Snapshot not available:', snapshotErr);
         }
 
-        // Fallback: try database API
-        let data = {
-          products: [] as Product[],
-          sales: [] as SalesRecord[],
-          pricing: [] as PricingRecord[],
-          costs: [] as CostRecord[],
-          inventory: [] as InventoryRecord[],
-          salesAggregations: null as SalesAggregations | null,
-          inventoryAggregations: null as InventoryAggregations | null,
-        };
+        // ── Step 3: No snapshot — load from database API (Vercel production) ──
+        if (!coreLoaded) {
+          try {
+            setLoadingStatus('Loading from database...');
+            setLoadingProgress(20);
+            const dbResponse = await fetch('/api/data');
+            if (dbResponse.ok) {
+              const dbResult = await dbResponse.json();
+              if (dbResult.success && dbResult.counts?.products > 0) {
+                console.log('Core data from database:', dbResult.counts);
+                setLoadingProgress(70);
 
-        try {
-          setLoadingStatus('Loading from database...');
-          const dbResponse = await fetch('/api/data');
-          if (dbResponse.ok) {
-            const dbResult = await dbResponse.json();
-            if (dbResult.success && dbResult.counts.products > 0) {
-              data = {
-                products: dbResult.data.products || [],
-                sales: dbResult.data.sales || [],
-                pricing: dbResult.data.pricing || [],
-                costs: dbResult.data.costs || [],
-                inventory: dbResult.data.inventory || [],
-                salesAggregations: dbResult.salesAggregations || null,
-                inventoryAggregations: dbResult.inventoryAggregations || null,
-              };
-              setLoadingProgress(85);
+                const dbProducts = dbResult.data.products || [];
+                const dbPricing = dbResult.data.pricing || [];
+                const dbCosts = dbResult.data.costs || [];
+                const dbInventory = dbResult.data.inventory || [];
+                const dbSalesAgg = dbResult.salesAggregations || null;
+                const dbInvAgg = dbResult.inventoryAggregations || null;
+
+                setProducts(dbProducts);
+                setPricing(dbPricing);
+                setCosts(dbCosts);
+                setInventory(dbInventory);
+                if (dbSalesAgg) setSalesAggregations(dbSalesAgg);
+                if (dbInvAgg) setInvAggregations(dbInvAgg);
+                setSales(dbResult.data.sales || []);
+
+                setLoadingProgress(80);
+                setIsLoading(false);
+                coreLoaded = true;
+
+                setCachedCore({
+                  products: dbProducts, pricing: dbPricing, costs: dbCosts,
+                  inventory: dbInventory,
+                  salesAggregations: dbSalesAgg || undefined,
+                  inventoryAggregations: dbInvAgg || undefined,
+                });
+
+                // Load sales progressively in background (API returns 0 sales in full mode)
+                if ((dbResult.data.sales || []).length === 0 && dbResult.counts.sales > 0) {
+                  console.log(`Loading ${dbResult.counts.sales} sales progressively...`);
+                  await loadSalesProgressively();
+                }
+                if (coreLoaded) return;
+              }
             }
+          } catch (dbErr) {
+            console.log('Database not available:', dbErr);
           }
-        } catch (dbErr) {
-          console.log('Database not available, falling back to Excel files:', dbErr);
         }
 
-        // If database is empty, try Excel files (local dev only)
-        if (data.products.length === 0) {
+        // ── Step 4: Fallback — try Excel files (local dev only) ──
+        if (!coreLoaded) {
           setLoadingStatus('Checking for local data files...');
           setLoadingProgress(20);
 
           try {
             const response = await fetch('/api/load-data');
-            setLoadingProgress(60);
-
             if (response.ok) {
               setLoadingStatus('Processing data...');
               setLoadingProgress(70);
               const result = await response.json();
-              console.log('Loaded from Excel:', result.counts);
-
               if (result.success) {
-                data = {
-                  products: result.data.products || [],
-                  sales: result.data.sales || [],
-                  pricing: result.data.pricing || [],
-                  costs: result.data.costs || [],
-                  inventory: result.data.inventory || [],
-                  salesAggregations: null,
-                  inventoryAggregations: null,
-                };
+                setProducts(result.data.products || []);
+                setSales(result.data.sales || []);
+                setPricing(result.data.pricing || []);
+                setCosts(result.data.costs || []);
+                setInventory(result.data.inventory || []);
+                coreLoaded = true;
               }
             }
           } catch (excelErr) {
@@ -347,30 +379,9 @@ export default function Home() {
           }
         }
 
-        // If still no data, show empty state
-        if (data.products.length === 0) {
-          console.log('No data found - user needs to import via Season Import Modal');
+        if (!coreLoaded) {
           setLoadingStatus('Ready - Import data to get started');
         }
-
-        setLoadingProgress(85);
-        setProducts(data.products);
-        setSales(data.sales);
-        setPricing(data.pricing);
-        setCosts(data.costs);
-        if (data.inventory) setInventory(data.inventory);
-        if (data.salesAggregations) setSalesAggregations(data.salesAggregations);
-        if (data.inventoryAggregations) setInvAggregations(data.inventoryAggregations);
-
-        // Cache core data (no sales) for next time
-        setCachedCore({
-          products: data.products,
-          pricing: data.pricing,
-          costs: data.costs,
-          inventory: data.inventory,
-          salesAggregations: data.salesAggregations || undefined,
-          inventoryAggregations: data.inventoryAggregations || undefined,
-        });
 
         setLoadingProgress(100);
         setIsLoading(false);
