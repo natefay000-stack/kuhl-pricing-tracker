@@ -191,6 +191,52 @@ export function normalizeCategory(category: string): string {
   return CATEGORY_MAP[upper] || upper;
 }
 
+// Inventory data from Inventory Movement Report
+export interface InventoryRecord {
+  id: string;
+  styleNumber: string;
+  styleDesc?: string;
+  color?: string;
+  colorDesc?: string;
+  colorType?: string;
+  styleCategory?: string;
+  styleCatDesc?: string;
+  warehouse?: string;
+  movementType?: string;     // Type — Receipt, Shipment, Adjustment, etc.
+  movementDate?: string;     // Date of movement
+  user?: string;
+  group?: string;
+  groupDesc?: string;
+  reference?: string;
+  customerVendor?: string;   // Customer/Vendor
+  reasonCode?: string;       // Rea
+  reasonDesc?: string;       // Rea Desc
+  costPrice: number;         // Cost/Price
+  wholesalePrice: number;
+  msrp: number;
+  sizePricing?: string;
+  division?: string;
+  divisionDesc?: string;
+  label?: string;
+  labelDesc?: string;
+  period?: string;           // Accounting period
+  qty: number;               // Movement qty (+/-)
+  balance: number;           // Running balance after movement
+  extension: number;         // Dollar extension
+  prodMgr?: string;
+  oldStyleNumber?: string;
+  pantoneCsiDesc?: string;
+  controlNumber?: string;
+  asnStatus?: string;
+  store?: string;
+  salesOrderNumber?: string;
+  segmentCode?: string;
+  segmentDesc?: string;
+  costCode?: string;
+  costDesc?: string;
+  createdAt?: string;
+}
+
 export interface PriceHistory {
   id: string;
   productId: string;

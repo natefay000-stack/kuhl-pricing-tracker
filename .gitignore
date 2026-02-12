@@ -9,6 +9,8 @@ out
 
 # Data files (use database in production)
 /data/*.xlsx
+public/data-*.json
+public/data-*.json.gz
 
 # Prisma
 /src/generated/prisma
@@ -29,6 +31,9 @@ tsconfig.tsbuildinfo
 
 # Supabase CLI temp files
 supabase/.temp/
+
+# Wireframe HTML files (design reference only)
+*-wireframe.html
 
 # Misc
 .env.vercel

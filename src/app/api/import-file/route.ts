@@ -204,6 +204,62 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      case 'inventory': {
+        // Parse inventory movement data — generic xlsx parsing with column mapping
+        const XLSX = require('xlsx');
+        const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, cellNF: false, cellText: false });
+        const sheetName = workbook.SheetNames[0];
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+        console.log('Parsed inventory:', rawRows.length, 'records');
+
+        // Map columns to our field names
+        const COLUMN_MAP: Record<string, string> = {
+          'Style': 'styleNumber', 'Style Desc': 'styleDesc',
+          'Clr': 'color', 'Clr Desc': 'colorDesc', 'Color Type': 'colorType',
+          'Style Category': 'styleCategory', 'Style Cat Desc': 'styleCatDesc',
+          'Whse': 'warehouse', 'Type': 'movementType', 'Date': 'movementDate',
+          'User': 'user', 'Group': 'group', 'Group Desc.': 'groupDesc', 'Group Desc': 'groupDesc',
+          'Reference': 'reference', 'Customer/Vendor': 'customerVendor',
+          'Rea': 'reasonCode', 'Rea Desc': 'reasonDesc',
+          'Cost/Price': 'costPrice', 'Wholesale Price': 'wholesalePrice', 'MSRP': 'msrp',
+          'Size Pricing': 'sizePricing', 'Division': 'division', 'Division Desc': 'divisionDesc',
+          'Label': 'label', 'Label Desc': 'labelDesc', 'Period': 'period',
+          'Qty': 'qty', 'Balance': 'balance', 'Extension': 'extension',
+          'ProdMgr': 'prodMgr', 'Old Style #': 'oldStyleNumber',
+          'Pantone/CSI Desc': 'pantoneCsiDesc', 'Control #': 'controlNumber',
+          'ASN Status #': 'asnStatus', 'Store': 'store', 'Sales Order #': 'salesOrderNumber',
+          'Segment Code': 'segmentCode', 'Segment Description': 'segmentDesc',
+          'Cost Code': 'costCode', 'Cost Description': 'costDesc',
+        };
+
+        const NUMBER_FIELDS = new Set(['costPrice', 'wholesalePrice', 'msrp', 'qty', 'balance', 'extension']);
+
+        const inventoryData = rawRows.map((row: Record<string, unknown>, index: number) => {
+          const record: Record<string, unknown> = { id: `inv-${index}` };
+          for (const [excelCol, fieldName] of Object.entries(COLUMN_MAP)) {
+            const val = row[excelCol];
+            if (val === undefined || val === null || val === '') {
+              record[fieldName] = NUMBER_FIELDS.has(fieldName) ? 0 : null;
+            } else if (NUMBER_FIELDS.has(fieldName)) {
+              record[fieldName] = Number(val) || 0;
+            } else if (fieldName === 'movementDate') {
+              record[fieldName] = val instanceof Date ? val.toISOString() : String(val);
+            } else {
+              record[fieldName] = String(val).trim();
+            }
+          }
+          if (!record.styleNumber) record.styleNumber = '';
+          return record;
+        });
+
+        return NextResponse.json({
+          success: true,
+          fileType: 'inventory',
+          summary: `${inventoryData.length.toLocaleString()} inventory movement records`,
+          inventory: inventoryData,
+        });
+      }
+
       default:
         return NextResponse.json({ error: `Unknown file type: ${fileType}` }, { status: 400 });
     }

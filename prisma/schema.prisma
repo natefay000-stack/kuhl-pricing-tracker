@@ -4,8 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // Products from Line List
@@ -152,6 +153,7 @@ model Season {
   hasLineList   Boolean  @default(false)
   hasPricing    Boolean  @default(false)
   hasCosts      Boolean  @default(false)
+  hasInventory  Boolean  @default(false)
   startDate     DateTime?
   endDate       DateTime?
   notes         String?
@@ -160,4 +162,59 @@ model Season {
 
   @@index([code])
   @@index([status])
+}
+
+// FG Inventory Movement data — each row is a movement transaction
+model Inventory {
+  id                  String   @id @default(cuid())
+  styleNumber         String
+  styleDesc           String?
+  color               String?
+  colorDesc           String?
+  colorType           String?
+  styleCategory       String?
+  styleCatDesc        String?
+  warehouse           String?
+  movementType        String?        // Type column — e.g., "Receipt", "Shipment", "Adjustment"
+  movementDate        DateTime?      // Date of the movement
+  user                String?        // User who performed the movement
+  group               String?        // Group code
+  groupDesc           String?
+  reference           String?
+  customerVendor      String?        // Customer/Vendor
+  reasonCode          String?        // Rea
+  reasonDesc          String?        // Rea Desc
+  costPrice           Float    @default(0)  // Cost/Price
+  wholesalePrice      Float    @default(0)
+  msrp                Float    @default(0)
+  sizePricing         String?
+  division            String?
+  divisionDesc        String?
+  label               String?
+  labelDesc           String?
+  period              String?        // Accounting period
+  qty                 Int      @default(0)  // Movement qty (+/-)
+  balance             Int      @default(0)  // Running balance after movement
+  extension           Float    @default(0)  // Dollar extension
+  prodMgr             String?
+  oldStyleNumber      String?
+  pantoneCsiDesc      String?
+  controlNumber       String?
+  asnStatus           String?
+  store               String?
+  salesOrderNumber    String?
+  segmentCode         String?
+  segmentDesc         String?
+  costCode            String?
+  costDesc            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([styleNumber])
+  @@index([color])
+  @@index([warehouse])
+  @@index([movementType])
+  @@index([movementDate])
+  @@index([period])
+  @@index([customerVendor])
 }

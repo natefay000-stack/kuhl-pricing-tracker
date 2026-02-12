@@ -2,7 +2,7 @@
  * File type detection utilities for smart import
  */
 
-export type FileType = 'lineList' | 'costs' | 'sales' | 'pricing' | 'unknown';
+export type FileType = 'lineList' | 'costs' | 'sales' | 'pricing' | 'inventory' | 'unknown';
 
 export interface DetectionResult {
   type: FileType;
@@ -51,6 +51,34 @@ const PRICING_COLUMNS = [
   'Color', 'Clr',
 ];
 
+const INVENTORY_COLUMNS = [
+  // FG Inventory Movement report columns
+  'Balance', 'Extension',
+  'Whse', 'Warehouse', 'WH',
+  'Rea', 'Rea Desc', 'Reason',
+  'Customer/Vendor',
+  'Color Type',
+  'Style Category', 'Style Cat Desc',
+  'Control #', 'ASN Status #',
+  'Sales Order #',
+  'Segment Code', 'Segment Description',
+  'Cost Code', 'Cost Description',
+  'ProdMgr',
+  'Old Style #',
+  'Pantone/CSI Desc',
+  // On-hand snapshot columns (future)
+  'On Hand', 'On-Hand', 'O/H', 'OH', 'OnHand',
+  'Hold', 'On Hold',
+  'Reserved', 'Rsrv',
+  'PO', 'PO Qty', 'Purchase Order',
+  'Cut', 'Cut Qty', 'Cut Ticket',
+  'Transfer', 'TRN', 'Transfer Qty',
+  'Demand', 'Dmnd', 'Demand Qty',
+  'ATS', 'Available to Sell', 'Avail',
+  'Inseam',
+  'Waist', 'Waist Size',
+];
+
 /**
  * Detect file type based on column headers
  */
@@ -61,6 +89,7 @@ export function detectFileType(headers: string[]): DetectionResult {
   const costsMatches = countMatches(normalizedHeaders, COSTS_COLUMNS);
   const salesMatches = countMatches(normalizedHeaders, SALES_COLUMNS);
   const pricingMatches = countMatches(normalizedHeaders, PRICING_COLUMNS);
+  const inventoryMatches = countMatches(normalizedHeaders, INVENTORY_COLUMNS);
 
   // Get matched column names for display
   const getMatchedColumns = (signature: string[]) =>
@@ -76,6 +105,16 @@ export function detectFileType(headers: string[]): DetectionResult {
   const hasLineListSpecific = headerLower.some(h =>
     h === 'category' || h === 'cat desc' || h === 'division' || h === 'division desc'
   );
+
+  // Inventory detection (3+ matches required) — check early as columns are very distinctive
+  if (inventoryMatches >= 3) {
+    return {
+      type: 'inventory',
+      confidence: inventoryMatches >= 6 ? 'high' : inventoryMatches >= 4 ? 'medium' : 'low',
+      matchedColumns: getMatchedColumns(INVENTORY_COLUMNS),
+      allColumns: normalizedHeaders,
+    };
+  }
 
   // Determine type based on match counts and thresholds
   // Sales detection is most specific (3+ matches required)

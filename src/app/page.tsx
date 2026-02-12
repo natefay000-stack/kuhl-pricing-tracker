@@ -16,15 +16,16 @@ import LineListView from '@/components/views/LineListView';
 import ValidationView from '@/components/views/ValidationView';
 import CustomerView from '@/components/views/CustomerView';
 import DataSourceMapView from '@/components/views/DataSourceMapView';
+import InventoryView from '@/components/views/InventoryView';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
-import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
+import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 
 // Cache version - increment to invalidate cache
-// v2: Added salesAggregations for correct channel/category/gender charts
-const CACHE_VERSION = 'v2';
+// v6: lightweight cache (core only, sales always streamed from snapshot)
+const CACHE_VERSION = 'v6';
 const CACHE_KEY = `kuhl-data-${CACHE_VERSION}`;
 
 // Sales aggregation types (from API)
@@ -64,21 +65,31 @@ export interface SalesAggregations {
   byCustomer: CustomerAggregation[];
 }
 
-interface CachedData {
+interface InventoryAggregations {
+  totalCount: number;
+  byType: { movementType: string; count: number; totalQty: number; totalExtension: number }[];
+  byWarehouse: { warehouse: string; count: number; totalQty: number; totalExtension: number }[];
+  byPeriod: { period: string; count: number; totalQty: number; totalExtension: number }[];
+}
+
+// Lightweight cache — core data only (products, pricing, costs, inventory, aggregations)
+// Sales (380K records, ~112MB JSON) are NEVER cached — always streamed from /api/snapshot
+interface CachedCoreData {
   products: Product[];
-  sales: SalesRecord[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  inventory?: InventoryRecord[];
   salesAggregations?: SalesAggregations;
+  inventoryAggregations?: InventoryAggregations;
   timestamp: number;
 }
 
-// Cache helpers using localStorage (simpler than IndexedDB)
-function getCachedData(): CachedData | null {
+// Cache helpers — core data only (~13MB, fits in localStorage)
+function getCachedCore(): CachedCoreData | null {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     if (cached) {
-      const data = JSON.parse(cached) as CachedData;
+      const data = JSON.parse(cached) as CachedCoreData;
       // Cache valid for 1 hour
       if (Date.now() - data.timestamp < 60 * 60 * 1000) {
         return data;
@@ -90,38 +101,32 @@ function getCachedData(): CachedData | null {
   return null;
 }
 
-function setCachedData(data: Omit<CachedData, 'timestamp'>) {
+function setCachedCore(data: Omit<CachedCoreData, 'timestamp'>) {
   try {
-    // Clear old cache first to free up space
     localStorage.removeItem(CACHE_KEY);
+    // Also clean up any old v5 cache that might be bloated with sales
+    try { localStorage.removeItem('kuhl-data-v5'); } catch { /* ignore */ }
 
-    // Try to cache all data
-    const fullData = { ...data, timestamp: Date.now() };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(fullData));
+    const coreData = {
+      products: data.products,
+      pricing: data.pricing,
+      costs: data.costs,
+      inventory: data.inventory,
+      salesAggregations: data.salesAggregations,
+      inventoryAggregations: data.inventoryAggregations,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(coreData));
   } catch (e) {
-    // If quota exceeded, try caching without sales (largest dataset)
-    console.warn('Full cache failed, trying without sales:', e);
-    try {
-      localStorage.removeItem(CACHE_KEY);
-      const reducedData = {
-        products: data.products,
-        sales: [], // Skip sales to save space
-        pricing: data.pricing,
-        costs: data.costs,
-        timestamp: Date.now(),
-      };
-      localStorage.setItem(CACHE_KEY, JSON.stringify(reducedData));
-      console.log('Cached without sales data');
-    } catch (e2) {
-      console.warn('Cache completely failed, will load from server:', e2);
-      localStorage.removeItem(CACHE_KEY);
-    }
+    console.warn('Cache write failed:', e);
+    localStorage.removeItem(CACHE_KEY);
   }
 }
 
 function clearCache() {
   try {
     localStorage.removeItem(CACHE_KEY);
+    try { localStorage.removeItem('kuhl-data-v5'); } catch { /* ignore */ }
   } catch (e) {
     console.warn('Cache clear failed:', e);
   }
@@ -132,7 +137,9 @@ export default function Home() {
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [pricing, setPricing] = useState<PricingRecord[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
+  const [inventory, setInventory] = useState<InventoryRecord[]>([]);
   const [salesAggregations, setSalesAggregations] = useState<SalesAggregations | null>(null);
+  const [invAggregations, setInvAggregations] = useState<InventoryAggregations | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Checking cache...');
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
@@ -180,91 +187,127 @@ export default function Home() {
         setLoadingStatus('Checking cache...');
         setLoadingProgress(5);
 
-        const cached = getCachedData();
+        // Check lightweight core cache first (no sales — those are always streamed)
+        const cached = getCachedCore();
         if (cached) {
-          console.log('Loading from cache...');
+          console.log('Core data from cache, streaming sales...');
           setLoadingStatus('Loading from cache...');
-          setLoadingProgress(50);
+          setLoadingProgress(60);
 
           setProducts(cached.products);
-          setSales(cached.sales);
           setPricing(cached.pricing);
           setCosts(cached.costs);
-          if (cached.salesAggregations) {
-            setSalesAggregations(cached.salesAggregations);
-          }
+          if (cached.inventory) setInventory(cached.inventory);
+          if (cached.salesAggregations) setSalesAggregations(cached.salesAggregations);
+          if (cached.inventoryAggregations) setInvAggregations(cached.inventoryAggregations);
+          setSales([]); // Sales loaded below
 
-          setLoadingProgress(100);
-          setIsLoading(false);
+          setLoadingProgress(80);
+          setIsLoading(false); // Show UI immediately
+
+          // Stream sales in background (always fresh from snapshot)
+          try {
+            setLoadingStatus('Loading sales data...');
+            const salesRes = await fetch('/api/snapshot?file=sales');
+            if (salesRes.ok) {
+              const salesData = await salesRes.json();
+              setSales(salesData || []);
+              console.log(`Sales loaded: ${(salesData || []).length} records`);
+            }
+          } catch (salesErr) {
+            console.warn('Failed to load sales:', salesErr);
+          }
           return;
         }
 
-        // Try loading from database first (for deployed environment)
-        setLoadingStatus('Connecting to database...');
+        // No cache — load everything from snapshot API
+        setLoadingStatus('Loading data...');
         setLoadingProgress(10);
-        console.log('Trying database API...');
+        console.log('No cache, loading from snapshot API...');
 
+        try {
+          // Phase 1: Core data (products, pricing, costs, inventory, aggregations)
+          const coreRes = await fetch('/api/snapshot?file=core');
+          if (coreRes.ok) {
+            const core = await coreRes.json();
+            if (core.success && core.counts.products > 0) {
+              console.log('Core data loaded:', core.counts);
+              setLoadingProgress(70);
+
+              const coreProducts = core.data.products || [];
+              const corePricing = core.data.pricing || [];
+              const coreCosts = core.data.costs || [];
+              const coreInventory = core.data.inventory || [];
+              const coreSalesAgg = core.salesAggregations || null;
+              const coreInvAgg = core.inventoryAggregations || null;
+
+              // Show UI immediately with core data
+              setProducts(coreProducts);
+              setPricing(corePricing);
+              setCosts(coreCosts);
+              setInventory(coreInventory);
+              if (coreSalesAgg) setSalesAggregations(coreSalesAgg);
+              if (coreInvAgg) setInvAggregations(coreInvAgg);
+              setSales([]);
+
+              setLoadingProgress(80);
+              setIsLoading(false);
+
+              // Cache core data for next visit
+              setCachedCore({
+                products: coreProducts,
+                pricing: corePricing,
+                costs: coreCosts,
+                inventory: coreInventory,
+                salesAggregations: coreSalesAgg || undefined,
+                inventoryAggregations: coreInvAgg || undefined,
+              });
+
+              // Phase 2: Stream sales in background
+              console.log('Loading sales data in background...');
+              try {
+                const salesRes = await fetch('/api/snapshot?file=sales');
+                if (salesRes.ok) {
+                  const salesData = await salesRes.json();
+                  setSales(salesData || []);
+                  console.log(`All sales loaded: ${(salesData || []).length} records`);
+                }
+              } catch (salesErr) {
+                console.warn('Failed to load sales data:', salesErr);
+              }
+              return;
+            }
+          }
+        } catch (snapshotErr) {
+          console.log('Snapshot not available, trying API:', snapshotErr);
+        }
+
+        // Fallback: try database API
         let data = {
           products: [] as Product[],
           sales: [] as SalesRecord[],
           pricing: [] as PricingRecord[],
           costs: [] as CostRecord[],
+          inventory: [] as InventoryRecord[],
           salesAggregations: null as SalesAggregations | null,
+          inventoryAggregations: null as InventoryAggregations | null,
         };
 
         try {
-          // First: load products, pricing, costs (small datasets) + sales count
-          const dbResponse = await fetch('/api/data?salesPageSize=50000&salesPage=0');
+          setLoadingStatus('Loading from database...');
+          const dbResponse = await fetch('/api/data');
           if (dbResponse.ok) {
             const dbResult = await dbResponse.json();
             if (dbResult.success && dbResult.counts.products > 0) {
-              console.log('Loaded from database:', dbResult.counts);
-              setLoadingProgress(30);
-
               data = {
                 products: dbResult.data.products || [],
                 sales: dbResult.data.sales || [],
                 pricing: dbResult.data.pricing || [],
                 costs: dbResult.data.costs || [],
+                inventory: dbResult.data.inventory || [],
                 salesAggregations: dbResult.salesAggregations || null,
+                inventoryAggregations: dbResult.inventoryAggregations || null,
               };
-
-              // If there are more sales pages, load them progressively
-              const totalSales = dbResult.counts.sales || 0;
-              const loadedSales = data.sales.length;
-
-              if (loadedSales < totalSales) {
-                const PAGE_SIZE = 50000;
-                const totalPages = Math.ceil(totalSales / PAGE_SIZE);
-                console.log(`Loading remaining sales: ${loadedSales}/${totalSales} (${totalPages} pages)`);
-
-                // Show UI with what we have, then load remaining sales
-                setProducts(data.products);
-                setPricing(data.pricing);
-                setCosts(data.costs);
-                if (data.salesAggregations) setSalesAggregations(data.salesAggregations);
-                setSales(data.sales);
-
-                for (let page = 1; page < totalPages; page++) {
-                  setLoadingStatus(`Loading sales data (${Math.round(((page) / totalPages) * 100)}%)...`);
-                  setLoadingProgress(30 + Math.round((page / totalPages) * 55));
-
-                  try {
-                    const salesRes = await fetch(`/api/data?salesOnly=true&salesPageSize=${PAGE_SIZE}&salesPage=${page}`);
-                    if (salesRes.ok) {
-                      const salesResult = await salesRes.json();
-                      if (salesResult.sales && salesResult.sales.length > 0) {
-                        data.sales = [...data.sales, ...salesResult.sales];
-                        setSales(data.sales);
-                      }
-                    }
-                  } catch (salesErr) {
-                    console.warn(`Failed to load sales page ${page}:`, salesErr);
-                  }
-                }
-                console.log(`All sales loaded: ${data.sales.length} records`);
-              }
-
               setLoadingProgress(85);
             }
           }
@@ -276,7 +319,6 @@ export default function Home() {
         if (data.products.length === 0) {
           setLoadingStatus('Checking for local data files...');
           setLoadingProgress(20);
-          console.log('Fetching data from Excel API...');
 
           try {
             const response = await fetch('/api/load-data');
@@ -285,7 +327,6 @@ export default function Home() {
             if (response.ok) {
               setLoadingStatus('Processing data...');
               setLoadingProgress(70);
-
               const result = await response.json();
               console.log('Loaded from Excel:', result.counts);
 
@@ -295,7 +336,9 @@ export default function Home() {
                   sales: result.data.sales || [],
                   pricing: result.data.pricing || [],
                   costs: result.data.costs || [],
-                  salesAggregations: null, // Excel fallback doesn't have aggregations
+                  inventory: result.data.inventory || [],
+                  salesAggregations: null,
+                  inventoryAggregations: null,
                 };
               }
             }
@@ -304,7 +347,7 @@ export default function Home() {
           }
         }
 
-        // If still no data, show empty state (user needs to import)
+        // If still no data, show empty state
         if (data.products.length === 0) {
           console.log('No data found - user needs to import via Season Import Modal');
           setLoadingStatus('Ready - Import data to get started');
@@ -315,19 +358,18 @@ export default function Home() {
         setSales(data.sales);
         setPricing(data.pricing);
         setCosts(data.costs);
-        if (data.salesAggregations) {
-          setSalesAggregations(data.salesAggregations);
-        }
+        if (data.inventory) setInventory(data.inventory);
+        if (data.salesAggregations) setSalesAggregations(data.salesAggregations);
+        if (data.inventoryAggregations) setInvAggregations(data.inventoryAggregations);
 
-        // Cache for next time
-        setLoadingStatus('Caching data...');
-        setLoadingProgress(95);
-        setCachedData({
+        // Cache core data (no sales) for next time
+        setCachedCore({
           products: data.products,
-          sales: data.sales,
           pricing: data.pricing,
           costs: data.costs,
+          inventory: data.inventory,
           salesAggregations: data.salesAggregations || undefined,
+          inventoryAggregations: data.inventoryAggregations || undefined,
         });
 
         setLoadingProgress(100);
@@ -367,13 +409,8 @@ export default function Home() {
     const newSales = data.sales as unknown as SalesRecord[];
     setSales(newSales);
 
-    // Update cache
-    setCachedData({
-      products,
-      sales: newSales,
-      pricing,
-      costs,
-    });
+    // Update core cache (sales not cached — too large)
+    setCachedCore({ products, pricing, costs, inventory });
 
     // Persist to database (full refresh - no season filter)
     try {
@@ -422,13 +459,8 @@ export default function Home() {
 
     setSales(finalSales);
 
-    // Update cache
-    setCachedData({
-      products,
-      sales: finalSales,
-      pricing,
-      costs,
-    });
+    // Update core cache
+    setCachedCore({ products, pricing, costs, inventory });
 
     // Persist to database - delete then insert for each season
     try {
@@ -483,8 +515,9 @@ export default function Home() {
     products?: Record<string, unknown>[];
     pricing?: Record<string, unknown>[];
     costs?: Record<string, unknown>[];
+    inventory?: Record<string, unknown>[];
   }) => {
-    console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs');
+    console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs', data.inventory?.length || 0, 'inventory');
 
     // For products: clean slate per season - delete existing products for each season in file, then add new
     if (data.products && data.products.length > 0) {
@@ -539,12 +572,7 @@ export default function Home() {
       }
 
       // Update cache
-      setCachedData({
-        products: finalProducts,
-        sales,
-        pricing,
-        costs,
-      });
+      setCachedCore({ products: finalProducts, pricing, costs, inventory });
     }
 
     // For pricing: replace all pricing with new data
@@ -573,12 +601,7 @@ export default function Home() {
       }
 
       // Update cache
-      setCachedData({
-        products,
-        sales,
-        pricing: newPricing,
-        costs,
-      });
+      setCachedCore({ products, pricing: newPricing, costs, inventory });
     }
 
     // For costs: merge with priority — Landed Cost (priority 1) > Standard Cost (priority 2)
@@ -712,12 +735,50 @@ export default function Home() {
       }
 
       // Update cache
-      setCachedData({
-        products,
-        sales,
-        pricing,
-        costs: finalCosts,
-      });
+      setCachedCore({ products, pricing, costs: finalCosts, inventory });
+    }
+
+    // For inventory: replace all (movement data has no season partitioning)
+    if (data.inventory && data.inventory.length > 0) {
+      const newInventory = data.inventory as unknown as InventoryRecord[];
+      console.log('Importing inventory movement data:', newInventory.length, 'records');
+
+      setInventory(newInventory);
+
+      // Persist to database — delete all then insert in batches
+      try {
+        await fetch('/api/data/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'inventory',
+            data: [],
+            fileName: 'inventory_clear',
+            replaceExisting: true,
+          }),
+        });
+
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < data.inventory.length; i += BATCH_SIZE) {
+          const batch = data.inventory.slice(i, i + BATCH_SIZE);
+          await fetch('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'inventory',
+              data: batch,
+              fileName: 'inventory_import',
+              replaceExisting: false,
+            }),
+          });
+        }
+        console.log('Inventory import complete');
+      } catch (dbErr) {
+        console.warn('Could not persist inventory to database:', dbErr);
+      }
+
+      // Update cache
+      setCachedCore({ products, pricing, costs, inventory: newInventory });
     }
 
     // Close the modal
@@ -752,12 +813,7 @@ export default function Home() {
     setSales(newSales);
 
     // Update cache with new data
-    setCachedData({
-      products: newProducts,
-      sales: newSales,
-      pricing: newPricing,
-      costs: newCosts,
-    });
+    setCachedCore({ products: newProducts, pricing: newPricing, costs: newCosts, inventory });
 
     // Also persist to database (for deployed environment)
     try {
@@ -867,7 +923,7 @@ export default function Home() {
           {/* Tip for slow loads */}
           {loadingProgress > 10 && loadingProgress < 80 && (
             <p className="text-gray-500 text-xs mt-4">
-              First load processes 250K+ records. Subsequent loads use cache.
+              Loading data from database. Subsequent visits use cache.
             </p>
           )}
         </div>
@@ -955,6 +1011,21 @@ export default function Home() {
                 pricing={pricing}
                 costs={costs}
                 salesAggregations={salesAggregations}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'inventory' && (
+            <ErrorBoundary viewName="Inventory">
+              <InventoryView
+                products={products}
+                sales={sales}
+                inventory={inventory}
+                inventoryAggregations={invAggregations || undefined}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}

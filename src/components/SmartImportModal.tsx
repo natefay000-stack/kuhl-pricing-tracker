@@ -67,6 +67,7 @@ interface SmartImportModalProps {
     products?: Record<string, unknown>[];
     pricing?: Record<string, unknown>[];
     costs?: Record<string, unknown>[];
+    inventory?: Record<string, unknown>[];
   }) => void;
   onImportSalesReplace: (data: {
     sales: Record<string, unknown>[];
@@ -83,6 +84,7 @@ const FILE_TYPE_LABELS: Record<FileType, string> = {
   costs: 'Landed Costs',
   sales: 'Sales Data',
   pricing: 'Pricing',
+  inventory: 'Inventory',
   unknown: 'Unknown',
 };
 
@@ -469,11 +471,13 @@ export default function SmartImportModal({
         onImportMultiSeason({ costs: data.costs });
       } else if (selectedType === 'pricing') {
         onImportMultiSeason({ pricing: data.pricing });
+      } else if (selectedType === 'inventory') {
+        onImportMultiSeason({ inventory: data.inventory });
       }
 
       setImportProgress(100);
       setImportResult({
-        added: data.products?.length || data.sales?.length || data.costs?.length || data.pricing?.length || 0,
+        added: data.products?.length || data.sales?.length || data.costs?.length || data.pricing?.length || data.inventory?.length || 0,
         updated: 0,
         summary: data.summary || 'Import complete',
       });
@@ -840,7 +844,7 @@ export default function SmartImportModal({
                   )}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['lineList', 'sales', 'costs', 'pricing'] as FileType[]).map(type => (
+                  {(['lineList', 'sales', 'costs', 'pricing', 'inventory'] as FileType[]).map(type => (
                     <label
                       key={type}
                       className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${

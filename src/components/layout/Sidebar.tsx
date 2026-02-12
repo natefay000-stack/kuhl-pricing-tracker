@@ -14,9 +14,10 @@ import {
   Settings,
   GitCompare,
   Users,
+  Warehouse,
 } from 'lucide-react';
 
-export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'customers' | 'linelist' | 'validation' | 'datasources';
+export type ViewId = 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'costs' | 'margins' | 'customers' | 'inventory' | 'linelist' | 'validation' | 'datasources';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -32,6 +33,7 @@ const views = [
   { id: 'linelist' as ViewId, label: 'Line List', icon: List },
   { id: 'validation' as ViewId, label: 'Validation', icon: AlertTriangle },
   { id: 'sales' as ViewId, label: 'Sales', icon: ShoppingBag },
+  { id: 'inventory' as ViewId, label: 'Inventory', icon: Warehouse },
   { id: 'costs' as ViewId, label: 'Costs', icon: DollarSign },
   { id: 'pricing' as ViewId, label: 'Pricing', icon: TrendingUp },
   { id: 'products' as ViewId, label: 'Style Master', icon: Package },
