@@ -37,7 +37,16 @@ tsconfig.tsbuildinfo
 supabase/.temp/
 
 # Wireframe HTML files (design reference only)
-*-wireframe.html
+*-wireframe*.html
+customers-list-detail*.html
+style-color-performance.html
+top-styles-channel*.html
+top-styles-heatmap*.html
+inv-opn-season-wireframe*.html
+
+# Build artifacts & temp
+var/
+.next 2
 
 # Misc
 .env.vercel

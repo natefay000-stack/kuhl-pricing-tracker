@@ -310,15 +310,41 @@ export default function Home() {
       return allSales;
     };
 
-    // ── Helper: try loading sales from snapshot file (local dev) ──
+    // ── Helper: try loading sales from per-season snapshot files ──
     const loadSalesFromSnapshot = async (): Promise<boolean> => {
       try {
         setSalesLoading(true);
+        setSalesLoadingProgress('Loading sales manifest...');
+
+        // Try new per-season format first (manifest + per-season files)
+        const manifestRes = await fetchWithTimeout('/data-sales-manifest.json', { timeout: 15000 });
+        if (manifestRes.ok) {
+          const manifest = await manifestRes.json();
+          if (manifest.seasons && manifest.seasons.length > 0) {
+            setSalesLoadingProgress(`Loading sales (${manifest.seasons.length} seasons)...`);
+            // Load all season files in parallel from static CDN
+            const seasonPromises = manifest.seasons.map(async (season: string) => {
+              const res = await fetchWithTimeout(`/data-sales-${season}.json`, { timeout: 60000 });
+              if (res.ok) return res.json();
+              return [];
+            });
+            const seasonArrays = await Promise.all(seasonPromises);
+            const allSalesData = seasonArrays.flat();
+            if (allSalesData.length > 0) {
+              setSales(allSalesData);
+              setSalesLoading(false);
+              setSalesLoadingProgress('');
+              console.log(`Sales from snapshot: ${allSalesData.length} records (${manifest.seasons.length} seasons)`);
+              return true;
+            }
+          }
+        }
+
+        // Fallback: old single-file format via API
         setSalesLoadingProgress('Loading sales from snapshot...');
         const res = await fetchWithTimeout('/api/snapshot?file=sales', { timeout: 120000 });
         if (res.ok) {
           const salesData = await res.json();
-          // Snapshot can be either a raw array or {success, sales: [...]}
           const salesArray = Array.isArray(salesData) ? salesData : salesData?.sales;
           if (Array.isArray(salesArray) && salesArray.length > 0) {
             setSales(salesArray);

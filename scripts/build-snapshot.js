@@ -152,12 +152,45 @@ async function main() {
     inventoryAggregations,
   };
 
+  // Build sales snapshot — strip unused fields to keep file size manageable
+  // Only include fields the frontend actually reads
+  const slimSales = sales.map(s => {
+    const rec = {
+      styleNumber: s.styleNumber,
+      season: s.season,
+      revenue: s.revenue,
+      unitsBooked: s.unitsBooked,
+    };
+    // Only include non-empty strings (skip empty/null to save space)
+    if (s.styleDesc) rec.styleDesc = s.styleDesc;
+    if (s.colorCode) rec.colorCode = s.colorCode;
+    if (s.colorDesc) rec.colorDesc = s.colorDesc;
+    if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
+    if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
+    if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
+    if (s.customer) rec.customer = s.customer;
+    if (s.customerType) rec.customerType = s.customerType;
+    if (s.salesRep) rec.salesRep = s.salesRep;
+    if (s.gender) rec.gender = s.gender;
+    if (s.orderType) rec.orderType = s.orderType;
+    // Only include non-zero numbers
+    if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
+    if (s.shipped) rec.shipped = s.shipped;
+    if (s.cost) rec.cost = s.cost;
+    if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
+    if (s.msrp) rec.msrp = s.msrp;
+    if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
+    return rec;
+  });
+
+  console.log(`  Slim sales: ${sales.length} records (stripped ${Object.keys(sales[0] || {}).length - Object.keys(slimSales[0] || {}).length} unused fields per record)`);
+
   // Build sales snapshot (separate file for progressive loading)
   const salesSnapshot = {
     success: true,
     buildTime: new Date().toISOString(),
-    totalSales: sales.length,
-    sales,
+    totalSales: slimSales.length,
+    sales: slimSales,
   };
 
   // Ensure public directory exists
@@ -171,15 +204,39 @@ async function main() {
   fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
   const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
 
-  // Write sales snapshot
-  const salesPath = path.join(publicDir, 'data-sales.json');
-  fs.writeFileSync(salesPath, JSON.stringify(salesSnapshot));
-  const salesSizeMB = (fs.statSync(salesPath).size / 1024 / 1024).toFixed(1);
+  // Write sales split by season (each file stays under Vercel's 100 MB limit)
+  const salesBySeason = {};
+  for (const s of slimSales) {
+    const season = s.season || 'unknown';
+    if (!salesBySeason[season]) salesBySeason[season] = [];
+    salesBySeason[season].push(s);
+  }
+
+  const seasonKeys = Object.keys(salesBySeason).sort();
+  let totalSalesMB = 0;
+
+  // Write a manifest listing all season files
+  const manifest = {
+    success: true,
+    buildTime: new Date().toISOString(),
+    totalSales: slimSales.length,
+    seasons: seasonKeys,
+  };
+  fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
+
+  for (const season of seasonKeys) {
+    const seasonData = salesBySeason[season];
+    const seasonPath = path.join(publicDir, `data-sales-${season}.json`);
+    fs.writeFileSync(seasonPath, JSON.stringify(seasonData));
+    const sizeMB = (fs.statSync(seasonPath).size / 1024 / 1024).toFixed(1);
+    totalSalesMB += parseFloat(sizeMB);
+    console.log(`  Sales ${season}: ${seasonPath} (${sizeMB} MB, ${seasonData.length} records)`);
+  }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`\nSnapshots built in ${elapsed}s`);
   console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
-  console.log(`  Sales: ${salesPath} (${salesSizeMB} MB)`);
+  console.log(`  Sales: ${seasonKeys.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
   console.log(`Counts: ${products.length} products, ${sales.length} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
 }
 

@@ -1,10 +1,11 @@
 /**
- * Rebuild static JSON snapshots from SQLite database.
+ * Rebuild static JSON snapshots from database.
  * Called automatically after file imports to keep snapshots fresh.
  *
  * Outputs:
- *   public/data-core.json   — products, pricing, costs, inventory + aggregations
- *   public/data-sales.json  — all sales records
+ *   public/data-core.json              — products, pricing, costs, inventory + aggregations
+ *   public/data-sales-manifest.json    — season list
+ *   public/data-sales-{season}.json    — per-season sales records (slim format)
  */
 
 import prisma from '@/lib/prisma';
@@ -88,19 +89,45 @@ function computeSalesAggregations(sales: any[]) {
   };
 }
 
+// Slim a sales record — strip unused fields and zero/null values
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function slimSalesRecord(s: any): Record<string, unknown> {
+  const rec: Record<string, unknown> = {
+    styleNumber: s.styleNumber,
+    season: s.season,
+    revenue: s.revenue,
+    unitsBooked: s.unitsBooked,
+  };
+  if (s.styleDesc) rec.styleDesc = s.styleDesc;
+  if (s.colorCode) rec.colorCode = s.colorCode;
+  if (s.colorDesc) rec.colorDesc = s.colorDesc;
+  if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
+  if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
+  if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
+  if (s.customer) rec.customer = s.customer;
+  if (s.customerType) rec.customerType = s.customerType;
+  if (s.salesRep) rec.salesRep = s.salesRep;
+  if (s.gender) rec.gender = s.gender;
+  if (s.orderType) rec.orderType = s.orderType;
+  if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
+  if (s.shipped) rec.shipped = s.shipped;
+  if (s.cost) rec.cost = s.cost;
+  if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
+  if (s.msrp) rec.msrp = s.msrp;
+  if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
+  return rec;
+}
+
 /**
- * Rebuild both core and sales snapshot files from the SQLite database.
- * Returns { corePath, salesPath, counts } on success.
- *
- * This runs in-process and is fast (~2-5s) since SQLite is local.
+ * Rebuild snapshots from the database.
+ * Returns { corePath, counts } on success.
  */
 export async function rebuildSnapshots(): Promise<{
   corePath: string;
-  salesPath: string;
   counts: { products: number; sales: number; pricing: number; costs: number; inventory: number };
 }> {
   const startTime = Date.now();
-  console.log('[Snapshot] Rebuilding from SQLite...');
+  console.log('[Snapshot] Rebuilding from database...');
 
   const [products, pricing, costs, inventory, sales] = await Promise.all([
     prisma.product.findMany({ orderBy: { season: 'desc' } }),
@@ -130,26 +157,38 @@ export async function rebuildSnapshots(): Promise<{
     inventoryAggregations,
   };
 
-  const salesSnapshot = {
-    success: true,
-    buildTime: new Date().toISOString(),
-    totalSales: sales.length,
-    sales,
-  };
-
   const publicDir = join(process.cwd(), 'public');
   if (!existsSync(publicDir)) {
     mkdirSync(publicDir, { recursive: true });
   }
 
   const corePath = join(publicDir, 'data-core.json');
-  const salesPath = join(publicDir, 'data-sales.json');
-
   writeFileSync(corePath, JSON.stringify(coreSnapshot));
-  writeFileSync(salesPath, JSON.stringify(salesSnapshot));
+
+  // Write per-season sales files (slim format)
+  const slimSales = sales.map(slimSalesRecord);
+  const salesBySeason: Record<string, Record<string, unknown>[]> = {};
+  for (const s of slimSales) {
+    const season = (s.season as string) || 'unknown';
+    if (!salesBySeason[season]) salesBySeason[season] = [];
+    salesBySeason[season].push(s);
+  }
+
+  const seasonKeys = Object.keys(salesBySeason).sort();
+  const manifest = {
+    success: true,
+    buildTime: new Date().toISOString(),
+    totalSales: slimSales.length,
+    seasons: seasonKeys,
+  };
+  writeFileSync(join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
+
+  for (const season of seasonKeys) {
+    writeFileSync(join(publicDir, `data-sales-${season}.json`), JSON.stringify(salesBySeason[season]));
+  }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`[Snapshot] Rebuilt in ${elapsed}s — ${counts.products} products, ${counts.sales} sales, ${counts.pricing} pricing, ${counts.costs} costs, ${counts.inventory} inventory`);
 
-  return { corePath, salesPath, counts };
+  return { corePath, counts };
 }
