@@ -120,6 +120,36 @@ export async function POST(request: NextRequest) {
               msrp: Number(item.msrp || 0),
               netUnitPrice: Number(item.netUnitPrice || 0),
               orderType: String(item.orderType || ''),
+              // Invoice-specific fields
+              invoiceDate: item.invoiceDate ? new Date(String(item.invoiceDate)) : null,
+              accountingPeriod: item.accountingPeriod ? String(item.accountingPeriod) : null,
+              invoiceNumber: item.invoiceNumber ? String(item.invoiceNumber) : null,
+              shipToState: item.shipToState ? String(item.shipToState) : null,
+              returnedAtNet: Number(item.returnedAtNet || 0),
+              shippedAtNet: Number(item.shippedAtNet || 0),
+              totalPrice: Number(item.totalPrice || 0),
+              commissionRate: Number(item.commissionRate || 0),
+              ytdNetInvoicing: Number(item.ytdNetInvoicing || 0),
+              ytdCreditMemos: Number(item.ytdCreditMemos || 0),
+              ytdSales: Number(item.ytdSales || 0),
+              warehouse: item.warehouse ? String(item.warehouse) : null,
+              warehouseDesc: item.warehouseDesc ? String(item.warehouseDesc) : null,
+              openAtNet: Number(item.openAtNet || 0),
+              openOrder: Number(item.openOrder || 0),
+              returned: Number(item.returned || 0),
+              shippedAtMsrp: Number(item.shippedAtMsrp || 0),
+              totalAtNet: Number(item.totalAtNet || 0),
+              totalAtWholesale: Number(item.totalAtWholesale || 0),
+              returnedAtWholesale: Number(item.returnedAtWholesale || 0),
+              // Geographic fields
+              shipToCity: item.shipToCity ? String(item.shipToCity) : null,
+              shipToZip: item.shipToZip ? String(item.shipToZip) : null,
+              billToState: item.billToState ? String(item.billToState) : null,
+              billToCity: item.billToCity ? String(item.billToCity) : null,
+              billToZip: item.billToZip ? String(item.billToZip) : null,
+              // Unit counts
+              unitsShipped: Number(item.unitsShipped || 0),
+              unitsReturned: Number(item.unitsReturned || 0),
             }));
             await tx.sale.createMany({ data: batch });
             count += batch.length;

@@ -12,10 +12,23 @@
  */
 
 const { PrismaClient } = require('@prisma/client');
+const { PrismaNeon } = require('@prisma/adapter-neon');
+const { Pool, neonConfig } = require('@neondatabase/serverless');
+const ws = require('ws');
 const fs = require('fs');
 const path = require('path');
 
-const prisma = new PrismaClient();
+// WebSocket support for Node.js
+neonConfig.webSocketConstructor = ws;
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('DATABASE_URL not set, skipping snapshot build');
+  process.exit(0);
+}
+const pool = new Pool({ connectionString });
+const adapter = new PrismaNeon(pool);
+const prisma = new PrismaClient({ adapter });
 
 // Compute aggregations in-process
 function computeInventoryAggregations(inventory) {
