@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * Build static JSON snapshots of all data from SQLite (via Prisma).
+ * Build static JSON snapshots from database (Neon PostgreSQL via Prisma).
  * Output:
- *   public/data-core.json   — products, pricing, costs, inventory + aggregations
- *   public/data-sales.json  — all sales records
+ *   public/data-core.json              — products, pricing, costs, inventory + aggregations
+ *   public/data-sales-manifest.json    — season list
+ *   public/data-sales-{season}.json    — per-season sales records (slim format)
  *
  * The frontend loads these directly — no API calls needed on page load.
  * Run this whenever data changes: node scripts/build-snapshot.js
  *
- * Also called automatically after file imports.
+ * Build cache: Snapshots are cached in .next/cache/data-snapshots/ (persisted by
+ * Vercel between builds). If the database is unavailable, the cached files are
+ * restored to public/ automatically.
  */
 
 const { PrismaClient } = require('@prisma/client');
@@ -21,14 +24,43 @@ const path = require('path');
 // WebSocket support for Node.js
 neonConfig.webSocketConstructor = ws;
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  console.error('DATABASE_URL not set, skipping snapshot build');
-  process.exit(0);
+const publicDir = path.join(__dirname, '..', 'public');
+const cacheDir = path.join(__dirname, '..', '.next', 'cache', 'data-snapshots');
+
+// Ensure directories exist
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
-const pool = new Pool({ connectionString });
-const adapter = new PrismaNeon(pool);
-const prisma = new PrismaClient({ adapter });
+
+// Copy all data-*.json files between directories
+function copySnapshots(from, to) {
+  ensureDir(to);
+  const files = fs.readdirSync(from).filter(f =>
+    f.startsWith('data-') && f.endsWith('.json')
+  );
+  for (const file of files) {
+    fs.copyFileSync(path.join(from, file), path.join(to, file));
+  }
+  return files;
+}
+
+// Try to restore snapshots from build cache
+function restoreFromCache() {
+  if (!fs.existsSync(cacheDir)) return false;
+  const manifestPath = path.join(cacheDir, 'data-sales-manifest.json');
+  if (!fs.existsSync(manifestPath)) return false;
+
+  console.log('Restoring snapshots from build cache...');
+  const files = copySnapshots(cacheDir, publicDir);
+  console.log(`  Restored ${files.length} files from cache`);
+  return true;
+}
+
+// Save snapshots to build cache
+function saveToCache() {
+  const files = copySnapshots(publicDir, cacheDir);
+  console.log(`  Cached ${files.length} snapshot files for future builds`);
+}
 
 // Compute aggregations in-process
 function computeInventoryAggregations(inventory) {
@@ -107,144 +139,168 @@ function computeSalesAggregations(sales) {
 
 async function main() {
   const startTime = Date.now();
-  console.log('Building data snapshot from SQLite (Prisma)...\n');
+  const connectionString = process.env.DATABASE_URL;
 
-  // Fetch all tables in parallel
-  console.log('Fetching tables...');
-  const [products, pricing, costs, inventory, sales] = await Promise.all([
-    prisma.product.findMany({ orderBy: { season: 'desc' } }),
-    prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
-    prisma.cost.findMany({ orderBy: { season: 'desc' } }),
-    prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
-    prisma.sale.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
-  ]);
+  if (!connectionString) {
+    console.log('DATABASE_URL not set, checking cache...');
+    if (restoreFromCache()) return;
+    console.error('No cache available either. Skipping snapshot build.');
+    process.exit(0);
+  }
 
-  console.log(`  Products: ${products.length} rows`);
-  console.log(`  Pricing: ${pricing.length} rows`);
-  console.log(`  Costs: ${costs.length} rows`);
-  console.log(`  Inventory: ${inventory.length} rows`);
-  console.log(`  Sales: ${sales.length} rows`);
+  let pool, prisma;
+  try {
+    pool = new Pool({ connectionString });
+    const adapter = new PrismaNeon(pool);
+    prisma = new PrismaClient({ adapter });
 
-  // Compute aggregations locally
-  console.log('\nComputing aggregations...');
-  const inventoryAggregations = computeInventoryAggregations(inventory);
-  const salesAggregations = computeSalesAggregations(sales);
-  console.log('  Done.');
+    console.log('Building data snapshots from database...\n');
 
-  // Build core snapshot (everything except bulk sales)
-  const coreSnapshot = {
-    success: true,
-    buildTime: new Date().toISOString(),
-    counts: {
-      products: products.length,
-      sales: sales.length,
-      pricing: pricing.length,
-      costs: costs.length,
-      inventory: inventory.length,
-    },
-    data: {
-      products,
-      pricing,
-      costs,
-      inventory,
-    },
-    salesAggregations,
-    inventoryAggregations,
-  };
+    // Fetch all tables in parallel
+    console.log('Fetching tables...');
+    const [products, pricing, costs, inventory, sales] = await Promise.all([
+      prisma.product.findMany({ orderBy: { season: 'desc' } }),
+      prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
+      prisma.cost.findMany({ orderBy: { season: 'desc' } }),
+      prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
+      prisma.sale.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
+    ]);
 
-  // Build sales snapshot — strip unused fields to keep file size manageable
-  // Only include fields the frontend actually reads
-  const slimSales = sales.map(s => {
-    const rec = {
-      styleNumber: s.styleNumber,
-      season: s.season,
-      revenue: s.revenue,
-      unitsBooked: s.unitsBooked,
+    console.log(`  Products: ${products.length} rows`);
+    console.log(`  Pricing: ${pricing.length} rows`);
+    console.log(`  Costs: ${costs.length} rows`);
+    console.log(`  Inventory: ${inventory.length} rows`);
+    console.log(`  Sales: ${sales.length} rows`);
+
+    // Compute aggregations locally
+    console.log('\nComputing aggregations...');
+    const inventoryAggregations = computeInventoryAggregations(inventory);
+    const salesAggregations = computeSalesAggregations(sales);
+    console.log('  Done.');
+
+    // Build core snapshot
+    const coreSnapshot = {
+      success: true,
+      buildTime: new Date().toISOString(),
+      counts: {
+        products: products.length,
+        sales: sales.length,
+        pricing: pricing.length,
+        costs: costs.length,
+        inventory: inventory.length,
+      },
+      data: { products, pricing, costs, inventory },
+      salesAggregations,
+      inventoryAggregations,
     };
-    // Only include non-empty strings (skip empty/null to save space)
-    if (s.styleDesc) rec.styleDesc = s.styleDesc;
-    if (s.colorCode) rec.colorCode = s.colorCode;
-    if (s.colorDesc) rec.colorDesc = s.colorDesc;
-    if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
-    if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
-    if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
-    if (s.customer) rec.customer = s.customer;
-    if (s.customerType) rec.customerType = s.customerType;
-    if (s.salesRep) rec.salesRep = s.salesRep;
-    if (s.gender) rec.gender = s.gender;
-    if (s.orderType) rec.orderType = s.orderType;
-    // Only include non-zero numbers
-    if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
-    if (s.shipped) rec.shipped = s.shipped;
-    if (s.cost) rec.cost = s.cost;
-    if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
-    if (s.msrp) rec.msrp = s.msrp;
-    if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
-    return rec;
-  });
 
-  console.log(`  Slim sales: ${sales.length} records (stripped ${Object.keys(sales[0] || {}).length - Object.keys(slimSales[0] || {}).length} unused fields per record)`);
+    // Build slim sales records
+    const slimSales = sales.map(s => {
+      const rec = {
+        styleNumber: s.styleNumber,
+        season: s.season,
+        revenue: s.revenue,
+        unitsBooked: s.unitsBooked,
+      };
+      if (s.styleDesc) rec.styleDesc = s.styleDesc;
+      if (s.colorCode) rec.colorCode = s.colorCode;
+      if (s.colorDesc) rec.colorDesc = s.colorDesc;
+      if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
+      if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
+      if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
+      if (s.customer) rec.customer = s.customer;
+      if (s.customerType) rec.customerType = s.customerType;
+      if (s.salesRep) rec.salesRep = s.salesRep;
+      if (s.gender) rec.gender = s.gender;
+      if (s.orderType) rec.orderType = s.orderType;
+      if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
+      if (s.shipped) rec.shipped = s.shipped;
+      if (s.cost) rec.cost = s.cost;
+      if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
+      if (s.msrp) rec.msrp = s.msrp;
+      if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
+      return rec;
+    });
 
-  // Build sales snapshot (separate file for progressive loading)
-  const salesSnapshot = {
-    success: true,
-    buildTime: new Date().toISOString(),
-    totalSales: slimSales.length,
-    sales: slimSales,
-  };
+    console.log(`  Slim sales: ${sales.length} records (stripped ${Object.keys(sales[0] || {}).length - Object.keys(slimSales[0] || {}).length} unused fields per record)`);
 
-  // Ensure public directory exists
-  const publicDir = path.join(__dirname, '..', 'public');
-  if (!fs.existsSync(publicDir)) {
-    fs.mkdirSync(publicDir, { recursive: true });
+    // Write to public/
+    ensureDir(publicDir);
+
+    const corePath = path.join(publicDir, 'data-core.json');
+    fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
+    const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
+
+    // Split sales by season
+    const salesBySeason = {};
+    for (const s of slimSales) {
+      const season = s.season || 'unknown';
+      if (!salesBySeason[season]) salesBySeason[season] = [];
+      salesBySeason[season].push(s);
+    }
+
+    const seasonKeys = Object.keys(salesBySeason).sort();
+    let totalSalesMB = 0;
+
+    const manifest = {
+      success: true,
+      buildTime: new Date().toISOString(),
+      totalSales: slimSales.length,
+      seasons: seasonKeys,
+    };
+    fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
+
+    for (const season of seasonKeys) {
+      const seasonData = salesBySeason[season];
+      const seasonPath = path.join(publicDir, `data-sales-${season}.json`);
+      fs.writeFileSync(seasonPath, JSON.stringify(seasonData));
+      const sizeMB = (fs.statSync(seasonPath).size / 1024 / 1024).toFixed(1);
+      totalSalesMB += parseFloat(sizeMB);
+      console.log(`  Sales ${season}: ${seasonPath} (${sizeMB} MB, ${seasonData.length} records)`);
+    }
+
+    // Cache for future builds
+    saveToCache();
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\nSnapshots built in ${elapsed}s`);
+    console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
+    console.log(`  Sales: ${seasonKeys.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
+    console.log(`Counts: ${products.length} products, ${sales.length} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
+
+    await prisma.$disconnect();
+    await pool.end();
+
+  } catch (err) {
+    console.error('Database error:', err.message || err);
+    console.log('\nAttempting to restore from build cache...');
+
+    if (restoreFromCache()) {
+      console.log('Successfully restored cached snapshots. Build will continue.');
+    } else {
+      console.error('No cached snapshots available. Build will proceed without data.');
+      // Write empty snapshots so the app can still load
+      ensureDir(publicDir);
+      fs.writeFileSync(path.join(publicDir, 'data-core.json'), JSON.stringify({
+        success: true, buildTime: new Date().toISOString(),
+        counts: { products: 0, sales: 0, pricing: 0, costs: 0, inventory: 0 },
+        data: { products: [], pricing: [], costs: [], inventory: [] },
+        salesAggregations: { byChannel: [], byCategory: [], byGender: [], byCustomer: [] },
+        inventoryAggregations: { totalCount: 0, byType: [], byWarehouse: [], byPeriod: [] },
+      }));
+      fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify({
+        success: true, buildTime: new Date().toISOString(), totalSales: 0, seasons: [],
+      }));
+    }
+
+    // Clean up connections
+    try { if (prisma) await prisma.$disconnect(); } catch {}
+    try { if (pool) await pool.end(); } catch {}
   }
-
-  // Write core snapshot
-  const corePath = path.join(publicDir, 'data-core.json');
-  fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
-  const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
-
-  // Write sales split by season (each file stays under Vercel's 100 MB limit)
-  const salesBySeason = {};
-  for (const s of slimSales) {
-    const season = s.season || 'unknown';
-    if (!salesBySeason[season]) salesBySeason[season] = [];
-    salesBySeason[season].push(s);
-  }
-
-  const seasonKeys = Object.keys(salesBySeason).sort();
-  let totalSalesMB = 0;
-
-  // Write a manifest listing all season files
-  const manifest = {
-    success: true,
-    buildTime: new Date().toISOString(),
-    totalSales: slimSales.length,
-    seasons: seasonKeys,
-  };
-  fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
-
-  for (const season of seasonKeys) {
-    const seasonData = salesBySeason[season];
-    const seasonPath = path.join(publicDir, `data-sales-${season}.json`);
-    fs.writeFileSync(seasonPath, JSON.stringify(seasonData));
-    const sizeMB = (fs.statSync(seasonPath).size / 1024 / 1024).toFixed(1);
-    totalSalesMB += parseFloat(sizeMB);
-    console.log(`  Sales ${season}: ${seasonPath} (${sizeMB} MB, ${seasonData.length} records)`);
-  }
-
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\nSnapshots built in ${elapsed}s`);
-  console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
-  console.log(`  Sales: ${seasonKeys.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
-  console.log(`Counts: ${products.length} products, ${sales.length} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
 }
 
-main()
-  .catch(err => {
-    console.error('FATAL:', err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch(err => {
+  console.error('FATAL:', err);
+  // Don't exit(1) — allow the Next.js build to continue
+  process.exit(0);
+});
