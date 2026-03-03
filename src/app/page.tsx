@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Sidebar, { ViewId } from '@/components/layout/Sidebar';
 import AppHeader from '@/components/layout/AppHeader';
 import FilterBar from '@/components/layout/FilterBar';
@@ -207,6 +207,17 @@ export default function Home() {
   const [selectedDesigner, setSelectedDesigner] = useState<string>('');
   const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+
+  // Reset filters when navigating between views
+  const handleViewChange = useCallback((view: ViewId) => {
+    setActiveView(view);
+    setSelectedDivision('');
+    setSelectedCategory('');
+    setSelectedDesigner('');
+    setSelectedCustomerType('');
+    setSelectedCustomer('');
+    setSearchQuery('');
+  }, []);
 
   // Style detail panel
   const [selectedStyleNumber, setSelectedStyleNumber] = useState<string | null>(null);
@@ -1220,7 +1231,7 @@ export default function Home() {
       {/* Sidebar */}
       <Sidebar
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={handleViewChange}
         onImportClick={() => setShowImportModal(true)}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
@@ -1351,6 +1362,8 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                selectedCustomer={selectedCustomer}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />

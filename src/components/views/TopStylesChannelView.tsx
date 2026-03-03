@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Trophy, Download, AlertTriangle, X, List, Grid3X3 } from 'lucide-react';
-import { Product, SalesRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
+import React, { useState, useMemo } from 'react';
+import { Download, AlertTriangle, List, Grid3X3 } from 'lucide-react';
+import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { parseSeasonCode, isFutureSeason, isRelevantSeason } from '@/utils/season';
-import { getSeasonStatus as getCanonicalStatus } from '@/lib/season-utils';
 import { formatCurrencyShort } from '@/utils/format';
 import { sortSeasons } from '@/lib/store';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { getCombineKey } from '@/utils/combineStyles';
+import { matchesDivision } from '@/utils/divisionMap';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -73,6 +73,8 @@ interface TopStylesChannelViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  selectedCustomerType?: string;
+  selectedCustomer?: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
@@ -86,13 +88,6 @@ const CHANNEL_SHORT: Record<ChannelId, string> = {
   total: 'Total', online: 'Online', retail: 'Retail', rei: 'REI', scheels: 'Scheels', otherWholesale: 'Other WHS', allWholesale: 'All WHS',
 };
 
-// Status mapping (static — never changes at runtime)
-const STATUS_MAP: Record<string, 'Planning' | 'Pre-Book' | 'Selling' | 'Closed'> = {
-  'PLANNING': 'Planning',
-  'PRE-BOOK': 'Pre-Book',
-  'SHIPPING': 'Selling',
-  'CLOSED': 'Closed',
-};
 
 export default function TopStylesChannelView({
   products,
@@ -100,6 +95,8 @@ export default function TopStylesChannelView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  selectedCustomerType: globalCustomerType = '',
+  selectedCustomer: globalCustomer = '',
   searchQuery: globalSearchQuery,
   onStyleClick,
 }: TopStylesChannelViewProps) {
@@ -117,49 +114,33 @@ export default function TopStylesChannelView({
   const CHANNEL_META = combineWholesale ? CHANNELS_COMBINED : CHANNELS_DETAILED;
   const NON_TOTAL_CHANNELS = combineWholesale ? NON_TOTAL_CHANNELS_COMBINED : NON_TOTAL_CHANNELS_DETAILED;
 
-  // ── Local filter state (replaces global FilterBar props) ──────
-  const [selectedSeasons, setSelectedSeasons] = useState<string[]>([]);
-  const [localDivision, setLocalDivision] = useState('');
-  const [localCategory, setLocalCategory] = useState('');
-  const [localDesigner, setLocalDesigner] = useState('');
-  const [localCustomerType, setLocalCustomerType] = useState('');
-  const [localCustomer, setLocalCustomer] = useState('');
+  // ── Local filter state (only for filters not in global header) ──
   const [localRep, setLocalRep] = useState('');
 
-  // ── Sync global FilterBar → local state ──────────────────────
-  useEffect(() => {
-    if (!selectedSeason) {
-      setSelectedSeasons([]);
-    } else if (selectedSeason === '__ALL_SP__') {
-      // Select all Spring seasons from available list
+  // ── Derive active seasons from global season selector ─────────
+  const selectedSeasons = useMemo(() => {
+    if (!selectedSeason) return [] as string[];
+    if (selectedSeason === '__ALL_SP__') {
       const seasonSet = new Set<string>();
       products.forEach(p => p.season && seasonSet.add(p.season));
       sales.forEach(s => s.season && seasonSet.add(s.season));
-      const all = sortSeasons(Array.from(seasonSet)).filter(s => isRelevantSeason(s));
-      setSelectedSeasons(all.filter(s => s.endsWith('SP')));
-    } else if (selectedSeason === '__ALL_FA__') {
-      const seasonSet = new Set<string>();
-      products.forEach(p => p.season && seasonSet.add(p.season));
-      sales.forEach(s => s.season && seasonSet.add(s.season));
-      const all = sortSeasons(Array.from(seasonSet)).filter(s => isRelevantSeason(s));
-      setSelectedSeasons(all.filter(s => s.endsWith('FA')));
-    } else {
-      setSelectedSeasons([selectedSeason]);
+      return sortSeasons(Array.from(seasonSet)).filter(s => isRelevantSeason(s) && s.endsWith('SP'));
     }
+    if (selectedSeason === '__ALL_FA__') {
+      const seasonSet = new Set<string>();
+      products.forEach(p => p.season && seasonSet.add(p.season));
+      sales.forEach(s => s.season && seasonSet.add(s.season));
+      return sortSeasons(Array.from(seasonSet)).filter(s => isRelevantSeason(s) && s.endsWith('FA'));
+    }
+    return [selectedSeason];
   }, [selectedSeason, products, sales]);
 
-  useEffect(() => {
-    if (selectedDivision !== localDivision) setLocalDivision(selectedDivision);
-  }, [selectedDivision]);
-
-  useEffect(() => {
-    if (selectedCategory !== localCategory) setLocalCategory(selectedCategory);
-  }, [selectedCategory]);
-
-  // ── Season status helper ──────────────────────────────────────
-  const getSeasonDisplayStatus = (season: string): 'Planning' | 'Pre-Book' | 'Selling' | 'Closed' => {
-    return STATUS_MAP[getCanonicalStatus(season)] || 'Closed';
-  };
+  // Alias global props for use throughout (keeps rest of code working)
+  const localDivision = selectedDivision;
+  const localCategory = selectedCategory;
+  const localCustomerType = globalCustomerType;
+  const localCustomer = globalCustomer;
+  const localDesigner = ''; // Designer filter only available via global bar
 
   // ── Computed filter options ────────────────────────────────────
   const allSeasons = useMemo(() => {
@@ -174,44 +155,6 @@ export default function TopStylesChannelView({
     return allSeasons.slice(-4);
   }, [allSeasons, selectedSeasons]);
 
-  const divisions = useMemo(() => {
-    const all = new Set<string>();
-    products.forEach(p => p.divisionDesc && all.add(p.divisionDesc));
-    return Array.from(all).sort();
-  }, [products]);
-
-  const categories = useMemo(() => {
-    let filtered = products;
-    if (localDivision) filtered = products.filter(p => p.divisionDesc === localDivision);
-    const all = new Set<string>();
-    filtered.forEach(p => {
-      if (p.categoryDesc) all.add(normalizeCategory(p.categoryDesc));
-    });
-    return Array.from(all).sort();
-  }, [products, localDivision]);
-
-  const designers = useMemo(() => {
-    const all = new Set<string>();
-    products.forEach(p => p.designerName && all.add(p.designerName));
-    return Array.from(all).sort();
-  }, [products]);
-
-  const customerTypes = useMemo(() => {
-    const all = new Set<string>();
-    sales.forEach(s => s.customerType && all.add(s.customerType));
-    return Array.from(all).sort();
-  }, [sales]);
-
-  const customers = useMemo(() => {
-    const all = new Set<string>();
-    sales.forEach(s => {
-      if (!s.customer) return;
-      if (localCustomerType && s.customerType !== localCustomerType) return;
-      all.add(s.customer);
-    });
-    return Array.from(all).sort();
-  }, [sales, localCustomerType]);
-
   const reps = useMemo(() => {
     const all = new Set<string>();
     sales.forEach(s => {
@@ -219,28 +162,6 @@ export default function TopStylesChannelView({
     });
     return Array.from(all).sort();
   }, [sales]);
-
-  // ── Season helpers ─────────────────────────────────────────────
-  const toggleSeason = (season: string) => {
-    setSelectedSeasons(prev =>
-      prev.includes(season) ? prev.filter(s => s !== season) : [...prev, season]
-    );
-  };
-
-  const selectSeasonType = (type: 'SP' | 'FA') => {
-    const matching = allSeasons.filter(s => s.includes(type));
-    const allSelected = matching.every(s => selectedSeasons.includes(s));
-    if (allSelected) {
-      setSelectedSeasons(prev => prev.filter(s => !s.includes(type)));
-    } else {
-      setSelectedSeasons(prev => {
-        const others = prev.filter(s => !s.includes(type));
-        return [...others, ...matching];
-      });
-    }
-  };
-
-  const clearSeasonFilter = () => setSelectedSeasons([]);
 
   // ── Designer style set (for filtering sales by designer) ──────
   const designerStyleSet = useMemo(() => {
@@ -252,19 +173,23 @@ export default function TopStylesChannelView({
     return set;
   }, [products, localDesigner]);
 
-  // ── Product-lookup style set (for filtering sales by division/category) ──
-  // Sales records often have empty divisionDesc/categoryDesc, so we look up
-  // matching style numbers from products and filter sales by that set.
-  const productFilteredStyleSet = useMemo(() => {
-    if (!localDivision && !localCategory) return null;
+  // ── Product-lookup style set (for filtering sales by category via product data) ──
+  // Products have richer category data; sales may also have it directly.
+  // For division, we filter sales directly using matchesDivision since
+  // products often lack divisionDesc while sales have it from the import.
+  const productCategoryStyleSet = useMemo(() => {
+    if (!localCategory) return null;
     const set = new Set<string>();
+    // First try products
     products.forEach(p => {
-      if (localDivision && p.divisionDesc !== localDivision) return;
-      if (localCategory && normalizeCategory(p.categoryDesc) !== localCategory) return;
-      set.add(p.styleNumber);
+      if (normalizeCategory(p.categoryDesc) === normalizeCategory(localCategory)) {
+        set.add(p.styleNumber);
+      }
     });
-    return set;
-  }, [products, localDivision, localCategory]);
+    // If products matched, use that set; otherwise fall back to sales categoryDesc
+    if (set.size > 0) return set;
+    return null; // will filter sales directly by categoryDesc instead
+  }, [products, localCategory]);
 
   // ── Determine the "next future season" label for F26 detection ──
   const nextFutureSeason = useMemo(() => {
@@ -301,9 +226,16 @@ export default function TopStylesChannelView({
     const activeSeasonsSet = new Set(activeSeasons);
     return sales.filter(s => {
       if (activeSeasonsSet.size > 0 && !activeSeasonsSet.has(s.season)) return false;
-      // Division/category: use product-lookup instead of direct field comparison
-      // (sales records often have empty divisionDesc/categoryDesc)
-      if (productFilteredStyleSet && !productFilteredStyleSet.has(s.styleNumber)) return false;
+      // Division: filter directly on sales using fuzzy matchesDivision
+      if (localDivision && !matchesDivision(s.divisionDesc || '', localDivision)) return false;
+      // Category: use product-lookup if available, otherwise filter sales directly
+      if (localCategory) {
+        if (productCategoryStyleSet) {
+          if (!productCategoryStyleSet.has(s.styleNumber)) return false;
+        } else if (normalizeCategory(s.categoryDesc) !== normalizeCategory(localCategory)) {
+          return false;
+        }
+      }
       if (localCustomerType && s.customerType !== localCustomerType) return false;
       if (localCustomer && s.customer !== localCustomer) return false;
       if (localRep && s.salesRep !== localRep) return false;
@@ -314,7 +246,7 @@ export default function TopStylesChannelView({
       }
       return true;
     });
-  }, [sales, activeSeasons, productFilteredStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, globalSearchQuery]);
+  }, [sales, activeSeasons, localDivision, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, globalSearchQuery]);
 
   // ── 2. Channel sales map ──────────────────────────────────────
   // Map<channelId, Map<styleKey, { revenue, units, desc }>>
@@ -414,7 +346,12 @@ export default function TopStylesChannelView({
     for (const sale of sales) {
       if (!priorSeasons.has(sale.season)) continue;
       // Apply the same filters as filteredSales so trends compare apples-to-apples
-      if (productFilteredStyleSet && !productFilteredStyleSet.has(sale.styleNumber)) continue;
+      if (localDivision && !matchesDivision(sale.divisionDesc || '', localDivision)) continue;
+      if (localCategory) {
+        if (productCategoryStyleSet) {
+          if (!productCategoryStyleSet.has(sale.styleNumber)) continue;
+        } else if (normalizeCategory(sale.categoryDesc) !== normalizeCategory(localCategory)) continue;
+      }
       if (localCustomerType && sale.customerType !== localCustomerType) continue;
       if (localCustomer && sale.customer !== localCustomer) continue;
       if (localRep && sale.salesRep !== localRep) continue;
@@ -441,7 +378,7 @@ export default function TopStylesChannelView({
     }
 
     return map;
-  }, [sales, priorSeasons, productFilteredStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, combineStyles]);
+  }, [sales, priorSeasons, localDivision, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, combineStyles]);
 
   // ── 5. Channel rankings ───────────────────────────────────────
   const channelRankings = useMemo(() => {
@@ -692,8 +629,8 @@ export default function TopStylesChannelView({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-4xl font-display font-bold text-text-primary">Top Styles by Channel</h2>
-          <p className="text-base text-text-muted mt-2">
+          <h2 className="text-2xl font-display font-semibold text-text-primary">Top Styles by Channel</h2>
+          <p className="text-xs text-text-muted mt-1">
             Identify channel gaps and track {futureSeasonLabel} assortment planning
           </p>
         </div>
@@ -711,172 +648,25 @@ export default function TopStylesChannelView({
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-lg border border-border-primary bg-surface text-text-primary hover:bg-surface-tertiary transition-colors"
           >
-            <Download className="w-5 h-5" />
+            <Download className="w-3.5 h-3.5" />
             Export
           </button>
         </div>
       </div>
 
       {/* Data Sources Legend */}
-      <SourceLegend sources={['sales', 'linelist']} className="bg-surface rounded-xl border-2 border-border-primary p-4" />
+      <SourceLegend sources={['sales', 'linelist']} className="bg-surface rounded-lg border border-border-primary p-3" />
 
-      {/* Quick Season Filter */}
-      <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-bold text-text-muted uppercase tracking-wide">Quick Season Filter</span>
-            <button
-              onClick={() => selectSeasonType('SP')}
-              className={`text-sm font-bold px-4 py-1.5 rounded-lg transition-colors ${
-                allSeasons.filter(s => s.includes('SP')).every(s => selectedSeasons.includes(s)) && allSeasons.filter(s => s.includes('SP')).length > 0
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 hover:bg-emerald-200'
-              }`}
-            >
-              All Spring
-            </button>
-            <button
-              onClick={() => selectSeasonType('FA')}
-              className={`text-sm font-bold px-4 py-1.5 rounded-lg transition-colors ${
-                allSeasons.filter(s => s.includes('FA')).every(s => selectedSeasons.includes(s)) && allSeasons.filter(s => s.includes('FA')).length > 0
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800'
-              }`}
-            >
-              All Fall
-            </button>
-          </div>
-          {selectedSeasons.length > 0 && (
-            <button
-              onClick={clearSeasonFilter}
-              className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-text-secondary"
-            >
-              <X className="w-4 h-4" />
-              Clear ({selectedSeasons.length} selected)
-            </button>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-3">
-          {allSeasons.map(season => {
-            const isSelected = selectedSeasons.length === 0
-              ? activeSeasons.includes(season)
-              : selectedSeasons.includes(season);
-            const status = getSeasonDisplayStatus(season);
-            const isSpring = season.includes('SP');
-
-            return (
-              <button
-                key={season}
-                onClick={() => toggleSeason(season)}
-                className={`px-5 py-3 rounded-xl text-base font-bold transition-all ${
-                  isSelected
-                    ? status === 'Planning'
-                      ? 'bg-purple-500 text-white'
-                      : isSpring
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-orange-500 text-white'
-                    : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
-                }`}
-              >
-                <div className="font-mono font-black">{season}</div>
-                <div className={`text-xs font-medium mt-0.5 ${
-                  isSelected ? 'text-white/80' : 'text-text-faint'
-                }`}>
-                  {status}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Dropdown Filters + View Toggle */}
-      <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
-        <div className="flex gap-6 flex-wrap items-end">
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Division</label>
+      {/* View Controls */}
+      <div className="flex flex-wrap gap-3 items-center">
+          {/* Sales Rep (page-specific filter) */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-text-muted uppercase tracking-wide">Sales Rep</label>
             <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[160px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={localDivision}
-              onChange={e => {
-                setLocalDivision(e.target.value);
-                setLocalCategory('');
-              }}
-            >
-              <option value="">All Divisions</option>
-              {divisions.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Category</label>
-            <select
-              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                localCategory ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950' : 'border-border-primary'
-              }`}
-              value={localCategory}
-              onChange={e => setLocalCategory(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categories.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Designer</label>
-            <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={localDesigner}
-              onChange={e => setLocalDesigner(e.target.value)}
-            >
-              <option value="">All Designers</option>
-              {designers.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer Type</label>
-            <select
-              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[160px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                localCustomerType ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/50' : 'border-border-primary'
-              }`}
-              value={localCustomerType}
-              onChange={e => {
-                setLocalCustomerType(e.target.value);
-                setLocalCustomer('');
-              }}
-            >
-              <option value="">All Types</option>
-              {customerTypes.map(ct => (
-                <option key={ct} value={ct}>{CUSTOMER_TYPE_LABELS[ct] || ct}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer</label>
-            <select
-              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                localCustomer ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/50' : 'border-border-primary'
-              }`}
-              value={localCustomer}
-              onChange={e => setLocalCustomer(e.target.value)}
-            >
-              <option value="">All Customers</option>
-              {customers.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Sales Rep</label>
-            <select
-              className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                localRep ? 'border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/50' : 'border-border-primary'
+              className={`border border-border-primary rounded-lg px-3 py-1.5 text-sm bg-surface min-w-[160px] focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${
+                localRep ? 'border-purple-400 bg-purple-500/10' : ''
               }`}
               value={localRep}
               onChange={e => setLocalRep(e.target.value)}
@@ -887,6 +677,8 @@ export default function TopStylesChannelView({
               ))}
             </select>
           </div>
+
+          <div className="flex-1" />
 
           {/* Combine Styles Toggle */}
           <button
@@ -943,7 +735,6 @@ export default function TopStylesChannelView({
               Heatmap
             </button>
           </div>
-        </div>
       </div>
 
       {/* ═══════════════ LIST VIEW ═══════════════ */}

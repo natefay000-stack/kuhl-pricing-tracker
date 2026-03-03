@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Product, SalesRecord, CUSTOMER_TYPE_LABELS, normalizeCategory } from '@/types/product';
 import { sortSeasons, compareSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
@@ -85,6 +85,19 @@ export default function CustomerView({
   }, [globalSearchQuery]);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('revenue');
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll customer list to the selected customer
+  const scrollToCustomer = useCallback((customerName: string | null) => {
+    if (!customerName || !listRef.current) return;
+    // Small delay to ensure DOM has rendered
+    requestAnimationFrame(() => {
+      const el = listRef.current?.querySelector(`[data-customer="${CSS.escape(customerName)}"]`) as HTMLElement | null;
+      if (el) {
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    });
+  }, []);
 
   /* ── Derive activeSeason from global filter ────────────────────── */
   const allSeasons = useMemo(() => {
@@ -190,6 +203,11 @@ export default function CustomerView({
   const activeMetrics = activeCustomer ? filteredCustomers.find(c => c.customer === activeCustomer) : null;
   const activePrior = activeCustomer ? priorMetricsMap.get(activeCustomer) : null;
 
+  // Scroll list to show the active customer whenever it changes
+  useEffect(() => {
+    scrollToCustomer(activeCustomer);
+  }, [activeCustomer, scrollToCustomer]);
+
   /* ── Detail: Top selling styles ────────────────────────────────── */
   const topStyles = useMemo(() => {
     if (!activeCustomer) return [];
@@ -197,6 +215,8 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
+      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const sn = sale.styleNumber;
       if (!map.has(sn)) map.set(sn, { styleDesc: sale.styleDesc || '', divisionDesc: sale.divisionDesc || '', revenue: 0, units: 0 });
       const m = map.get(sn)!;
@@ -207,7 +227,7 @@ export default function CustomerView({
       .map(([styleNumber, d]) => ({ styleNumber, ...d }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [activeCustomer, sales, activeSeason, globalDivision]);
+  }, [activeCustomer, sales, activeSeason, globalDivision, globalCategory, globalCustomerType]);
 
   /* ── Detail: Revenue by category ───────────────────────────────── */
   const categoryBreakdown = useMemo(() => {
@@ -216,6 +236,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
       map.set(cat, (map.get(cat) || 0) + (sale.revenue || 0));
     });
@@ -223,7 +244,7 @@ export default function CustomerView({
       .map(([category, revenue]) => ({ category, revenue }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [activeCustomer, sales, activeSeason, globalDivision]);
+  }, [activeCustomer, sales, activeSeason, globalDivision, globalCustomerType]);
 
   const maxCatRevenue = categoryBreakdown[0]?.revenue || 1;
 
@@ -234,6 +255,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
       const rev = sale.revenue || 0;
       map.set(cat, (map.get(cat) || 0) + rev);
@@ -244,7 +266,7 @@ export default function CustomerView({
       map.forEach((rev, cat) => shares.set(cat, (rev / total) * 100));
     }
     return shares;
-  }, [sales, activeSeason, globalDivision]);
+  }, [sales, activeSeason, globalDivision, globalCustomerType]);
 
   /* ── Detail: Season revenue history (with shipped/booked) ───────── */
   const seasonHistory = useMemo(() => {
@@ -252,6 +274,9 @@ export default function CustomerView({
     const map = new Map<string, { revenue: number; shipped: number; units: number; styles: Set<string> }>();
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer) return;
+      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
+      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const s = sale.season;
       if (!map.has(s)) map.set(s, { revenue: 0, shipped: 0, units: 0, styles: new Set() });
       const m = map.get(s)!;
@@ -264,7 +289,7 @@ export default function CustomerView({
       .map(([season, d]) => ({ season, revenue: d.revenue, shipped: d.shipped, booked: d.revenue - d.shipped, units: d.units, styles: d.styles.size }))
       .sort((a, b) => compareSeasons(a.season, b.season))
       .slice(-6);
-  }, [activeCustomer, sales]);
+  }, [activeCustomer, sales, globalDivision, globalCategory, globalCustomerType]);
 
   const maxSeasonRev = Math.max(...seasonHistory.map(s => s.revenue), 1);
 
@@ -361,7 +386,7 @@ export default function CustomerView({
           </div>
 
           {/* Scrollable list */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={listRef} className="flex-1 overflow-y-auto">
             {filteredCustomers.map(c => {
               const isSelected = c.customer === activeCustomer;
               const prior = priorMetricsMap.get(c.customer);
@@ -370,6 +395,7 @@ export default function CustomerView({
               return (
                 <button
                   key={c.customer}
+                  data-customer={c.customer}
                   onClick={() => setSelectedCustomer(c.customer)}
                   className={`
                     w-full flex items-center gap-2.5 px-3.5 py-3 border-b border-border-secondary text-left transition-all cursor-pointer
@@ -430,13 +456,13 @@ export default function CustomerView({
           {activeMetrics ? (
             <>
               {/* ── Detail Header ──────────────────────────────────── */}
-              <div className="card flex items-center gap-5 px-5 py-4">
-                <div className="w-14 h-14 rounded-xl bg-blue-500/15 flex items-center justify-center text-xl font-semibold text-blue-400 flex-shrink-0">
+              <div className="card flex items-center gap-5 px-5 py-4 sticky top-0 z-10 bg-surface border-b border-border-primary shadow-sm">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/15 flex items-center justify-center text-lg font-semibold text-blue-400 flex-shrink-0">
                   {getInitials(activeMetrics.customer)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-semibold text-text-primary truncate">{activeMetrics.customer}</h2>
+                    <h2 className="text-lg font-semibold text-text-primary truncate">{activeMetrics.customer}</h2>
                     {priorSeason && !priorMetricsMap.has(activeMetrics.customer) && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider flex-shrink-0">
                         New Customer
@@ -567,9 +593,10 @@ export default function CustomerView({
                       }), 1);
                       const barWidth = (share / maxShare) * 100;
                       const companyWidth = (companyShare / maxShare) * 100;
+                      const isActiveCat = globalCategory && normalizeCategory(cat.category) === normalizeCategory(globalCategory);
                       return (
-                        <div key={cat.category} className="flex items-center gap-2">
-                          <div className="w-[5.5em] text-sm font-medium text-text-primary flex-shrink-0 truncate">{cat.category}</div>
+                        <div key={cat.category} className={`flex items-center gap-2 ${isActiveCat ? 'bg-blue-500/10 -mx-2 px-2 py-1 rounded-md ring-1 ring-blue-500/30' : ''}`}>
+                          <div className={`w-[5.5em] text-sm font-medium flex-shrink-0 truncate ${isActiveCat ? 'text-blue-400 font-semibold' : 'text-text-primary'}`}>{cat.category}</div>
                           <div className="flex-1 h-7 bg-surface-tertiary rounded-md overflow-hidden min-w-0 relative">
                             {/* Customer bar */}
                             <div
