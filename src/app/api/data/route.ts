@@ -239,7 +239,7 @@ function computeSalesAggregations(sales: any[]) {
     const div = (s.divisionDesc || '').toLowerCase();
     let gender = 'Unisex';
     if (div.includes('women') || div.includes('woman')) gender = "Women's";
-    else if (div.includes("men's") || div.includes('mens')) gender = "Men's";
+    else if (div.includes('men')) gender = "Men's";
     const gk = `${s.season}-${gender}`;
     const ge = genderMap.get(gk);
     if (ge) { ge.revenue += s.revenue || 0; ge.units += s.unitsBooked || 0; }

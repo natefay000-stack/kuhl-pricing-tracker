@@ -13,8 +13,8 @@ import { matchesDivision } from '@/utils/divisionMap';
 function getGenderFromDivision(divisionDesc: string): string {
   if (!divisionDesc) return 'Unknown';
   const lower = divisionDesc.toLowerCase();
-  if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
-  if (lower.includes("women's") || lower.includes("woman")) return "Women's";
+  if (lower.includes("women") || lower.includes("woman")) return "Women's";
+  if (lower.includes("men")) return "Men's";
   if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
   return "Unknown";
 }

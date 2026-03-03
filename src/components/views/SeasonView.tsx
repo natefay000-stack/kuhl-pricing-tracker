@@ -145,16 +145,16 @@ export default function SeasonView({
     products.forEach((p) => {
       if (p.divisionDesc) {
         const lower = p.divisionDesc.toLowerCase();
-        if (lower.includes("men's") && !lower.includes("women's")) all.add("Men's");
-        else if (lower.includes("women's")) all.add("Women's");
+        if (lower.includes("women") || lower.includes("woman")) all.add("Women's");
+        else if (lower.includes("men")) all.add("Men's");
         else if (lower.includes("unisex")) all.add("Unisex");
       }
     });
     sales.forEach((s) => {
       if (s.divisionDesc) {
         const lower = s.divisionDesc.toLowerCase();
-        if (lower.includes("men's") && !lower.includes("women's")) all.add("Men's");
-        else if (lower.includes("women's")) all.add("Women's");
+        if (lower.includes("women") || lower.includes("woman")) all.add("Women's");
+        else if (lower.includes("men")) all.add("Men's");
         else if (lower.includes("unisex")) all.add("Unisex");
       }
     });
@@ -246,8 +246,8 @@ export default function SeasonView({
       if (localCategoryFilter && style.categoryDesc !== localCategoryFilter) return false;
       if (localGenderFilter) {
         const lower = style.divisionDesc?.toLowerCase() || '';
-        if (localGenderFilter === "Men's" && !(lower.includes("men's") && !lower.includes("women's"))) return false;
-        if (localGenderFilter === "Women's" && !lower.includes("women's")) return false;
+        if (localGenderFilter === "Men's" && !(lower.includes("men") && !lower.includes("women"))) return false;
+        if (localGenderFilter === "Women's" && !(lower.includes("women") || lower.includes("woman"))) return false;
         if (localGenderFilter === "Unisex" && !lower.includes("unisex")) return false;
       }
       if (selectedDesigner && style.designerName !== selectedDesigner) return false;

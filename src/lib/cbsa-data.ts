@@ -175,10 +175,10 @@ export function getFipsToCbsaMap(): Map<string, string> | null {
 function getGenderFromDivision(divisionDesc: string): string {
   if (!divisionDesc) return 'Unknown';
   const lower = divisionDesc.toLowerCase();
-  if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
-  if (lower === 'm' || lower === '01') return "Men's";
-  if (lower.includes("women's") || lower.includes("woman")) return "Women's";
+  if (lower.includes("women") || lower.includes("woman")) return "Women's";
   if (lower === 'w' || lower === '02') return "Women's";
+  if (lower.includes("men")) return "Men's";
+  if (lower === 'm' || lower === '01') return "Men's";
   if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
   if (lower === '08') return "Unisex";
   return "Unknown";
