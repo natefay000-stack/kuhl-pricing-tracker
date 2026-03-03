@@ -1,8 +1,33 @@
-/data/
+# Data snapshots (generated at build time from database)
 public/data-*.json
 public/data-*.json.gz
-scripts/
+public/data-*.json.bak*
+
+# Source data files
+/data/
+
+# SQLite databases
+*.db
+*.db-journal
+
+# Build artifacts & temp
+var/
+.next 2
+
+# Scripts (build-snapshot.js needed for build, but rest not needed)
+# Note: scripts/ must NOT be ignored since build-snapshot.js runs during build
+
+# Claude Code
 .claude/
+
+# OS / IDE
 .DS_Store
 tsconfig.tsbuildinfo
-*-wireframe.html
+
+# Wireframe HTML files (design reference only)
+*-wireframe*.html
+customers-list-detail*.html
+style-color-performance.html
+top-styles-channel*.html
+top-styles-heatmap*.html
+inv-opn-season-wireframe*.html
