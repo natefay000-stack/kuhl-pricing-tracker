@@ -278,7 +278,17 @@ async function main() {
     if (restoreFromCache()) {
       console.log('Successfully restored cached snapshots. Build will continue.');
     } else {
-      console.error('No cached snapshots available. Build will proceed without data.');
+      // Check if pre-built snapshot files already exist in public/ (e.g., from deployment upload)
+      const existingManifest = path.join(publicDir, 'data-sales-manifest.json');
+      if (fs.existsSync(existingManifest)) {
+        const m = JSON.parse(fs.readFileSync(existingManifest, 'utf-8'));
+        if (m.totalSales > 0) {
+          console.log(`Using existing snapshot files in public/ (${m.totalSales} sales, ${m.seasons.length} seasons)`);
+          saveToCache(); // Cache these for future builds
+          return; // Don't overwrite with empty data
+        }
+      }
+      console.error('No cached or existing snapshots available. Build will proceed without data.');
       // Write empty snapshots so the app can still load
       ensureDir(publicDir);
       fs.writeFileSync(path.join(publicDir, 'data-core.json'), JSON.stringify({

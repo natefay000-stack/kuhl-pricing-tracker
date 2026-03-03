@@ -1,5 +1,5 @@
-# Data snapshots (generated at build time from database)
-public/data-*.json
+# Data snapshots — uploaded with deploy; build script refreshes from DB when available
+# public/data-*.json  # Not ignored: needed for deploy when DB is unavailable
 public/data-*.json.gz
 public/data-*.json.bak*
 
