@@ -4,28 +4,40 @@ import { useState, useEffect, useMemo } from 'react';
 import Sidebar, { ViewId } from '@/components/layout/Sidebar';
 import AppHeader from '@/components/layout/AppHeader';
 import FilterBar from '@/components/layout/FilterBar';
-import DashboardView from '@/components/views/DashboardView';
-import SeasonView from '@/components/views/SeasonView';
-import SeasonCompView from '@/components/views/SeasonCompView';
-import SalesView from '@/components/views/SalesView';
-import CostsView from '@/components/views/CostsView';
-import PricingView from '@/components/views/PricingView';
-import MarginsView from '@/components/views/MarginsView';
-import StyleMasterView from '@/components/views/StyleMasterView';
-import LineListView from '@/components/views/LineListView';
-import ValidationView from '@/components/views/ValidationView';
-import CustomerView from '@/components/views/CustomerView';
-import DataSourceMapView from '@/components/views/DataSourceMapView';
-import InventoryView from '@/components/views/InventoryView';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
-import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord } from '@/types/product';
+import { SalesLoadingContext } from '@/components/SalesLoadingBanner';
+import retryDynamic from '@/lib/retryDynamic';
+
+// Lazy-load view components with automatic retry on chunk load failure.
+// retryDynamic wraps next/dynamic with 3 retries + cache-bust + auto-reload fallback.
+const ExecutiveDashboardView = retryDynamic(() => import('@/components/views/ExecutiveDashboardView'));
+const DashboardView = retryDynamic(() => import('@/components/views/DashboardView'));
+const SeasonView = retryDynamic(() => import('@/components/views/SeasonView'));
+const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
+const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
+const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
+const PricingView = retryDynamic(() => import('@/components/views/PricingView'));
+const MarginsView = retryDynamic(() => import('@/components/views/MarginsView'));
+const StyleMasterView = retryDynamic(() => import('@/components/views/StyleMasterView'));
+const LineListView = retryDynamic(() => import('@/components/views/LineListView'));
+const ValidationView = retryDynamic(() => import('@/components/views/ValidationView'));
+const CustomerView = retryDynamic(() => import('@/components/views/CustomerView'));
+const DataFlowView = retryDynamic(() => import('@/components/views/DataFlowView'));
+const InventoryView = retryDynamic(() => import('@/components/views/InventoryView'));
+const TopStylesChannelView = retryDynamic(() => import('@/components/views/TopStylesChannelView'));
+const StyleColorPerfView = retryDynamic(() => import('@/components/views/StyleColorPerfView'));
+const SellThroughView = retryDynamic(() => import('@/components/views/SellThroughView'));
+const TariffView = retryDynamic(() => import('@/components/views/TariffView'));
+const InvOpnSeasonView = retryDynamic(() => import('@/components/views/InvOpnSeasonView'));
+const GeoHeatmapView = retryDynamic(() => import('@/components/views/GeoHeatmapView'));
+import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 
 // Cache version - increment to invalidate cache
-// v6: lightweight cache (core only, sales always streamed from snapshot)
-const CACHE_VERSION = 'v6';
+// v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
+const CACHE_VERSION = 'v10';
 const CACHE_KEY = `kuhl-data-${CACHE_VERSION}`;
 
 // Sales aggregation types (from API)
@@ -132,26 +144,69 @@ function clearCache() {
   }
 }
 
+// ── Helper: fetch with timeout (prevents hanging on slow/dead servers) ──
+async function fetchWithTimeout(url: string, options?: RequestInit & { timeout?: number }): Promise<Response> {
+  const { timeout = 15000, ...fetchOptions } = options || {};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...fetchOptions, signal: controller.signal });
+    return res;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${Math.round(timeout / 1000)}s: ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── Helper: checked fetch for DB persistence batches ──
+// Throws on non-OK response so callers know a batch failed.
+async function checkedFetch(url: string, init: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '(no body)');
+    throw new Error(`DB import failed (${res.status}): ${text}`);
+  }
+  return res;
+}
+
+// Abort controller ref shared between background loaders and import handlers.
+// When an import starts we abort any in-flight background sales load.
+let salesLoadAbort: AbortController | null = null;
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [pricing, setPricing] = useState<PricingRecord[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryRecord[]>([]);
+  const [inventoryOH, setInventoryOH] = useState<InventoryOHRecord[]>([]);
+  const [ohAggregations, setOHAggregations] = useState<InventoryOHAggregations | null>(null);
   const [salesAggregations, setSalesAggregations] = useState<SalesAggregations | null>(null);
   const [invAggregations, setInvAggregations] = useState<InventoryAggregations | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Checking cache...');
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
+  const [loadingSlow, setLoadingSlow] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesLoadingProgress, setSalesLoadingProgress] = useState('');
 
   // UI State
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Filter state
   const [selectedSeason, setSelectedSeason] = useState<string>('');
   const [selectedDivision, setSelectedDivision] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedDesigner, setSelectedDesigner] = useState<string>('');
+  const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
 
   // Style detail panel
   const [selectedStyleNumber, setSelectedStyleNumber] = useState<string | null>(null);
@@ -170,130 +225,211 @@ export default function Home() {
   const divisions = useMemo(() => {
     const all = new Set<string>();
     products.forEach(p => p.divisionDesc && all.add(p.divisionDesc));
+    // Also extract divisions from sales when products aren't loaded yet
+    if (all.size === 0) {
+      sales.forEach(s => s.divisionDesc && all.add(s.divisionDesc));
+    }
     return Array.from(all).sort();
-  }, [products]);
+  }, [products, sales]);
 
   const categories = useMemo(() => {
     const all = new Set<string>();
     products.forEach(p => p.categoryDesc && all.add(p.categoryDesc));
+    // Also extract categories from sales when products aren't loaded yet
+    if (all.size === 0) {
+      sales.forEach(s => s.categoryDesc && all.add(s.categoryDesc));
+    }
+    return Array.from(all).sort();
+  }, [products, sales]);
+
+  const designers = useMemo(() => {
+    const all = new Set<string>();
+    products.forEach(p => p.designerName && all.add(p.designerName));
     return Array.from(all).sort();
   }, [products]);
 
+  const customerTypes = useMemo(() => {
+    const all = new Set<string>();
+    sales.forEach(s => {
+      if (s.customerType) {
+        // customerType can be comma-separated
+        s.customerType.split(',').forEach(ct => {
+          const trimmed = ct.trim();
+          if (trimmed) all.add(trimmed);
+        });
+      }
+    });
+    return Array.from(all).sort();
+  }, [sales]);
+
+  const customerNames = useMemo(() => {
+    const all = new Set<string>();
+    sales.forEach(s => s.customer && s.customer !== 'Unknown' && all.add(s.customer));
+    return Array.from(all).sort();
+  }, [sales]);
+
+  // ── Helper: yield to event loop so React can paint status updates ──
+  const tick = () => new Promise<void>(r => setTimeout(r, 0));
+
   // Load data on mount
   useEffect(() => {
-    async function initializeData() {
+    let cancelled = false;
+
+    // ── Helper: load sales progressively from /api/data?salesOnly=true ──
+    const loadSalesProgressively = async () => {
+      const controller = new AbortController();
+      salesLoadAbort = controller;
+      const PAGE_SIZE = 50000;
+      let page = 0;
+      let allSales: SalesRecord[] = [];
+      let totalPages = 1;
+      setSalesLoading(true);
+      setSalesLoadingProgress('Loading sales...');
+      while (page < totalPages) {
+        if (controller.signal.aborted) { console.log('Sales load aborted by import'); break; }
+        try {
+          const res = await fetch(`/api/data?salesOnly=true&salesPage=${page}&salesPageSize=${PAGE_SIZE}`, { signal: controller.signal });
+          if (!res.ok) break;
+          const result = await res.json();
+          if (!result.success || !result.sales) break;
+          allSales = [...allSales, ...result.sales];
+          totalPages = result.totalPages || 1;
+          setSales(allSales);
+          setSalesLoadingProgress(`Loading sales... ${Math.round(((page + 1) / totalPages) * 100)}% (${allSales.length.toLocaleString()} records)`);
+          console.log(`Sales page ${page + 1}/${totalPages}: ${allSales.length} total`);
+          page++;
+        } catch (err: unknown) {
+          if (err instanceof DOMException && err.name === 'AbortError') { console.log('Sales load aborted'); break; }
+          console.warn('Sales page fetch failed:', err);
+          break;
+        }
+      }
+      salesLoadAbort = null;
+      setSalesLoading(false);
+      setSalesLoadingProgress('');
+      return allSales;
+    };
+
+    // ── Helper: try loading sales from snapshot file (local dev) ──
+    const loadSalesFromSnapshot = async (): Promise<boolean> => {
       try {
-        // Check cache first
+        setSalesLoading(true);
+        setSalesLoadingProgress('Loading sales from snapshot...');
+        const res = await fetchWithTimeout('/api/snapshot?file=sales', { timeout: 120000 });
+        if (res.ok) {
+          const salesData = await res.json();
+          // Snapshot can be either a raw array or {success, sales: [...]}
+          const salesArray = Array.isArray(salesData) ? salesData : salesData?.sales;
+          if (Array.isArray(salesArray) && salesArray.length > 0) {
+            setSales(salesArray);
+            setSalesLoading(false);
+            setSalesLoadingProgress('');
+            console.log(`Sales from snapshot: ${salesArray.length} records`);
+            return true;
+          }
+        }
+        setSalesLoading(false);
+        setSalesLoadingProgress('');
+      } catch {
+        setSalesLoading(false);
+        setSalesLoadingProgress('');
+        /* snapshot not available */
+      }
+      return false;
+    };
+
+    // ── Helper: apply core data to state ──
+    const applyCoreData = (core: {
+      products: Product[]; pricing: PricingRecord[]; costs: CostRecord[];
+      inventory?: InventoryRecord[]; inventoryOH?: InventoryOHRecord[];
+      salesAggregations?: SalesAggregations | null; inventoryAggregations?: InventoryAggregations | null;
+      ohAggregations?: InventoryOHAggregations | null;
+    }) => {
+      setProducts(core.products);
+      setPricing(core.pricing);
+      setCosts(core.costs);
+      if (core.inventory) setInventory(core.inventory);
+      if (core.inventoryOH) setInventoryOH(core.inventoryOH);
+      if (core.salesAggregations) setSalesAggregations(core.salesAggregations);
+      if (core.inventoryAggregations) setInvAggregations(core.inventoryAggregations);
+      if (core.ohAggregations) setOHAggregations(core.ohAggregations);
+      setSales([]);
+    };
+
+    async function initializeData() {
+      if (cancelled) return;
+      // Show "taking too long" controls after 5 seconds
+      setLoadingSlow(false);
+      const slowTimer = setTimeout(() => setLoadingSlow(true), 5000);
+
+      try {
+        // ── Step 1: Check localStorage cache (synchronous, ~instant) ──
         setLoadingStatus('Checking cache...');
         setLoadingProgress(5);
+        await tick(); // let React paint the initial status
+        if (cancelled) { clearTimeout(slowTimer); return; }
 
-        // ── Helper: load sales progressively from /api/data?salesOnly=true ──
-        const loadSalesProgressively = async () => {
-          const PAGE_SIZE = 50000;
-          let page = 0;
-          let allSales: SalesRecord[] = [];
-          let totalPages = 1;
-          while (page < totalPages) {
-            try {
-              const res = await fetch(`/api/data?salesOnly=true&salesPage=${page}&salesPageSize=${PAGE_SIZE}`);
-              if (!res.ok) break;
-              const result = await res.json();
-              if (!result.success || !result.sales) break;
-              allSales = [...allSales, ...result.sales];
-              totalPages = result.totalPages || 1;
-              setSales(allSales);
-              console.log(`Sales page ${page + 1}/${totalPages}: ${allSales.length} total`);
-              page++;
-            } catch (err) {
-              console.warn('Sales page fetch failed:', err);
-              break;
-            }
-          }
-          return allSales;
-        };
-
-        // ── Helper: try loading sales from snapshot file (local dev) ──
-        const loadSalesFromSnapshot = async (): Promise<boolean> => {
-          try {
-            const res = await fetch('/api/snapshot?file=sales');
-            if (res.ok) {
-              const salesData = await res.json();
-              if (Array.isArray(salesData) && salesData.length > 0) {
-                setSales(salesData);
-                console.log(`Sales from snapshot: ${salesData.length} records`);
-                return true;
-              }
-            }
-          } catch { /* snapshot not available */ }
-          return false;
-        };
-
-        // ── Step 1: Check lightweight core cache ──
         const cached = getCachedCore();
         if (cached) {
           console.log('Core data from cache, loading sales...');
-          setLoadingStatus('Loading from cache...');
-          setLoadingProgress(60);
-
-          setProducts(cached.products);
-          setPricing(cached.pricing);
-          setCosts(cached.costs);
-          if (cached.inventory) setInventory(cached.inventory);
-          if (cached.salesAggregations) setSalesAggregations(cached.salesAggregations);
-          if (cached.inventoryAggregations) setInvAggregations(cached.inventoryAggregations);
-          setSales([]);
-
+          applyCoreData(cached);
           setLoadingProgress(80);
-          setIsLoading(false); // Show UI immediately
+          setIsLoading(false); // Show UI immediately — sales load in background
+          clearTimeout(slowTimer);
+          setLoadingSlow(false);
 
-          // Load sales in background — try snapshot first, then progressive API
+          // OH data is too large for localStorage — fetch in background
+          fetchWithTimeout('/api/data', { timeout: 30000 })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              if (d?.data?.inventoryOH) setInventoryOH(d.data.inventoryOH);
+              if (d?.ohAggregations) setOHAggregations(d.ohAggregations);
+              if (d?.inventoryAggregations) setInvAggregations(d.inventoryAggregations);
+            })
+            .catch(() => console.warn('Background OH fetch failed'));
+
           const gotSnapshot = await loadSalesFromSnapshot();
-          if (!gotSnapshot) {
-            await loadSalesProgressively();
-          }
+          if (!gotSnapshot) await loadSalesProgressively();
           return;
         }
 
         // ── Step 2: No cache — try snapshot API (local dev) ──
         setLoadingStatus('Loading data...');
         setLoadingProgress(10);
-        let coreLoaded = false;
+        await tick();
+        if (cancelled) { clearTimeout(slowTimer); return; }
 
         try {
-          const coreRes = await fetch('/api/snapshot?file=core');
+          const coreRes = await fetchWithTimeout('/api/snapshot?file=core', { timeout: 15000 });
           if (coreRes.ok) {
             const core = await coreRes.json();
-            if (core.success && core.counts?.products > 0) {
+            if (core.success && (core.counts?.products > 0 || core.counts?.sales > 0)) {
               console.log('Core data from snapshot:', core.counts);
               setLoadingProgress(70);
 
-              const coreProducts = core.data.products || [];
-              const corePricing = core.data.pricing || [];
-              const coreCosts = core.data.costs || [];
-              const coreInventory = core.data.inventory || [];
-              const coreSalesAgg = core.salesAggregations || null;
-              const coreInvAgg = core.inventoryAggregations || null;
-
-              setProducts(coreProducts);
-              setPricing(corePricing);
-              setCosts(coreCosts);
-              setInventory(coreInventory);
-              if (coreSalesAgg) setSalesAggregations(coreSalesAgg);
-              if (coreInvAgg) setInvAggregations(coreInvAgg);
-              setSales([]);
+              applyCoreData({
+                products: core.data.products || [],
+                pricing: core.data.pricing || [],
+                costs: core.data.costs || [],
+                inventory: core.data.inventory || [],
+                inventoryOH: core.data.inventoryOH || [],
+                salesAggregations: core.salesAggregations,
+                inventoryAggregations: core.inventoryAggregations,
+                ohAggregations: core.ohAggregations,
+              });
 
               setLoadingProgress(80);
               setIsLoading(false);
-              coreLoaded = true;
+              clearTimeout(slowTimer);
+              setLoadingSlow(false);
 
               setCachedCore({
-                products: coreProducts, pricing: corePricing, costs: coreCosts,
-                inventory: coreInventory,
-                salesAggregations: coreSalesAgg || undefined,
-                inventoryAggregations: coreInvAgg || undefined,
+                products: core.data.products || [], pricing: core.data.pricing || [], costs: core.data.costs || [],
+                inventory: core.data.inventory || [],
+                salesAggregations: core.salesAggregations || undefined,
+                inventoryAggregations: core.inventoryAggregations || undefined,
               });
 
-              // Load sales from snapshot or progressive API
               const gotSnapshot = await loadSalesFromSnapshot();
               if (!gotSnapshot) await loadSalesProgressively();
               return;
@@ -303,96 +439,98 @@ export default function Home() {
           console.log('Snapshot not available:', snapshotErr);
         }
 
-        // ── Step 3: No snapshot — load from database API (Vercel production) ──
-        if (!coreLoaded) {
-          try {
-            setLoadingStatus('Loading from database...');
-            setLoadingProgress(20);
-            const dbResponse = await fetch('/api/data');
-            if (dbResponse.ok) {
-              const dbResult = await dbResponse.json();
-              if (dbResult.success && dbResult.counts?.products > 0) {
-                console.log('Core data from database:', dbResult.counts);
-                setLoadingProgress(70);
+        // ── Step 3: No snapshot — try database API (Vercel production) ──
+        setLoadingStatus('Loading from database...');
+        setLoadingProgress(20);
+        await tick();
+        if (cancelled) { clearTimeout(slowTimer); return; }
 
-                const dbProducts = dbResult.data.products || [];
-                const dbPricing = dbResult.data.pricing || [];
-                const dbCosts = dbResult.data.costs || [];
-                const dbInventory = dbResult.data.inventory || [];
-                const dbSalesAgg = dbResult.salesAggregations || null;
-                const dbInvAgg = dbResult.inventoryAggregations || null;
+        try {
+          const dbResponse = await fetchWithTimeout('/api/data', { timeout: 30000 });
+          if (dbResponse.ok) {
+            const dbResult = await dbResponse.json();
+            if (dbResult.success && (dbResult.counts?.products > 0 || dbResult.counts?.sales > 0)) {
+              console.log('Core data from database:', dbResult.counts);
+              setLoadingProgress(70);
 
-                setProducts(dbProducts);
-                setPricing(dbPricing);
-                setCosts(dbCosts);
-                setInventory(dbInventory);
-                if (dbSalesAgg) setSalesAggregations(dbSalesAgg);
-                if (dbInvAgg) setInvAggregations(dbInvAgg);
-                setSales(dbResult.data.sales || []);
+              applyCoreData({
+                products: dbResult.data.products || [],
+                pricing: dbResult.data.pricing || [],
+                costs: dbResult.data.costs || [],
+                inventory: dbResult.data.inventory || [],
+                inventoryOH: dbResult.data.inventoryOH || [],
+                salesAggregations: dbResult.salesAggregations,
+                inventoryAggregations: dbResult.inventoryAggregations,
+                ohAggregations: dbResult.ohAggregations,
+              });
+              setSales(dbResult.data.sales || []);
 
-                setLoadingProgress(80);
-                setIsLoading(false);
-                coreLoaded = true;
+              setLoadingProgress(80);
+              setIsLoading(false);
+              clearTimeout(slowTimer);
+              setLoadingSlow(false);
 
-                setCachedCore({
-                  products: dbProducts, pricing: dbPricing, costs: dbCosts,
-                  inventory: dbInventory,
-                  salesAggregations: dbSalesAgg || undefined,
-                  inventoryAggregations: dbInvAgg || undefined,
-                });
+              setCachedCore({
+                products: dbResult.data.products || [], pricing: dbResult.data.pricing || [], costs: dbResult.data.costs || [],
+                inventory: dbResult.data.inventory || [],
+                salesAggregations: dbResult.salesAggregations || undefined,
+                inventoryAggregations: dbResult.inventoryAggregations || undefined,
+              });
 
-                // Load sales progressively in background (API returns 0 sales in full mode)
-                if ((dbResult.data.sales || []).length === 0 && dbResult.counts.sales > 0) {
-                  console.log(`Loading ${dbResult.counts.sales} sales progressively...`);
-                  await loadSalesProgressively();
-                }
-                if (coreLoaded) return;
+              if ((dbResult.data.sales || []).length === 0 && dbResult.counts.sales > 0) {
+                console.log(`Loading ${dbResult.counts.sales} sales progressively...`);
+                await loadSalesProgressively();
               }
+              return;
             }
-          } catch (dbErr) {
-            console.log('Database not available:', dbErr);
           }
+        } catch (dbErr) {
+          console.log('Database not available:', dbErr);
         }
 
         // ── Step 4: Fallback — try Excel files (local dev only) ──
-        if (!coreLoaded) {
-          setLoadingStatus('Checking for local data files...');
-          setLoadingProgress(20);
+        setLoadingStatus('Checking for local data files...');
+        setLoadingProgress(20);
+        await tick();
+        if (cancelled) { clearTimeout(slowTimer); return; }
 
-          try {
-            const response = await fetch('/api/load-data');
-            if (response.ok) {
-              setLoadingStatus('Processing data...');
-              setLoadingProgress(70);
-              const result = await response.json();
-              if (result.success) {
-                setProducts(result.data.products || []);
-                setSales(result.data.sales || []);
-                setPricing(result.data.pricing || []);
-                setCosts(result.data.costs || []);
-                setInventory(result.data.inventory || []);
-                coreLoaded = true;
-              }
+        try {
+          const response = await fetchWithTimeout('/api/load-data', { timeout: 120000 });
+          if (response.ok) {
+            setLoadingStatus('Processing data...');
+            setLoadingProgress(70);
+            const result = await response.json();
+            if (result.success) {
+              setProducts(result.data.products || []);
+              setSales(result.data.sales || []);
+              setPricing(result.data.pricing || []);
+              setCosts(result.data.costs || []);
+              setInventory(result.data.inventory || []);
+              setLoadingProgress(100);
+              setIsLoading(false);
+              return;
             }
-          } catch (excelErr) {
-            console.log('Excel files not available:', excelErr);
           }
+        } catch (excelErr) {
+          console.log('Excel files not available:', excelErr);
         }
 
-        if (!coreLoaded) {
-          setLoadingStatus('Ready - Import data to get started');
-        }
-
+        // ── No data source worked — show empty state ──
+        setLoadingStatus('Ready - Import data to get started');
         setLoadingProgress(100);
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to initialize data:', err);
         setLoadingStatus('Ready - Import data to get started');
         setIsLoading(false);
+      } finally {
+        clearTimeout(slowTimer);
+        setLoadingSlow(false);
       }
     }
 
     initializeData();
+    return () => { cancelled = true; };
   }, []);
 
   // Handle refresh
@@ -414,14 +552,17 @@ export default function Home() {
   const handleSalesOnlyImport = async (data: {
     sales: Record<string, unknown>[];
   }) => {
+    // Cancel any background sales loading to prevent race conditions
+    if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
+    setImportError(null);
     console.log('Importing sales-only data:', data.sales.length, 'records');
 
     // Replace all sales with new data
     const newSales = data.sales as unknown as SalesRecord[];
     setSales(newSales);
 
-    // Update core cache (sales not cached — too large)
-    setCachedCore({ products, pricing, costs, inventory });
+    // Invalidate cache — sales aggregations are now stale
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
 
     // Persist to database (full refresh - no season filter)
     try {
@@ -434,21 +575,22 @@ export default function Home() {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
 
-        await fetch('/api/data/import', {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'sales',
-            // No season - will delete all sales on first batch
             data: batch,
             fileName: `full_sales_import_batch_${batchNum}`,
-            replaceExisting: i === 0, // Only replace on first batch
+            replaceExisting: i === 0,
           }),
         });
       }
       console.log('Sales data persisted to database');
     } catch (dbErr) {
-      console.warn('Could not persist to database:', dbErr);
+      const msg = `Sales DB import failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}. Data is loaded locally but may be lost on refresh.`;
+      console.error(msg);
+      setImportError(msg);
     }
 
     // Close the modal
@@ -460,6 +602,13 @@ export default function Home() {
     sales: Record<string, unknown>[];
     seasons: string[];
   }) => {
+    if (!data.sales || !Array.isArray(data.sales)) {
+      console.warn('handleSalesReplaceImport called with no sales data — ignoring');
+      return;
+    }
+    // Cancel any background sales loading to prevent race conditions
+    if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
+    setImportError(null);
     console.log('REPLACE import:', data.sales.length, 'sales records for seasons:', data.seasons);
 
     // Keep sales from seasons NOT being replaced
@@ -470,21 +619,21 @@ export default function Home() {
 
     setSales(finalSales);
 
-    // Update core cache
-    setCachedCore({ products, pricing, costs, inventory });
+    // Invalidate cache — sales aggregations are now stale
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
 
     // Persist to database - delete then insert for each season
     try {
       // First, delete existing sales for each season
       for (const season of data.seasons) {
         console.log(`Deleting existing sales for season: ${season}`);
-        await fetch('/api/data/import', {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'sales',
             season,
-            data: [], // Empty data with replaceExisting will just delete
+            data: [],
             fileName: `sales_clear_${season}`,
             replaceExisting: true,
           }),
@@ -501,24 +650,63 @@ export default function Home() {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         console.log(`Inserting sales batch ${batchNum}/${totalBatches}`);
 
-        await fetch('/api/data/import', {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'sales',
             data: batch,
             fileName: `sales_replace_batch_${batchNum}`,
-            replaceExisting: false, // Already deleted, just insert
+            replaceExisting: false,
           }),
         });
       }
       console.log('Sales REPLACE import complete');
     } catch (dbErr) {
-      console.warn('Could not persist sales to database:', dbErr);
+      const msg = `Sales replace import failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}. Data is loaded locally but may be lost on refresh.`;
+      console.error(msg);
+      setImportError(msg);
     }
 
     // Close the modal
     setShowImportModal(false);
+  };
+
+  // Handle direct-to-DB import — large sales files already written to DB by API
+  // Just need to reload sales data from the database
+  const handleDirectToDbImport = async () => {
+    // Cancel any background sales loading to prevent race conditions
+    if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
+    setImportError(null);
+    console.log('Direct-to-DB import complete — reloading sales from database...');
+    setShowImportModal(false);
+
+    try {
+      // Reload sales progressively from the database
+      const PAGE_SIZE = 50000;
+      let page = 0;
+      let allSales: SalesRecord[] = [];
+      let totalPages = 1;
+      while (page < totalPages) {
+        const res = await checkedFetch(`/api/data?salesOnly=true&salesPage=${page}&salesPageSize=${PAGE_SIZE}`, {});
+        const result = await res.json();
+        if (!result.success || !result.sales) break;
+        allSales = [...allSales, ...result.sales];
+        totalPages = result.totalPages || 1;
+        setSales(allSales);
+        console.log(`Reloading sales page ${page + 1}/${totalPages}: ${allSales.length} total`);
+        page++;
+      }
+      console.log(`Sales reload complete: ${allSales.length} records`);
+
+      // Invalidate core cache so next page load refreshes from DB
+      // (sales themselves aren't cached, but aggregations may be stale)
+      try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+    } catch (err) {
+      const msg = `Failed to reload sales after direct-to-DB import: ${err instanceof Error ? err.message : String(err)}`;
+      console.error(msg);
+      setImportError(msg);
+    }
   };
 
   // Handle multi-season import (products, pricing, or costs that span multiple seasons)
@@ -528,7 +716,17 @@ export default function Home() {
     costs?: Record<string, unknown>[];
     inventory?: Record<string, unknown>[];
   }) => {
+    // Cancel any background sales loading to prevent race conditions
+    if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
+    setImportError(null);
     console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs', data.inventory?.length || 0, 'inventory');
+
+    // Track final values for a single cache write at the end
+    let finalProducts = products;
+    let finalPricing = pricing;
+    let finalCosts = costs;
+    let finalInventory = inventory;
+    const dbErrors: string[] = [];
 
     // For products: clean slate per season - delete existing products for each season in file, then add new
     if (data.products && data.products.length > 0) {
@@ -541,54 +739,50 @@ export default function Home() {
 
       // Keep products from seasons NOT in the file, replace those that ARE in the file
       const productsToKeep = products.filter(p => !seasonsInFile.has(p.season));
-      const finalProducts = [...productsToKeep, ...newProducts];
+      finalProducts = [...productsToKeep, ...newProducts];
       setProducts(finalProducts);
 
       // Persist to database - delete then insert for each season
       try {
-        // First, delete existing products for each season in the file
         for (const season of Array.from(seasonsInFile)) {
           console.log(`Deleting existing products for season: ${season}`);
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'products',
               season,
-              data: [], // Empty data with replaceExisting will just delete
+              data: [],
               fileName: `line_list_clear_${season}`,
               replaceExisting: true,
             }),
           });
         }
 
-        // Then insert all new products in batches
         const BATCH_SIZE = 1000;
         for (let i = 0; i < data.products.length; i += BATCH_SIZE) {
           const batch = data.products.slice(i, i + BATCH_SIZE);
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'products',
               data: batch,
               fileName: 'line_list_import',
-              replaceExisting: false, // Already deleted, just insert
+              replaceExisting: false,
             }),
           });
         }
         console.log('Line List import complete');
       } catch (dbErr) {
-        console.warn('Could not persist products to database:', dbErr);
+        dbErrors.push(`Products: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
-
-      // Update cache
-      setCachedCore({ products: finalProducts, pricing, costs, inventory });
     }
 
     // For pricing: replace all pricing with new data
     if (data.pricing && data.pricing.length > 0) {
       const newPricing = data.pricing as unknown as PricingRecord[];
+      finalPricing = newPricing;
       setPricing(newPricing);
 
       // Persist to database
@@ -596,7 +790,7 @@ export default function Home() {
         const BATCH_SIZE = 1000;
         for (let i = 0; i < data.pricing.length; i += BATCH_SIZE) {
           const batch = data.pricing.slice(i, i + BATCH_SIZE);
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -608,11 +802,8 @@ export default function Home() {
           });
         }
       } catch (dbErr) {
-        console.warn('Could not persist pricing to database:', dbErr);
+        dbErrors.push(`Pricing: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
-
-      // Update cache
-      setCachedCore({ products, pricing: newPricing, costs, inventory });
     }
 
     // For costs: merge with priority — Landed Cost (priority 1) > Standard Cost (priority 2)
@@ -625,17 +816,17 @@ export default function Home() {
       newCosts.forEach(c => c.season && seasonsInFile.add(c.season));
       console.log(`Importing ${importSource} costs for seasons:`, Array.from(seasonsInFile));
 
-      let finalCosts: CostRecord[];
+      let mergedCosts: CostRecord[];
 
       if (importSource === 'landed_cost') {
         // Landed Cost is priority 1 — always wins
         // For matching seasons: replace ALL existing cost records (both landed and standard)
-        const costsToKeep = costs.filter(c => !seasonsInFile.has(c.season));
-        finalCosts = [...costsToKeep, ...newCosts];
+        const costsToKeep = finalCosts.filter(c => !seasonsInFile.has(c.season));
+        mergedCosts = [...costsToKeep, ...newCosts];
       } else {
         // Standard Cost is priority 2 — only fills gaps, never overwrites landed_cost
         // Keep existing landed_cost records, replace only standard_cost (or add new)
-        const costsToKeep = costs.filter(c => {
+        const costsToKeep = finalCosts.filter(c => {
           if (!seasonsInFile.has(c.season)) return true; // Different season, keep
           if (c.costSource === 'landed_cost') return true; // Landed cost = higher priority, keep
           return false; // Same season, standard_cost or no source — replace
@@ -649,10 +840,11 @@ export default function Home() {
         );
         const newCostsFiltered = newCosts.filter(c => !landedKeys.has(`${c.styleNumber}-${c.season}`));
 
-        finalCosts = [...costsToKeep, ...newCostsFiltered];
+        mergedCosts = [...costsToKeep, ...newCostsFiltered];
         console.log(`Standard Cost import: ${newCosts.length} records, ${newCosts.length - newCostsFiltered.length} skipped (landed_cost exists), ${newCostsFiltered.length} applied`);
       }
 
+      finalCosts = mergedCosts;
       setCosts(finalCosts);
 
       // Persist to database
@@ -661,7 +853,7 @@ export default function Home() {
           // Landed cost: delete all existing for these seasons, then insert
           for (const season of Array.from(seasonsInFile)) {
             console.log(`Deleting all costs for season: ${season} (landed_cost import)`);
-            await fetch('/api/data/import', {
+            await checkedFetch('/api/data/import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -679,7 +871,7 @@ export default function Home() {
           //  non-landed records for these seasons and re-insert the kept ones + new ones)
           for (const season of Array.from(seasonsInFile)) {
             console.log(`Deleting costs for season: ${season} (standard_cost import)`);
-            await fetch('/api/data/import', {
+            await checkedFetch('/api/data/import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -692,14 +884,14 @@ export default function Home() {
             });
           }
           // Re-insert the kept landed_cost records for these seasons
-          const landedToReinsert = costs.filter(
+          const landedToReinsert = finalCosts.filter(
             c => seasonsInFile.has(c.season) && c.costSource === 'landed_cost'
           );
           if (landedToReinsert.length > 0) {
             const BATCH_SIZE = 1000;
             for (let i = 0; i < landedToReinsert.length; i += BATCH_SIZE) {
               const batch = landedToReinsert.slice(i, i + BATCH_SIZE);
-              await fetch('/api/data/import', {
+              await checkedFetch('/api/data/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -718,18 +910,18 @@ export default function Home() {
         const costsToInsert = importSource === 'landed_cost'
           ? data.costs
           : data.costs.filter((c: Record<string, unknown>) => {
-              const landedKeys = new Set(
-                costs
+              const landedKeysDb = new Set(
+                finalCosts
                   .filter(ec => ec.costSource === 'landed_cost' && seasonsInFile.has(ec.season))
                   .map(ec => `${ec.styleNumber}-${ec.season}`)
               );
-              return !landedKeys.has(`${c.styleNumber}-${c.season}`);
+              return !landedKeysDb.has(`${c.styleNumber}-${c.season}`);
             });
 
         const BATCH_SIZE = 1000;
         for (let i = 0; i < costsToInsert.length; i += BATCH_SIZE) {
           const batch = costsToInsert.slice(i, i + BATCH_SIZE);
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -742,11 +934,8 @@ export default function Home() {
         }
         console.log(`${importSource} import complete: ${costsToInsert.length} records persisted`);
       } catch (dbErr) {
-        console.warn('Could not persist costs to database:', dbErr);
+        dbErrors.push(`Costs: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
-
-      // Update cache
-      setCachedCore({ products, pricing, costs: finalCosts, inventory });
     }
 
     // For inventory: replace all (movement data has no season partitioning)
@@ -754,11 +943,12 @@ export default function Home() {
       const newInventory = data.inventory as unknown as InventoryRecord[];
       console.log('Importing inventory movement data:', newInventory.length, 'records');
 
-      setInventory(newInventory);
+      finalInventory = newInventory;
+      setInventory(finalInventory);
 
       // Persist to database — delete all then insert in batches
       try {
-        await fetch('/api/data/import', {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -772,7 +962,7 @@ export default function Home() {
         const BATCH_SIZE = 1000;
         for (let i = 0; i < data.inventory.length; i += BATCH_SIZE) {
           const batch = data.inventory.slice(i, i + BATCH_SIZE);
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -785,15 +975,22 @@ export default function Home() {
         }
         console.log('Inventory import complete');
       } catch (dbErr) {
-        console.warn('Could not persist inventory to database:', dbErr);
+        dbErrors.push(`Inventory: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
-
-      // Update cache
-      setCachedCore({ products, pricing, costs, inventory: newInventory });
     }
+
+    // Single cache write with all final values (avoids stale closures from sequential writes)
+    setCachedCore({ products: finalProducts, pricing: finalPricing, costs: finalCosts, inventory: finalInventory });
 
     // Close the modal
     setShowImportModal(false);
+
+    // Surface any DB persistence errors
+    if (dbErrors.length > 0) {
+      const msg = `Data loaded in-memory but failed to persist to database:\n${dbErrors.join('\n')}`;
+      console.error(msg);
+      setImportError(msg);
+    }
   };
 
   // Handle import from Season Import Modal
@@ -804,6 +1001,9 @@ export default function Home() {
     sales: Record<string, unknown>[];
     season: string;
   }) => {
+    // Cancel any background sales loading to prevent race conditions
+    if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
+    setImportError(null);
     console.log('Importing season data:', data.season, data.products.length, 'products', data.pricing?.length || 0, 'pricing', data.sales?.length || 0, 'sales');
 
     // Remove existing data for this season, then add new data
@@ -827,10 +1027,12 @@ export default function Home() {
     setCachedCore({ products: newProducts, pricing: newPricing, costs: newCosts, inventory });
 
     // Also persist to database (for deployed environment)
-    try {
-      // Import products to database
-      if (data.products.length > 0) {
-        await fetch('/api/data/import', {
+    const dbErrors: string[] = [];
+
+    // Import products to database
+    if (data.products.length > 0) {
+      try {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -841,11 +1043,15 @@ export default function Home() {
             replaceExisting: true,
           }),
         });
+      } catch (dbErr) {
+        dbErrors.push(`Products: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
+    }
 
-      // Import pricing to database
-      if (data.pricing && data.pricing.length > 0) {
-        await fetch('/api/data/import', {
+    // Import pricing to database
+    if (data.pricing && data.pricing.length > 0) {
+      try {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -856,11 +1062,15 @@ export default function Home() {
             replaceExisting: true,
           }),
         });
+      } catch (dbErr) {
+        dbErrors.push(`Pricing: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
+    }
 
-      // Import costs to database
-      if (data.costs.length > 0) {
-        await fetch('/api/data/import', {
+    // Import costs to database
+    if (data.costs.length > 0) {
+      try {
+        await checkedFetch('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -871,10 +1081,14 @@ export default function Home() {
             replaceExisting: true,
           }),
         });
+      } catch (dbErr) {
+        dbErrors.push(`Costs: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
+    }
 
-      // Import sales to database in batches (for large files)
-      if (data.sales && data.sales.length > 0) {
+    // Import sales to database in batches (for large files)
+    if (data.sales && data.sales.length > 0) {
+      try {
         const BATCH_SIZE = 500;
         const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
         console.log(`Importing ${data.sales.length} sales records in ${totalBatches} batches`);
@@ -884,7 +1098,7 @@ export default function Home() {
           const batchNum = Math.floor(i / BATCH_SIZE) + 1;
           console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
 
-          await fetch('/api/data/import', {
+          await checkedFetch('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -896,11 +1110,17 @@ export default function Home() {
             }),
           });
         }
+      } catch (dbErr) {
+        dbErrors.push(`Sales: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`);
       }
+    }
 
+    if (dbErrors.length > 0) {
+      const msg = `Data loaded in-memory but failed to persist to database:\n${dbErrors.join('\n')}`;
+      console.error(msg);
+      setImportError(msg);
+    } else {
       console.log('Data persisted to database');
-    } catch (dbErr) {
-      console.warn('Could not persist to database (may not be configured):', dbErr);
     }
 
     // Close the modal
@@ -932,10 +1152,37 @@ export default function Home() {
           <p className="text-gray-400 text-sm font-medium">{loadingStatus}</p>
 
           {/* Tip for slow loads */}
-          {loadingProgress > 10 && loadingProgress < 80 && (
+          {!loadingSlow && loadingProgress > 10 && loadingProgress < 80 && (
             <p className="text-gray-500 text-xs mt-4">
               Loading data from database. Subsequent visits use cache.
             </p>
+          )}
+
+          {/* Taking too long — show retry/skip */}
+          {loadingSlow && (
+            <div className="mt-6 space-y-3">
+              <p className="text-amber-400 text-xs">
+                Taking longer than expected. The server may still be starting up.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => {
+                    clearCache();
+                    setIsLoading(false);
+                    setLoadingStatus('Ready - Import data to get started');
+                  }}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg transition-colors"
+                >
+                  Skip &amp; Import Data
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -949,10 +1196,12 @@ export default function Home() {
         activeView={activeView}
         onViewChange={setActiveView}
         onImportClick={() => setShowImportModal(true)}
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
       />
 
       {/* Main Content */}
-      <main className="flex-1 ml-56 bg-surface-secondary">
+      <main className={`flex-1 bg-surface-secondary transition-all duration-200 ease-in-out ${sidebarCollapsed ? 'ml-[60px]' : 'ml-56'}`}>
         {/* Header */}
         <AppHeader
           searchQuery={searchQuery}
@@ -966,16 +1215,45 @@ export default function Home() {
           seasons={seasons}
           divisions={divisions}
           categories={categories}
+          designers={designers}
+          customerTypes={customerTypes}
+          customers={customerNames}
           selectedSeason={selectedSeason}
           selectedDivision={selectedDivision}
           selectedCategory={selectedCategory}
+          selectedDesigner={selectedDesigner}
+          selectedCustomerType={selectedCustomerType}
+          selectedCustomer={selectedCustomer}
           onSeasonChange={setSelectedSeason}
           onDivisionChange={setSelectedDivision}
           onCategoryChange={setSelectedCategory}
+          onDesignerChange={setSelectedDesigner}
+          onCustomerTypeChange={setSelectedCustomerType}
+          onCustomerChange={setSelectedCustomer}
         />
 
+        {/* Import error banner */}
+        {importError && (
+          <div className="mx-4 mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
+            <span className="text-red-400 text-sm font-medium flex-1 whitespace-pre-line">{importError}</span>
+            <button
+              onClick={() => setImportError(null)}
+              className="text-red-400 hover:text-red-300 text-sm font-bold px-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* View Content */}
+        <SalesLoadingContext.Provider value={{ salesLoading, salesLoadingProgress }}>
         <div className="min-h-[calc(100vh-112px)]">
+          {activeView === 'executive' && (
+            <ErrorBoundary viewName="Executive Dashboard">
+              <ExecutiveDashboardView />
+            </ErrorBoundary>
+          )}
+
           {activeView === 'dashboard' && (
             <ErrorBoundary viewName="Dashboard">
               <DashboardView
@@ -986,6 +1264,7 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -998,8 +1277,10 @@ export default function Home() {
                 sales={sales}
                 pricing={pricing}
                 costs={costs}
+                selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1010,6 +1291,10 @@ export default function Home() {
               <SeasonCompView
                 products={products}
                 sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1026,6 +1311,21 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'topstyles' && (
+            <ErrorBoundary viewName="Top Styles">
+              <TopStylesChannelView
+                products={products}
+                sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1038,9 +1338,27 @@ export default function Home() {
                 sales={sales}
                 inventory={inventory}
                 inventoryAggregations={invAggregations || undefined}
+                inventoryOH={inventoryOH}
+                ohAggregations={ohAggregations || undefined}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'sellthrough' && (
+            <ErrorBoundary viewName="Sell-Through">
+              <SellThroughView
+                products={products}
+                sales={sales}
+                inventoryOH={inventoryOH}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1056,6 +1374,22 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'tariffs' && (
+            <ErrorBoundary viewName="Tariffs">
+              <TariffView
+                products={products}
+                sales={sales}
+                costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1068,8 +1402,10 @@ export default function Home() {
                 pricing={pricing}
                 costs={costs}
                 sales={sales}
+                selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1082,8 +1418,10 @@ export default function Home() {
                 sales={sales}
                 pricing={pricing}
                 costs={costs}
+                selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
               />
             </ErrorBoundary>
           )}
@@ -1097,6 +1435,7 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1107,6 +1446,11 @@ export default function Home() {
               <CustomerView
                 products={products}
                 sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1119,6 +1463,10 @@ export default function Home() {
                 sales={sales}
                 pricing={pricing}
                 costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
@@ -1129,17 +1477,62 @@ export default function Home() {
               <ValidationView
                 products={products}
                 sales={sales}
+                searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
           )}
 
           {activeView === 'datasources' && (
-            <ErrorBoundary viewName="Data Sources">
-              <DataSourceMapView />
+            <ErrorBoundary viewName="Data Flow">
+              <DataFlowView />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'stylecolor' && (
+            <ErrorBoundary viewName="Style/Color Performance">
+              <StyleColorPerfView
+                products={products}
+                sales={sales}
+                costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                selectedCustomer={selectedCustomer}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'geoheatmap' && (
+            <ErrorBoundary viewName="Geo Heat Map">
+              <GeoHeatmapView
+                sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                selectedCustomer={selectedCustomer}
+              />
+            </ErrorBoundary>
+          )}
+          {activeView === 'invopnseason' && (
+            <ErrorBoundary viewName="Inv-Opn Season">
+              <InvOpnSeasonView
+                products={products}
+                sales={sales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
             </ErrorBoundary>
           )}
         </div>
+        </SalesLoadingContext.Provider>
       </main>
 
       {/* Style Detail Panel */}
@@ -1162,10 +1555,10 @@ export default function Home() {
           onImportSalesOnly={handleSalesOnlyImport}
           onImportMultiSeason={handleMultiSeasonImport}
           onImportSalesReplace={handleSalesReplaceImport}
+          onImportDirectToDb={handleDirectToDbImport}
           onClose={() => setShowImportModal(false)}
         />
       )}
     </div>
   );
 }
-// force deploy Mon Jan 26 22:52:59 MST 2026

@@ -1,1043 +1,674 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Product, SalesRecord, normalizeCategory } from '@/types/product';
-import { sortSeasons } from '@/lib/store';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Product, SalesRecord, CUSTOMER_TYPE_LABELS, normalizeCategory } from '@/types/product';
+import { sortSeasons, compareSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
-import { Search, Download, ChevronRight, Users } from 'lucide-react';
+import { matchesDivision } from '@/utils/divisionMap';
+import { Search, Download, Users } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
-import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrencyShort, formatNumberShort } from '@/utils/format';
+import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 interface CustomerViewProps {
   products: Product[];
   sales: SalesRecord[];
+  selectedSeason?: string;
+  selectedDivision?: string;
+  selectedCategory?: string;
+  selectedCustomerType?: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
+/* ── Customer type colors ───────────────────────────────────────── */
+const TYPE_DOT_COLORS: Record<string, string> = {
+  EC: 'bg-emerald-400',
+  WH: 'bg-blue-400',
+  BB: 'bg-purple-400',
+  WD: 'bg-orange-400',
+  PS: 'bg-pink-400',
+  KI: 'bg-cyan-400',
+};
+
+const TYPE_BADGE_CLASSES: Record<string, string> = {
+  EC: 'bg-emerald-500/15 text-emerald-400',
+  WH: 'bg-blue-500/15 text-blue-400',
+  BB: 'bg-purple-500/15 text-purple-400',
+  WD: 'bg-orange-500/15 text-orange-400',
+  PS: 'bg-pink-500/15 text-pink-400',
+  KI: 'bg-cyan-500/15 text-cyan-400',
+};
+
+const BAR_COLORS = ['#30d158', '#0a84ff', '#bf5af2', '#ff9f0a', '#ff453a', '#5ac8fa'];
+
+/* ── Helpers ────────────────────────────────────────────────────── */
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase();
+}
+
+/* ── Aggregated customer data ───────────────────────────────────── */
 type CustomerMetrics = {
   customer: string;
   customerType: string;
   revenue: number;
+  shipped: number;
   units: number;
+  totalCost: number;
   styles: Set<string>;
   orders: number;
-  margin: number | null;
 };
+
+type SortMode = 'revenue' | 'name';
 
 export default function CustomerView({
   products,
   sales,
+  selectedSeason: globalSeason = '',
+  selectedDivision: globalDivision = '',
+  selectedCategory: globalCategory = '',
+  selectedCustomerType: globalCustomerType = '',
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: CustomerViewProps) {
+  /* ── Local state ───────────────────────────────────────────────── */
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSeason, setSelectedSeason] = useState<string>('');
-  const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedGender, setSelectedGender] = useState<string>('');
+
+  // Sync global search → local search
+  useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSearchQuery]);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'category' | 'gender' | 'color' | 'style' | 'trend' | 'margin'>('category');
-  const [styleSearchQuery, setStyleSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('revenue');
 
-  // Get available seasons
+  /* ── Derive activeSeason from global filter ────────────────────── */
   const allSeasons = useMemo(() => {
-    const seasonSet = new Set<string>();
-    sales.forEach((s) => s.season && seasonSet.add(s.season));
-    return sortSeasons(Array.from(seasonSet)).filter((s) => isRelevantSeason(s));
+    const s = new Set<string>();
+    sales.forEach(r => r.season && s.add(r.season));
+    return sortSeasons(Array.from(s)).filter(ss => isRelevantSeason(ss));
   }, [sales]);
 
-  // Default to most recent season
-  const activeSeason = selectedSeason || allSeasons[allSeasons.length - 1] || '';
+  const activeSeason = useMemo(() => {
+    if (!globalSeason) return allSeasons[allSeasons.length - 1] || '';
+    if (globalSeason === '__ALL_SP__') {
+      return [...allSeasons].reverse().find(s => s.endsWith('SP')) || allSeasons[allSeasons.length - 1] || '';
+    }
+    if (globalSeason === '__ALL_FA__') {
+      return [...allSeasons].reverse().find(s => s.endsWith('FA')) || allSeasons[allSeasons.length - 1] || '';
+    }
+    return allSeasons.includes(globalSeason) ? globalSeason : allSeasons[allSeasons.length - 1] || '';
+  }, [globalSeason, allSeasons]);
 
-  // Get unique customer types
-  const customerTypes = useMemo(() => {
-    const types = new Set<string>();
-    sales.forEach((s) => s.customerType && types.add(s.customerType));
-    return Array.from(types).sort();
-  }, [sales]);
+  // Previous season for YoY comparison
+  const priorSeason = useMemo(() => {
+    const idx = allSeasons.indexOf(activeSeason);
+    if (!activeSeason) return '';
+    const half = activeSeason.slice(-2); // SP or FA
+    const yearNum = parseInt(activeSeason.slice(0, 2), 10);
+    const prior = `${String(yearNum - 1).padStart(2, '0')}${half}`;
+    return allSeasons.includes(prior) ? prior : (idx > 0 ? allSeasons[idx - 1] : '');
+  }, [allSeasons, activeSeason]);
 
-  // Get categories
-  const categories = useMemo(() => {
-    const cats = new Set<string>();
-    products.forEach((p) => p.categoryDesc && cats.add(normalizeCategory(p.categoryDesc)));
-    return Array.from(cats).sort();
-  }, [products]);
-
-  // Gender detection
-  const getGenderFromDivision = (divisionDesc: string): 'Men' | 'Women' | 'Unisex' => {
-    if (!divisionDesc) return 'Unisex';
-    const lower = divisionDesc.toLowerCase();
-    if (lower.includes('women') || lower.includes('woman')) return 'Women';
-    if (lower.includes('men') && !lower.includes('women')) return 'Men';
-    return 'Unisex';
-  };
-
-  // Calculate customer metrics
+  /* ── Build customer metrics for active season ──────────────────── */
   const customerMetrics = useMemo(() => {
-    const metricsMap = new Map<string, CustomerMetrics>();
+    const map = new Map<string, CustomerMetrics>();
 
-    sales.forEach((sale) => {
+    sales.forEach(sale => {
       if (sale.season !== activeSeason) return;
-      if (selectedCustomerType && sale.customerType !== selectedCustomerType) return;
-      if (selectedCategory) {
-        const saleCategory = normalizeCategory(sale.categoryDesc);
-        if (saleCategory !== selectedCategory) return;
+      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
+      if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
+      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      const cust = sale.customer || 'Unknown';
+      if (!map.has(cust)) {
+        map.set(cust, { customer: cust, customerType: sale.customerType || '', revenue: 0, shipped: 0, units: 0, totalCost: 0, styles: new Set(), orders: 0 });
       }
-      if (selectedGender) {
-        const gender = getGenderFromDivision(sale.divisionDesc || '');
-        if (gender !== selectedGender) return;
-      }
-
-      const customer = sale.customer || 'Unknown';
-
-      if (!metricsMap.has(customer)) {
-        metricsMap.set(customer, {
-          customer,
-          customerType: sale.customerType || '',
-          revenue: 0,
-          units: 0,
-          styles: new Set(),
-          orders: 0,
-          margin: null,
-        });
-      }
-
-      const metrics = metricsMap.get(customer)!;
-      metrics.revenue += sale.revenue || 0;
-      metrics.units += sale.unitsBooked || 0;
-      if (sale.styleNumber) metrics.styles.add(sale.styleNumber);
-      metrics.orders += 1;
+      const m = map.get(cust)!;
+      m.revenue += sale.revenue || 0;
+      m.shipped += (sale.shipped as number) || 0;
+      m.units += sale.unitsBooked || 0;
+      m.totalCost += sale.cost || 0;
+      if (sale.styleNumber) m.styles.add(sale.styleNumber);
+      m.orders += 1;
     });
 
-    return Array.from(metricsMap.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [sales, activeSeason, selectedCustomerType, selectedCategory, selectedGender]);
+    return Array.from(map.values());
+  }, [sales, activeSeason, globalCustomerType, globalCategory, globalDivision]);
 
-  // Filter by search
+  /* ── Prior-season metrics for YoY comparison ───────────────────── */
+  const priorMetricsMap = useMemo(() => {
+    if (!priorSeason) return new Map<string, { revenue: number; shipped: number; units: number; totalCost: number; styles: number; orders: number }>();
+    const map = new Map<string, { revenue: number; shipped: number; units: number; totalCost: number; styles: Set<string>; orders: number }>();
+
+    sales.forEach(sale => {
+      if (sale.season !== priorSeason) return;
+      const cust = sale.customer || 'Unknown';
+      if (!map.has(cust)) map.set(cust, { revenue: 0, shipped: 0, units: 0, totalCost: 0, styles: new Set(), orders: 0 });
+      const m = map.get(cust)!;
+      m.revenue += sale.revenue || 0;
+      m.shipped += (sale.shipped as number) || 0;
+      m.units += sale.unitsBooked || 0;
+      m.totalCost += sale.cost || 0;
+      if (sale.styleNumber) m.styles.add(sale.styleNumber);
+      m.orders += 1;
+    });
+
+    const result = new Map<string, { revenue: number; shipped: number; units: number; totalCost: number; styles: number; orders: number }>();
+    map.forEach((v, k) => result.set(k, { ...v, styles: v.styles.size }));
+    return result;
+  }, [sales, priorSeason]);
+
+  /* ── Filter + sort ─────────────────────────────────────────────── */
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery) return customerMetrics;
-    const query = searchQuery.toLowerCase();
-    return customerMetrics.filter((c) => c.customer.toLowerCase().includes(query));
-  }, [customerMetrics, searchQuery]);
+    let list = customerMetrics;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(c => c.customer.toLowerCase().includes(q));
+    }
+    list.sort((a, b) =>
+      sortMode === 'revenue' ? b.revenue - a.revenue : a.customer.localeCompare(b.customer)
+    );
+    return list;
+  }, [customerMetrics, searchQuery, sortMode]);
 
-  // Total stats
-  const totalStats = useMemo(() => {
-    const total = {
-      revenue: 0,
-      customers: filteredCustomers.length,
-      units: 0,
-      styles: new Set<string>(),
-    };
-
-    filteredCustomers.forEach((c) => {
-      total.revenue += c.revenue;
-      total.units += c.units;
-      c.styles.forEach((s) => total.styles.add(s));
-    });
-
-    return {
-      revenue: total.revenue,
-      customers: total.customers,
-      avgOrderValue: total.customers > 0 ? total.revenue / total.customers : 0,
-      totalStyles: total.styles.size,
-      topCustomerRevenue: filteredCustomers[0]?.revenue || 0,
-    };
+  /* ── Customer list summary ─────────────────────────────────────── */
+  const listSummary = useMemo(() => {
+    let totalRevenue = 0;
+    for (const c of filteredCustomers) totalRevenue += c.revenue;
+    return { count: filteredCustomers.length, totalRevenue };
   }, [filteredCustomers]);
 
-  // Get customer type color
-  const getCustomerTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      BB: 'bg-blue-100 dark:bg-blue-900 text-blue-700',
-      WH: 'bg-teal-100 text-teal-700',
-      EC: 'bg-purple-100 text-purple-700',
-      PS: 'bg-orange-100 text-orange-700',
-      KI: 'bg-green-100 dark:bg-green-900 text-green-700',
-      WD: 'bg-red-100 dark:bg-red-900 text-red-700',
-    };
-    return colors[type] || 'bg-surface-tertiary text-text-secondary';
-  };
+  /* ── Auto-select first customer if none selected ──────────────── */
+  const activeCustomer = selectedCustomer && filteredCustomers.some(c => c.customer === selectedCustomer)
+    ? selectedCustomer
+    : filteredCustomers[0]?.customer || null;
 
-  // Export current view data
-  const handleExport = () => {
-    if (selectedCustomer) {
-      // Export detail view data based on active tab
-      exportToExcel(
-        customerCategoryData.map(d => ({
-          Season: activeSeason,
-          Customer: selectedCustomer,
-          Category: d.category,
-          Revenue: d.revenue,
-          Units: d.units,
-          Styles: d.styles,
-          'Rev/Style': d.revPerStyle.toFixed(2),
-          '% of Total': d.pctOfTotal.toFixed(1) + '%',
-        })),
-        `customer_${selectedCustomer}_${activeTab}_${activeSeason}`
-      );
-    } else {
-      // Export customer list
-      exportToExcel(
-        filteredCustomers.map((c, idx) => ({
-          Season: activeSeason,
-          Rank: idx + 1,
-          Customer: c.customer,
-          Type: c.customerType,
-          Revenue: c.revenue.toFixed(2),
-          Units: c.units,
-          Styles: c.styles.size,
-          'Rev/Style': c.styles.size > 0 ? (c.revenue / c.styles.size).toFixed(2) : '0',
-        })),
-        `customers_${activeSeason}`
-      );
+  const activeMetrics = activeCustomer ? filteredCustomers.find(c => c.customer === activeCustomer) : null;
+  const activePrior = activeCustomer ? priorMetricsMap.get(activeCustomer) : null;
+
+  /* ── Detail: Top selling styles ────────────────────────────────── */
+  const topStyles = useMemo(() => {
+    if (!activeCustomer) return [];
+    const map = new Map<string, { styleDesc: string; divisionDesc: string; revenue: number; units: number }>();
+    sales.forEach(sale => {
+      if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
+      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      const sn = sale.styleNumber;
+      if (!map.has(sn)) map.set(sn, { styleDesc: sale.styleDesc || '', divisionDesc: sale.divisionDesc || '', revenue: 0, units: 0 });
+      const m = map.get(sn)!;
+      m.revenue += sale.revenue || 0;
+      m.units += sale.unitsBooked || 0;
+    });
+    return Array.from(map.entries())
+      .map(([styleNumber, d]) => ({ styleNumber, ...d }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [activeCustomer, sales, activeSeason, globalDivision]);
+
+  /* ── Detail: Revenue by category ───────────────────────────────── */
+  const categoryBreakdown = useMemo(() => {
+    if (!activeCustomer) return [];
+    const map = new Map<string, number>();
+    sales.forEach(sale => {
+      if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
+      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
+      map.set(cat, (map.get(cat) || 0) + (sale.revenue || 0));
+    });
+    return Array.from(map.entries())
+      .map(([category, revenue]) => ({ category, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [activeCustomer, sales, activeSeason, globalDivision]);
+
+  const maxCatRevenue = categoryBreakdown[0]?.revenue || 1;
+
+  /* ── Company-wide category share (benchmark) ────────────────────── */
+  const companyCategoryShares = useMemo(() => {
+    const map = new Map<string, number>();
+    let total = 0;
+    sales.forEach(sale => {
+      if (sale.season !== activeSeason) return;
+      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
+      const rev = sale.revenue || 0;
+      map.set(cat, (map.get(cat) || 0) + rev);
+      total += rev;
+    });
+    const shares = new Map<string, number>();
+    if (total > 0) {
+      map.forEach((rev, cat) => shares.set(cat, (rev / total) * 100));
     }
+    return shares;
+  }, [sales, activeSeason, globalDivision]);
+
+  /* ── Detail: Season revenue history (with shipped/booked) ───────── */
+  const seasonHistory = useMemo(() => {
+    if (!activeCustomer) return [];
+    const map = new Map<string, { revenue: number; shipped: number; units: number; styles: Set<string> }>();
+    sales.forEach(sale => {
+      if (sale.customer !== activeCustomer) return;
+      const s = sale.season;
+      if (!map.has(s)) map.set(s, { revenue: 0, shipped: 0, units: 0, styles: new Set() });
+      const m = map.get(s)!;
+      m.revenue += sale.revenue || 0;
+      m.shipped += (sale.shipped as number) || 0;
+      m.units += sale.unitsBooked || 0;
+      if (sale.styleNumber) m.styles.add(sale.styleNumber);
+    });
+    return Array.from(map.entries())
+      .map(([season, d]) => ({ season, revenue: d.revenue, shipped: d.shipped, booked: d.revenue - d.shipped, units: d.units, styles: d.styles.size }))
+      .sort((a, b) => compareSeasons(a.season, b.season))
+      .slice(-6);
+  }, [activeCustomer, sales]);
+
+  const maxSeasonRev = Math.max(...seasonHistory.map(s => s.revenue), 1);
+
+  /* ── KPI delta helper ──────────────────────────────────────────── */
+  function kpiDelta(current: number, prior: number | undefined): { pct: number; dir: 'up' | 'down' | 'flat' } {
+    if (prior === undefined || prior === null) return { pct: 0, dir: 'flat' };
+    if (prior === 0) return current > 0 ? { pct: 100, dir: 'up' } : { pct: 0, dir: 'flat' };
+    const pct = ((current - prior) / prior) * 100;
+    return { pct: Math.abs(pct), dir: pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat' };
+  }
+
+  /* ── Export ─────────────────────────────────────────────────────── */
+  const handleExport = () => {
+    exportToExcel(
+      filteredCustomers.map((c, idx) => ({
+        Season: activeSeason,
+        Rank: idx + 1,
+        Customer: c.customer,
+        Type: c.customerType,
+        Revenue: c.revenue.toFixed(2),
+        Shipped: c.shipped.toFixed(2),
+        Booked: (c.revenue - c.shipped).toFixed(2),
+        Units: c.units,
+        Styles: c.styles.size,
+        Orders: c.orders,
+      })),
+      `customers_${activeSeason}`
+    );
   };
 
-  // Customer detail data - By Category
-  const customerCategoryData = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const categoryMap = new Map<string, { revenue: number; units: number; styles: Set<string> }>();
-
-    sales.forEach(sale => {
-      if (sale.customer !== selectedCustomer) return;
-      if (sale.season !== activeSeason) return;
-
-      const category = normalizeCategory(sale.categoryDesc) || 'Other';
-      if (!categoryMap.has(category)) {
-        categoryMap.set(category, { revenue: 0, units: 0, styles: new Set() });
-      }
-
-      const cat = categoryMap.get(category)!;
-      cat.revenue += sale.revenue || 0;
-      cat.units += sale.unitsBooked || 0;
-      if (sale.styleNumber) cat.styles.add(sale.styleNumber);
-    });
-
-    const totalRevenue = Array.from(categoryMap.values()).reduce((sum, c) => sum + c.revenue, 0);
-
-    return Array.from(categoryMap.entries())
-      .map(([category, data]) => ({
-        category,
-        revenue: data.revenue,
-        units: data.units,
-        styles: data.styles.size,
-        revPerStyle: data.styles.size > 0 ? data.revenue / data.styles.size : 0,
-        pctOfTotal: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [selectedCustomer, sales, activeSeason]);
-
-  // Customer detail data - By Gender
-  const customerGenderData = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const genderMap = new Map<string, { revenue: number; units: number; styles: Set<string> }>();
-
-    sales.forEach(sale => {
-      if (sale.customer !== selectedCustomer) return;
-      if (sale.season !== activeSeason) return;
-
-      const gender = getGenderFromDivision(sale.divisionDesc || '');
-      if (!genderMap.has(gender)) {
-        genderMap.set(gender, { revenue: 0, units: 0, styles: new Set() });
-      }
-
-      const g = genderMap.get(gender)!;
-      g.revenue += sale.revenue || 0;
-      g.units += sale.unitsBooked || 0;
-      if (sale.styleNumber) g.styles.add(sale.styleNumber);
-    });
-
-    return Array.from(genderMap.entries())
-      .map(([gender, data]) => ({
-        gender,
-        revenue: data.revenue,
-        units: data.units,
-        styles: data.styles.size,
-        revPerStyle: data.styles.size > 0 ? data.revenue / data.styles.size : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [selectedCustomer, sales, activeSeason]);
-
-  // Customer detail data - By Color
-  const customerColorData = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const colorMap = new Map<string, { revenue: number; units: number; styles: Set<string> }>();
-
-    sales.forEach(sale => {
-      if (sale.customer !== selectedCustomer) return;
-      if (sale.season !== activeSeason) return;
-
-      const color = sale.colorDesc || 'Unknown';
-      if (!colorMap.has(color)) {
-        colorMap.set(color, { revenue: 0, units: 0, styles: new Set() });
-      }
-
-      const c = colorMap.get(color)!;
-      c.revenue += sale.revenue || 0;
-      c.units += sale.unitsBooked || 0;
-      if (sale.styleNumber) c.styles.add(sale.styleNumber);
-    });
-
-    const totalRevenue = Array.from(colorMap.values()).reduce((sum, c) => sum + c.revenue, 0);
-
-    return Array.from(colorMap.entries())
-      .map(([color, data]) => ({
-        color,
-        revenue: data.revenue,
-        units: data.units,
-        styles: data.styles.size,
-        pctOfTotal: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [selectedCustomer, sales, activeSeason]);
-
-  // Customer detail data - By Style
-  const customerStyleData = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const styleMap = new Map<string, {
-      styleDesc: string;
-      categoryDesc: string;
-      divisionDesc: string;
-      revenue: number;
-      units: number;
-      price: number;
-    }>();
-
-    sales.forEach(sale => {
-      if (sale.customer !== selectedCustomer) return;
-      if (sale.season !== activeSeason) return;
-
-      const styleNumber = sale.styleNumber;
-      if (!styleMap.has(styleNumber)) {
-        styleMap.set(styleNumber, {
-          styleDesc: sale.styleDesc || '',
-          categoryDesc: normalizeCategory(sale.categoryDesc) || '',
-          divisionDesc: sale.divisionDesc || '',
-          revenue: 0,
-          units: 0,
-          price: sale.wholesalePrice || 0,
-        });
-      }
-
-      const s = styleMap.get(styleNumber)!;
-      s.revenue += sale.revenue || 0;
-      s.units += sale.unitsBooked || 0;
-    });
-
-    const allStyles = Array.from(styleMap.entries())
-      .map(([styleNumber, data]) => ({
-        styleNumber,
-        styleDesc: data.styleDesc,
-        category: data.categoryDesc,
-        gender: getGenderFromDivision(data.divisionDesc),
-        revenue: data.revenue,
-        units: data.units,
-        price: data.price,
-      }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    // Filter by search query
-    if (!styleSearchQuery) return allStyles;
-    const query = styleSearchQuery.toLowerCase();
-    return allStyles.filter(s =>
-      s.styleNumber.toLowerCase().includes(query) ||
-      s.styleDesc.toLowerCase().includes(query)
-    );
-  }, [selectedCustomer, sales, activeSeason, styleSearchQuery]);
-
-  // Customer detail data - Season Trend
-  const customerSeasonData = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const seasonMap = new Map<string, { revenue: number; units: number; styles: Set<string> }>();
-
-    sales.forEach(sale => {
-      if (sale.customer !== selectedCustomer) return;
-
-      const season = sale.season;
-      if (!seasonMap.has(season)) {
-        seasonMap.set(season, { revenue: 0, units: 0, styles: new Set() });
-      }
-
-      const s = seasonMap.get(season)!;
-      s.revenue += sale.revenue || 0;
-      s.units += sale.unitsBooked || 0;
-      if (sale.styleNumber) s.styles.add(sale.styleNumber);
-    });
-
-    return Array.from(seasonMap.entries())
-      .map(([season, data]) => ({
-        season,
-        revenue: data.revenue,
-        units: data.units,
-        styles: data.styles.size,
-        revPerStyle: data.styles.size > 0 ? data.revenue / data.styles.size : 0,
-      }))
-      .sort((a, b) => a.season.localeCompare(b.season));
-  }, [selectedCustomer, sales]);
-
+  /* ──────────────────────────────────────────────────────────────── */
+  /*  RENDER                                                         */
+  /* ──────────────────────────────────────────────────────────────── */
   return (
-    <div className="p-6 space-y-6">
-      {/* Search Bar */}
-      <div className="max-w-md">
-        <div className="bg-surface border-2 border-border-primary rounded-xl px-4 py-3 flex items-center gap-3">
-          <Search className="w-4 h-4 text-text-faint" />
-          <input
-            type="text"
-            placeholder="Search customer name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 outline-none text-sm font-medium"
-          />
-        </div>
-      </div>
-
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-4">
+      <SalesLoadingBanner />
+      {/* ── Page Header ──────────────────────────────────────────── */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-4xl font-black text-text-primary tracking-tight">Customers</h1>
-          <p className="text-base text-text-muted mt-1">
-            Analyze customer performance by category, gender, and season
-          </p>
+          <h1 className="text-2xl font-display font-semibold text-text-primary">Customers</h1>
+          <p className="text-xs text-text-muted mt-1">Customer performance for <span className="font-mono font-semibold text-text-secondary">{activeSeason}</span></p>
         </div>
         <button
           onClick={handleExport}
-          className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-lg border border-border-primary bg-surface text-text-primary hover:bg-surface-tertiary transition-colors"
         >
-          <Download className="w-5 h-5" />
-          Export {selectedCustomer ? 'Detail' : 'List'}
+          <Download className="w-3.5 h-3.5" />
+          Export
         </button>
       </div>
 
-      {/* Data Sources Legend */}
-      <SourceLegend sources={['sales']} className="bg-surface rounded-xl border-2 border-border-primary p-4" />
+      {/* ── Main Layout: List + Detail ───────────────────────────── */}
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'minmax(200px, 22%) 1fr', height: 'calc(100vh - 200px)' }}>
 
-      {/* Filters */}
-      <div className="bg-surface rounded-xl border-2 border-border-primary p-5">
-        <div className="flex gap-6 flex-wrap items-end">
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Season</label>
-            <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={activeSeason}
-              onChange={(e) => setSelectedSeason(e.target.value)}
-            >
-              {allSeasons.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer Type</label>
-            <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[140px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={selectedCustomerType}
-              onChange={(e) => setSelectedCustomerType(e.target.value)}
-            >
-              <option value="">All Types</option>
-              {customerTypes.map((ct) => (
-                <option key={ct} value={ct}>{ct}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Category</label>
-            <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[180px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Gender</label>
-            <select
-              className="border-2 border-border-primary rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-              value={selectedGender}
-              onChange={(e) => setSelectedGender(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="Men">Men&apos;s</option>
-              <option value="Women">Women&apos;s</option>
-              <option value="Unisex">Unisex</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
-          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Total Revenue</div>
-          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.revenue)}</div>
-        </div>
-        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
-          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Active Customers</div>
-          <div className="text-3xl font-black text-text-primary">{totalStats.customers}</div>
-        </div>
-        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
-          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Avg Order Value</div>
-          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.avgOrderValue)}</div>
-        </div>
-        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
-          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Total Styles</div>
-          <div className="text-3xl font-black text-text-primary">{totalStats.totalStyles}</div>
-        </div>
-        <div className="bg-surface border-2 border-border-primary rounded-xl p-5">
-          <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Top Customer Rev</div>
-          <div className="text-3xl font-black text-text-primary">{formatCurrencyShort(totalStats.topCustomerRevenue)}</div>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-2 gap-6">
-        {/* Revenue by Customer Type Bar Chart */}
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
-          <h3 className="text-xl font-bold text-text-primary mb-4">Revenue by Customer Type</h3>
-          <div className="space-y-3">
-            {(() => {
-              const typeRevenue = new Map<string, number>();
-              customerMetrics.forEach(c => {
-                const current = typeRevenue.get(c.customerType) || 0;
-                typeRevenue.set(c.customerType, current + c.revenue);
-              });
-              const sorted = Array.from(typeRevenue.entries())
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 6);
-              const maxRevenue = sorted[0]?.[1] || 1;
-
-              return sorted.map(([type, revenue]) => (
-                <div key={type}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-semibold text-text-secondary">{type}</span>
-                    <span className="text-sm font-bold text-text-primary">{formatCurrencyShort(revenue)}</span>
-                  </div>
-                  <div className="w-full bg-surface-tertiary rounded-full h-6">
-                    <div
-                      className={`h-6 rounded-full ${getCustomerTypeColor(type).replace('text-', 'bg-').replace('100', '500')}`}
-                      style={{ width: `${(revenue / maxRevenue) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
-        </div>
-
-        {/* Top 10 Customers Donut Chart */}
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
-          <h3 className="text-xl font-bold text-text-primary mb-4">Top 10 Customers - Revenue Share</h3>
-          <div className="flex items-center justify-center gap-8">
-            {(() => {
-              const top10 = filteredCustomers.slice(0, 10);
-              const top10Revenue = top10.reduce((sum, c) => sum + c.revenue, 0);
-              const totalRevenue = totalStats.revenue;
-              const top10Pct = totalRevenue > 0 ? (top10Revenue / totalRevenue) * 100 : 0;
-
-              const colors = ['#3b82f6', '#0d9488', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
-
-              let currentAngle = 0;
-              const segments = top10.map((customer, idx) => {
-                const pct = (customer.revenue / totalRevenue) * 100;
-                const angle = (pct / 100) * 360;
-                const segment = {
-                  customer: customer.customer,
-                  revenue: customer.revenue,
-                  pct,
-                  startAngle: currentAngle,
-                  endAngle: currentAngle + angle,
-                  color: colors[idx % colors.length],
-                };
-                currentAngle += angle;
-                return segment;
-              });
-
-              return (
-                <>
-                  <svg width="180" height="180" viewBox="0 0 180 180">
-                    <circle cx="90" cy="90" r="70" fill="none" stroke="#e5e7eb" strokeWidth="28"/>
-                    {segments.map((seg, idx) => {
-                      const startRad = (seg.startAngle - 90) * Math.PI / 180;
-                      const endRad = (seg.endAngle - 90) * Math.PI / 180;
-                      const largeArc = seg.endAngle - seg.startAngle > 180 ? 1 : 0;
-
-                      const x1 = 90 + 70 * Math.cos(startRad);
-                      const y1 = 90 + 70 * Math.sin(startRad);
-                      const x2 = 90 + 70 * Math.cos(endRad);
-                      const y2 = 90 + 70 * Math.sin(endRad);
-
-                      return (
-                        <path
-                          key={idx}
-                          d={`M 90 90 L ${x1} ${y1} A 70 70 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                          fill={seg.color}
-                          opacity="0.9"
-                        />
-                      );
-                    })}
-                    <circle cx="90" cy="90" r="45" fill="white"/>
-                    <text x="90" y="85" textAnchor="middle" fontSize="16" fontWeight="700" fill="#111827">Top 10</text>
-                    <text x="90" y="102" textAnchor="middle" fontSize="13" fill="#6b7280">{top10Pct.toFixed(1)}%</text>
-                  </svg>
-                  <div className="space-y-2">
-                    {top10.slice(0, 5).map((c, idx) => (
-                      <div key={c.customer} className="flex items-center gap-2 text-sm">
-                        <div className="w-3 h-3 rounded" style={{ backgroundColor: colors[idx] }}></div>
-                        <span className="text-text-secondary flex-1 truncate max-w-[120px]">{c.customer}</span>
-                        <span className="font-semibold text-text-primary">{formatCurrencyShort(c.revenue)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
-
-      {/* Customer Table */}
-      {!selectedCustomer && (
-        <>
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-black text-text-primary">
-              All Customers
-              <span className="text-base font-normal text-text-muted ml-3">
-                {filteredCustomers.length} customers · Sorted by revenue
-              </span>
-            </h2>
-          </div>
-
-          <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                  <tr>
-                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4 w-12">#</th>
-                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Customer</th>
-                    <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Type</th>
-                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
-                    <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Avg Order</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-secondary">
-                  {filteredCustomers.slice(0, 50).map((customer, idx) => (
-                    <tr
-                      key={customer.customer}
-                      className="hover:bg-hover cursor-pointer transition-colors"
-                      onClick={() => setSelectedCustomer(customer.customer)}
-                    >
-                      <td className="px-6 py-4 text-sm text-text-faint">{idx + 1}</td>
-                      <td className="px-6 py-4">
-                        <span className="text-base font-bold text-blue-600 hover:underline">
-                          {customer.customer}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${getCustomerTypeColor(customer.customerType)}`}>
-                          {customer.customerType}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-text-primary">
-                        {formatCurrencyShort(customer.revenue)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
-                        {formatNumberShort(customer.units)}
-                      </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
-                        {customer.styles.size}
-                      </td>
-                      <td className="px-6 py-4 text-right text-base font-semibold text-text-secondary">
-                        {formatCurrencyShort(customer.revenue / customer.orders)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Customer Detail View */}
-      {selectedCustomer && (
-        <div className="space-y-6">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm text-text-muted">
-            <button
-              onClick={() => setSelectedCustomer(null)}
-              className="text-blue-600 hover:underline font-medium"
-            >
-              Customers
-            </button>
-            <ChevronRight className="w-4 h-4" />
-            <span className="text-text-primary font-semibold">{selectedCustomer}</span>
-          </div>
-
-          {/* Customer Detail Card */}
-          <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
-            <div className="flex items-center justify-between mb-6 pb-6 border-b-2 border-border-primary">
+        {/* === LEFT PANEL: Customer List ============================= */}
+        <div className="card flex flex-col overflow-hidden">
+          {/* List header */}
+          <div className="px-4 py-3 bg-surface-secondary border-b border-border-primary space-y-2">
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-3xl font-black text-text-primary">{selectedCustomer}</h2>
-                <p className="text-sm text-text-muted mt-1">{activeSeason}</p>
+                <span className="text-sm font-semibold text-text-primary">All Customers</span>
+                <span className="text-xs text-text-muted ml-1">· {listSummary.count}</span>
               </div>
-              <span className={`text-sm font-bold px-4 py-2 rounded-xl ${getCustomerTypeColor(filteredCustomers.find(c => c.customer === selectedCustomer)?.customerType || '')}`}>
-                {filteredCustomers.find(c => c.customer === selectedCustomer)?.customerType}
-              </span>
-            </div>
-
-            {/* Mini Stats */}
-            <div className="grid grid-cols-4 gap-4">
-              {(() => {
-                const customerData = filteredCustomers.find(c => c.customer === selectedCustomer);
-                if (!customerData) return null;
-                return (
-                  <>
-                    <div className="bg-surface-secondary rounded-lg p-4">
-                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Revenue</div>
-                      <div className="text-2xl font-black text-text-primary">{formatCurrencyShort(customerData.revenue)}</div>
-                    </div>
-                    <div className="bg-surface-secondary rounded-lg p-4">
-                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Units</div>
-                      <div className="text-2xl font-black text-text-primary">{formatNumberShort(customerData.units)}</div>
-                    </div>
-                    <div className="bg-surface-secondary rounded-lg p-4">
-                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Styles Ordered</div>
-                      <div className="text-2xl font-black text-text-primary">{customerData.styles.size}</div>
-                    </div>
-                    <div className="bg-surface-secondary rounded-lg p-4">
-                      <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-1">Avg Order</div>
-                      <div className="text-2xl font-black text-text-primary">{formatCurrencyShort(customerData.revenue / customerData.orders)}</div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="border-b-2 border-border-primary">
-            <div className="flex gap-0">
-              {[
-                { id: 'category', label: 'By Category' },
-                { id: 'gender', label: 'By Gender' },
-                { id: 'color', label: 'By Color' },
-                { id: 'style', label: 'By Style' },
-              ].map((tab) => (
+              <div className="flex gap-1">
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`px-6 py-3 text-sm font-semibold border-b-2 -mb-0.5 transition-colors ${
-                    activeTab === tab.id
-                      ? 'text-blue-600 border-blue-600'
-                      : 'text-text-muted border-transparent hover:text-text-primary'
-                  }`}
+                  onClick={() => setSortMode('revenue')}
+                  className={`px-2 py-0.5 text-[11px] rounded ${sortMode === 'revenue' ? 'bg-surface-tertiary text-text-primary' : 'text-text-faint hover:text-text-muted'}`}
                 >
-                  {tab.label}
+                  Revenue
                 </button>
-              ))}
+                <button
+                  onClick={() => setSortMode('name')}
+                  className={`px-2 py-0.5 text-[11px] rounded ${sortMode === 'name' ? 'bg-surface-tertiary text-text-primary' : 'text-text-faint hover:text-text-muted'}`}
+                >
+                  Name
+                </button>
+              </div>
+            </div>
+            {/* Search */}
+            <div className="flex items-center gap-2 bg-surface-primary border border-border-primary rounded-md px-2.5 py-1.5">
+              <Search className="w-3.5 h-3.5 text-text-faint flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="Search customers..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none text-sm w-full focus:outline-none placeholder:text-text-faint"
+              />
+            </div>
+            {/* Summary */}
+            <div className="text-[11px] text-text-faint">
+              Total: <span className="font-mono font-semibold text-text-secondary">{formatCurrencyShort(listSummary.totalRevenue)}</span>
             </div>
           </div>
 
-          {/* Tab Content */}
-          {activeTab === 'category' && (
-            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                    <tr>
-                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-secondary">
-                    {customerCategoryData.map((cat) => (
-                      <tr key={cat.category} className="hover:bg-hover">
-                        <td className="px-6 py-4 text-base font-bold text-text-primary">{cat.category}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(cat.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(cat.units)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{cat.styles}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(cat.revPerStyle)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{cat.pctOfTotal.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Scrollable list */}
+          <div className="flex-1 overflow-y-auto">
+            {filteredCustomers.map(c => {
+              const isSelected = c.customer === activeCustomer;
+              const prior = priorMetricsMap.get(c.customer);
+              const isNew = priorSeason && !prior;
+              const trend = prior && prior.revenue > 0 ? ((c.revenue - prior.revenue) / prior.revenue) * 100 : null;
+              return (
+                <button
+                  key={c.customer}
+                  onClick={() => setSelectedCustomer(c.customer)}
+                  className={`
+                    w-full flex items-center gap-2.5 px-3.5 py-3 border-b border-border-secondary text-left transition-all cursor-pointer
+                    ${isSelected
+                      ? 'bg-blue-500/10 border-l-[3px] border-l-blue-500 pl-[11px]'
+                      : 'hover:bg-hover border-l-[3px] border-l-transparent'
+                    }
+                  `}
+                >
+                  {/* Avatar */}
+                  <div className={`
+                    w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold flex-shrink-0
+                    ${isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-surface-tertiary text-text-muted'}
+                  `}>
+                    {getInitials(c.customer)}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-text-primary truncate">{c.customer}</span>
+                      {isNew && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider flex-shrink-0">
+                          New
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${TYPE_DOT_COLORS[c.customerType] || 'bg-gray-400'}`} />
+                      <span className="text-[11px] text-text-faint">{c.customerType} · {c.orders} orders</span>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-mono font-medium text-text-primary">{formatCurrencyShort(c.revenue)}</div>
+                    {trend !== null && (
+                      <div className={`text-[10px] mt-0.5 ${trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {trend >= 0 ? '↑' : '↓'} {Math.abs(trend).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+            {filteredCustomers.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-text-faint">
+                <Users className="w-10 h-10 mb-3 opacity-50" />
+                <p className="text-sm font-semibold text-text-muted">No customers found</p>
+                <p className="text-xs mt-1">Try adjusting your filters</p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
 
-          {activeTab === 'gender' && (
-            <div className="space-y-6">
-              {/* Gender Donut Chart */}
-              <div className="bg-surface rounded-xl border-2 border-border-primary p-6">
-                <h3 className="text-lg font-bold text-text-primary mb-4">Revenue by Gender</h3>
-                <div className="flex items-center justify-center gap-12">
-                  {(() => {
-                    const totalRevenue = customerGenderData.reduce((sum, g) => sum + g.revenue, 0);
-                    const genderColors: Record<string, string> = {
-                      'Men': '#3b82f6',
-                      'Women': '#ec4899',
-                      'Unisex': '#a78bfa',
-                    };
+        {/* === RIGHT PANEL: Detail ================================== */}
+        <div className="flex flex-col gap-3 overflow-y-auto pr-1">
+          {activeMetrics ? (
+            <>
+              {/* ── Detail Header ──────────────────────────────────── */}
+              <div className="card flex items-center gap-5 px-5 py-4">
+                <div className="w-14 h-14 rounded-xl bg-blue-500/15 flex items-center justify-center text-xl font-semibold text-blue-400 flex-shrink-0">
+                  {getInitials(activeMetrics.customer)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold text-text-primary truncate">{activeMetrics.customer}</h2>
+                    {priorSeason && !priorMetricsMap.has(activeMetrics.customer) && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold uppercase tracking-wider flex-shrink-0">
+                        New Customer
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5 text-sm text-text-muted">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${TYPE_BADGE_CLASSES[activeMetrics.customerType] || 'bg-surface-tertiary text-text-secondary'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${TYPE_DOT_COLORS[activeMetrics.customerType] || 'bg-gray-400'}`} />
+                      {CUSTOMER_TYPE_LABELS[activeMetrics.customerType] || activeMetrics.customerType}
+                    </span>
+                    <span>{activeMetrics.orders} orders this season</span>
+                  </div>
+                </div>
+              </div>
 
-                    let currentAngle = 0;
-                    const segments = customerGenderData.map((gender) => {
-                      const pct = totalRevenue > 0 ? (gender.revenue / totalRevenue) * 100 : 0;
-                      const angle = (pct / 100) * 360;
-                      const segment = {
-                        gender: gender.gender,
-                        revenue: gender.revenue,
-                        pct,
-                        startAngle: currentAngle,
-                        endAngle: currentAngle + angle,
-                        color: genderColors[gender.gender] || '#9ca3af',
-                      };
-                      currentAngle += angle;
-                      return segment;
-                    });
+              {/* ── KPI Cards (6) ─────────────────────────────────── */}
+              <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
+                {(() => {
+                  const avgOrder = activeMetrics.orders > 0 ? activeMetrics.revenue / activeMetrics.orders : 0;
+                  const priorAvgOrder = activePrior && activePrior.orders > 0 ? activePrior.revenue / activePrior.orders : undefined;
 
-                    return (
-                      <>
-                        <svg width="160" height="160" viewBox="0 0 160 160">
-                          <circle cx="80" cy="80" r="60" fill="none" stroke="#e5e7eb" strokeWidth="24"/>
-                          {segments.map((seg, idx) => {
-                            const startRad = (seg.startAngle - 90) * Math.PI / 180;
-                            const endRad = (seg.endAngle - 90) * Math.PI / 180;
-                            const largeArc = seg.endAngle - seg.startAngle > 180 ? 1 : 0;
+                  // Calculate actual margin from cost data
+                  const hasMarginData = activeMetrics.totalCost > 0 && activeMetrics.revenue > 0;
+                  const marginPct = hasMarginData ? ((activeMetrics.revenue - activeMetrics.totalCost) / activeMetrics.revenue) * 100 : null;
+                  const priorHasMargin = activePrior && activePrior.totalCost > 0 && activePrior.revenue > 0;
+                  const priorMarginPct = priorHasMargin ? ((activePrior!.revenue - activePrior!.totalCost) / activePrior!.revenue) * 100 : undefined;
 
-                            const x1 = 80 + 60 * Math.cos(startRad);
-                            const y1 = 80 + 60 * Math.sin(startRad);
-                            const x2 = 80 + 60 * Math.cos(endRad);
-                            const y2 = 80 + 60 * Math.sin(endRad);
+                  // Shipped % of revenue
+                  const shippedPct = activeMetrics.revenue > 0 ? (activeMetrics.shipped / activeMetrics.revenue) * 100 : 0;
+                  const priorShippedPct = activePrior && activePrior.revenue > 0 ? (activePrior.shipped / activePrior.revenue) * 100 : undefined;
 
-                            return (
-                              <path
-                                key={idx}
-                                d={`M 80 80 L ${x1} ${y1} A 60 60 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                                fill={seg.color}
-                                opacity="0.9"
-                              />
-                            );
-                          })}
-                          <circle cx="80" cy="80" r="38" fill="white"/>
-                        </svg>
-                        <div className="space-y-3">
-                          {customerGenderData.map((g) => (
-                            <div key={g.gender} className="flex items-center gap-3">
-                              <div className="w-4 h-4 rounded" style={{ backgroundColor: genderColors[g.gender] || '#9ca3af' }}></div>
-                              <span className="text-sm font-medium text-text-secondary w-20">{g.gender}</span>
-                              <span className="text-sm font-bold text-text-primary">
-                                {formatCurrencyShort(g.revenue)} ({totalRevenue > 0 ? ((g.revenue / totalRevenue) * 100).toFixed(0) : 0}%)
-                              </span>
-                            </div>
-                          ))}
+                  const kpis = [
+                    { label: 'Total Revenue', value: formatCurrencyShort(activeMetrics.revenue), delta: kpiDelta(activeMetrics.revenue, activePrior?.revenue) },
+                    { label: 'Customer Margin', value: marginPct !== null ? `${marginPct.toFixed(1)}%` : '—', delta: marginPct !== null && priorMarginPct !== undefined ? kpiDelta(marginPct, priorMarginPct) : { pct: 0, dir: 'flat' as const }, color: marginPct !== null && marginPct >= 50 ? 'text-emerald-400' : marginPct !== null ? 'text-amber-400' : undefined },
+                    { label: 'Units Sold', value: formatNumberShort(activeMetrics.units), delta: kpiDelta(activeMetrics.units, activePrior?.units) },
+                    { label: 'Avg Order Value', value: formatCurrencyShort(avgOrder), delta: kpiDelta(avgOrder, priorAvgOrder) },
+                    { label: 'Styles Ordered', value: String(activeMetrics.styles.size), delta: kpiDelta(activeMetrics.styles.size, activePrior?.styles) },
+                    { label: 'Shipped %', value: `${shippedPct.toFixed(0)}%`, delta: kpiDelta(shippedPct, priorShippedPct), color: shippedPct >= 90 ? 'text-emerald-400' : shippedPct >= 50 ? 'text-blue-400' : 'text-amber-400', sublabel: `${formatCurrencyShort(activeMetrics.shipped)} shipped · ${formatCurrencyShort(activeMetrics.revenue - activeMetrics.shipped)} open` },
+                  ];
+
+                  return kpis.map(kpi => (
+                    <div key={kpi.label} className="card px-4 py-3">
+                      <div className="text-[11px] uppercase tracking-wider text-text-faint font-semibold mb-1">{kpi.label}</div>
+                      <div className={`text-xl font-semibold font-mono ${kpi.color || 'text-text-primary'}`}>{kpi.value}</div>
+                      {'sublabel' in kpi && kpi.sublabel && (
+                        <div className="text-[11px] text-text-faint mt-0.5">{kpi.sublabel}</div>
+                      )}
+                      {kpi.delta.dir !== 'flat' && priorSeason && (
+                        <div className={`text-xs mt-1 flex items-center gap-1 ${kpi.delta.dir === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {kpi.delta.dir === 'up' ? '↑' : '↓'} {kpi.delta.pct.toFixed(0)}%
+                          <span className="text-text-faint">vs {priorSeason}</span>
                         </div>
-                      </>
-                    );
-                  })()}
-                </div>
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
 
-              {/* Gender Table */}
-              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-                <div className="overflow-x-auto">
+              {/* ── Content Grid: 2 columns ──────────────────────── */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {/* Top Selling Styles */}
+                <div className="card overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-primary">
+                    <span className="text-sm font-semibold text-text-primary">Top Selling Styles</span>
+                    <span className="text-xs text-text-faint">By revenue</span>
+                  </div>
                   <table className="w-full">
-                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                      <tr>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Gender</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
+                    <thead>
+                      <tr className="bg-surface-secondary border-b border-border-primary">
+                        <th className="text-left text-[11px] font-semibold uppercase text-text-faint px-3.5 py-2.5 w-10">#</th>
+                        <th className="text-left text-[11px] font-semibold uppercase text-text-faint px-3.5 py-2.5">Style</th>
+                        <th className="text-right text-[11px] font-semibold uppercase text-text-faint px-3.5 py-2.5">Revenue</th>
+                        <th className="text-right text-[11px] font-semibold uppercase text-text-faint px-3.5 py-2.5">Units</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-secondary">
-                      {customerGenderData.map((g) => (
-                        <tr key={g.gender} className="hover:bg-hover">
-                          <td className="px-6 py-4 text-base font-bold text-text-primary">{g.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(g.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(g.units)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">{g.styles}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(g.revPerStyle)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'color' && (
-            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                    <tr>
-                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Color</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles Using</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-secondary">
-                    {customerColorData.slice(0, 20).map((color) => (
-                      <tr key={color.color} className="hover:bg-hover">
-                        <td className="px-6 py-4 text-base font-bold text-text-primary">{color.color}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(color.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(color.units)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{color.styles}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{color.pctOfTotal.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'style' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                  <input
-                    type="text"
-                    placeholder="Search by style # or description..."
-                    value={styleSearchQuery}
-                    onChange={(e) => setStyleSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border-2 border-border-primary rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
-                </div>
-                {styleSearchQuery && (
-                  <span className="text-sm text-text-muted">
-                    Found {customerStyleData.length} matching styles
-                  </span>
-                )}
-              </div>
-
-              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                      <tr>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Style #</th>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Description</th>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Gender</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Price</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-secondary">
-                      {customerStyleData.slice(0, 25).map((style) => (
+                    <tbody>
+                      {topStyles.map((style, idx) => (
                         <tr
                           key={style.styleNumber}
-                          className="hover:bg-hover cursor-pointer"
+                          className="border-b border-border-secondary hover:bg-hover/50 cursor-pointer transition-colors"
                           onClick={() => onStyleClick(style.styleNumber)}
                         >
-                          <td className="px-6 py-4 font-mono text-base font-bold text-blue-600">{style.styleNumber}</td>
-                          <td className="px-6 py-4 text-sm text-text-secondary max-w-[200px] truncate">{style.styleDesc}</td>
-                          <td className="px-6 py-4 text-sm text-text-secondary">{style.category}</td>
-                          <td className="px-6 py-4 text-sm text-text-secondary">{style.gender}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(style.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(style.units)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">${style.price.toFixed(0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'trend' && (
-            <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                    <tr>
-                      <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Season</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Styles</th>
-                      <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Rev/Style</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-secondary">
-                    {customerSeasonData.map((s) => (
-                      <tr key={s.season} className="hover:bg-hover">
-                        <td className="px-6 py-4 font-mono text-base font-bold text-text-primary">{s.season}</td>
-                        <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(s.revenue)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(s.units)}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{s.styles}</td>
-                        <td className="px-6 py-4 text-right text-text-secondary">{formatCurrencyShort(s.revPerStyle)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'margin' && (
-            <div className="space-y-6">
-              <div className="bg-surface-secondary rounded-xl border-2 border-border-primary p-6">
-                <p className="text-sm text-text-secondary mb-4">
-                  Margin analysis by category for {selectedCustomer}
-                </p>
-                <p className="text-sm text-text-muted">
-                  <span className="font-semibold text-blue-600 hover:underline cursor-pointer">
-                    → View full margin breakdown in Margins page
-                  </span>
-                </p>
-              </div>
-
-              <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-surface-secondary border-b-2 border-border-primary">
-                      <tr>
-                        <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Category</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Revenue</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Units</th>
-                        <th className="text-right text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4">Avg Price</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-secondary">
-                      {customerCategoryData.map((cat) => (
-                        <tr key={cat.category} className="hover:bg-hover">
-                          <td className="px-6 py-4 text-base font-bold text-text-primary">{cat.category}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-text-primary">{formatCurrencyShort(cat.revenue)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">{formatNumberShort(cat.units)}</td>
-                          <td className="px-6 py-4 text-right text-text-secondary">
-                            {cat.units > 0 ? formatCurrencyShort(cat.revenue / cat.units) : '—'}
+                          <td className="px-3.5 py-2">
+                            <span className={`inline-flex items-center justify-center w-5.5 h-5.5 rounded-md text-[11px] font-semibold font-mono ${idx < 3 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-surface-tertiary text-text-muted'}`}>
+                              {idx + 1}
+                            </span>
                           </td>
+                          <td className="px-3.5 py-2">
+                            <div className="text-sm font-medium text-text-primary">{style.styleDesc || style.styleNumber}</div>
+                            <div className="text-[11px] text-text-faint mt-0.5">{style.styleNumber}</div>
+                          </td>
+                          <td className="px-3.5 py-2 text-right text-sm font-mono text-text-primary">{formatCurrencyShort(style.revenue)}</td>
+                          <td className="px-3.5 py-2 text-right text-sm font-mono text-text-secondary">{formatNumberShort(style.units)}</td>
                         </tr>
                       ))}
+                      {topStyles.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-xs text-text-faint">No style data</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Revenue by Category — horizontal bars with company benchmark */}
+                <div className="card overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-primary">
+                    <span className="text-sm font-semibold text-text-primary">Revenue by Category</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-[2px] h-3 bg-white/50 rounded-full" />
+                        <span className="text-[10px] text-text-faint">Co. avg</span>
+                      </div>
+                      <span className="text-xs text-text-faint">{activeSeason}</span>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-3.5">
+                    {categoryBreakdown.map((cat, idx) => {
+                      const totalCatRev = categoryBreakdown.reduce((s, c) => s + c.revenue, 0);
+                      const share = totalCatRev > 0 ? (cat.revenue / totalCatRev) * 100 : 0;
+                      const companyShare = companyCategoryShares.get(cat.category) || 0;
+                      // Scale bars: max of either customer or company share maps to 100% width
+                      const maxShare = Math.max(...categoryBreakdown.map(c => {
+                        const cs = totalCatRev > 0 ? (c.revenue / totalCatRev) * 100 : 0;
+                        const co = companyCategoryShares.get(c.category) || 0;
+                        return Math.max(cs, co);
+                      }), 1);
+                      const barWidth = (share / maxShare) * 100;
+                      const companyWidth = (companyShare / maxShare) * 100;
+                      return (
+                        <div key={cat.category} className="flex items-center gap-2">
+                          <div className="w-[5.5em] text-sm font-medium text-text-primary flex-shrink-0 truncate">{cat.category}</div>
+                          <div className="flex-1 h-7 bg-surface-tertiary rounded-md overflow-hidden min-w-0 relative">
+                            {/* Customer bar */}
+                            <div
+                              className="h-full rounded-md flex items-center pl-2 text-xs font-medium text-white whitespace-nowrap"
+                              style={{ width: `${Math.max(barWidth, 6)}%`, backgroundColor: BAR_COLORS[idx % BAR_COLORS.length] }}
+                            >
+                              {barWidth > 30 ? formatCurrencyShort(cat.revenue) : ''}
+                            </div>
+                            {/* Company average marker line (always on top) */}
+                            <div
+                              className="absolute top-0 h-full z-10 pointer-events-none"
+                              style={{ left: `${Math.max(companyWidth, 2)}%` }}
+                            >
+                              <div className="w-[2px] h-full bg-white/50" />
+                            </div>
+                          </div>
+                          <div className="w-[3.5em] text-right flex-shrink-0">
+                            <div className="font-mono text-sm text-text-secondary">{share.toFixed(0)}%</div>
+                            {Math.abs(share - companyShare) >= 1 && (
+                              <div className="text-[9px] text-text-faint font-mono">{companyShare.toFixed(0)}% avg</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {categoryBreakdown.length === 0 && (
+                      <p className="text-xs text-text-faint text-center py-6">No category data</p>
+                    )}
+                  </div>
+                </div>
               </div>
+
+              {/* ── Season Revenue Comparison (full width, stacked shipped/booked) ── */}
+              <div className="card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+                  <span className="text-sm font-semibold text-text-primary">Season Revenue Comparison</span>
+                  <span className="text-xs text-text-faint">Last {seasonHistory.length} seasons</span>
+                </div>
+                <div className="p-4">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-sm bg-blue-500" />
+                      <span className="text-xs text-text-muted">Shipped</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-sm bg-blue-500/30" />
+                      <span className="text-xs text-text-muted">Booked</span>
+                    </div>
+                  </div>
+                  <div className="flex items-end gap-2 h-[10em]">
+                    {seasonHistory.map(sh => {
+                      const pct = (sh.revenue / maxSeasonRev) * 100;
+                      const shippedPct = sh.revenue > 0 ? (sh.shipped / sh.revenue) * pct : 0;
+                      const bookedPct = pct - shippedPct;
+                      const isCurrent = sh.season === activeSeason;
+                      return (
+                        <div key={sh.season} className={`flex-1 flex flex-col items-center gap-1 ${isCurrent ? 'bg-blue-500/10 rounded-lg py-1 -my-1' : ''}`}>
+                          <div className="flex items-end h-[7.5em] w-full justify-center">
+                            <div className="w-3/5 max-w-[3em] flex flex-col-reverse" style={{ height: `${Math.max(pct, 4)}%` }}>
+                              {/* Shipped (bottom, solid) */}
+                              <div
+                                className="w-full rounded-t-none rounded-b-none bg-blue-500"
+                                style={{ height: shippedPct > 0 ? `${(shippedPct / Math.max(pct, 4)) * 100}%` : '0%', borderRadius: bookedPct <= 0 ? '4px 4px 0 0' : '0' }}
+                              />
+                              {/* Booked (top, lighter) */}
+                              {bookedPct > 0 && (
+                                <div
+                                  className="w-full bg-blue-500/30 rounded-t"
+                                  style={{ height: `${(bookedPct / Math.max(pct, 4)) * 100}%` }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <span className={`text-xs font-mono ${isCurrent ? 'text-blue-400 font-semibold' : 'text-text-muted'}`}>
+                            {formatCurrencyShort(sh.revenue)}
+                          </span>
+                          <span className={`text-xs font-medium ${isCurrent ? 'text-blue-400 font-semibold' : 'text-text-faint'}`}>
+                            {sh.season}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {seasonHistory.length === 0 && (
+                      <div className="flex-1 flex items-center justify-center text-xs text-text-faint">No season data</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ── Empty state ──────────────────────────────────────── */
+            <div className="flex flex-col items-center justify-center py-16 text-text-faint">
+              <Users className="w-12 h-12 mb-4 opacity-40" />
+              <p className="text-base font-semibold text-text-muted mb-2">Select a Customer</p>
+              <p className="text-sm">Choose a customer from the list to view details</p>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

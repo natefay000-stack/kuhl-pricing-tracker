@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // Products from Line List
@@ -51,35 +50,68 @@ model Product {
 
 // Sales data
 model Sale {
-  id                String   @id @default(cuid())
-  styleNumber       String
-  styleDesc         String?
-  colorCode         String?
-  colorDesc         String?
-  season            String
-  seasonType        String?
-  customer          String?
-  customerType      String?
-  salesRep          String?
-  divisionDesc      String?
-  categoryDesc      String?
-  gender            String?
-  unitsBooked       Int      @default(0)
-  unitsOpen         Int      @default(0)
-  revenue           Float    @default(0)
-  shipped           Float    @default(0)
-  cost              Float    @default(0)
-  wholesalePrice    Float    @default(0)
-  msrp              Float    @default(0)
-  netUnitPrice      Float    @default(0)
-  orderType         String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  styleNumber           String
+  styleDesc             String?
+  colorCode             String?
+  colorDesc             String?
+  season                String
+  seasonType            String?
+  customer              String?
+  customerType          String?
+  salesRep              String?
+  divisionDesc          String?
+  categoryDesc          String?
+  gender                String?
+  unitsBooked           Int       @default(0)
+  unitsOpen             Int       @default(0)
+  revenue               Float     @default(0)
+  shipped               Float     @default(0)
+  cost                  Float     @default(0)
+  wholesalePrice        Float     @default(0)
+  msrp                  Float     @default(0)
+  netUnitPrice          Float     @default(0)
+  orderType             String?
+  // New fields from detailed sales report
+  invoiceDate           DateTime?
+  accountingPeriod      String?
+  invoiceNumber         String?
+  shipToState           String?
+  returnedAtNet         Float     @default(0)
+  shippedAtNet          Float     @default(0)
+  totalPrice            Float     @default(0)
+  commissionRate        Float     @default(0)
+  ytdNetInvoicing       Float     @default(0)
+  ytdCreditMemos        Float     @default(0)
+  ytdSales              Float     @default(0)
+  warehouse             String?
+  warehouseDesc         String?
+  openAtNet             Float     @default(0)
+  openOrder             Float     @default(0)
+  returned              Float     @default(0)
+  shippedAtMsrp         Float     @default(0)
+  totalAtNet            Float     @default(0)
+  totalAtWholesale      Float     @default(0)
+  returnedAtWholesale   Float     @default(0)
+  // Geographic fields
+  shipToCity            String?
+  shipToZip             String?
+  billToState           String?
+  billToCity            String?
+  billToZip             String?
+  // Unit counts
+  unitsShipped          Int       @default(0)
+  unitsReturned         Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@index([season])
   @@index([styleNumber])
   @@index([customer])
   @@index([customerType])
+  @@index([invoiceDate])
+  @@index([accountingPeriod])
+  @@index([shipToState])
 }
 
 // Pricing by season (from pricebyseason file)

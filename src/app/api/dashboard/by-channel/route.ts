@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
           FROM "Sale"
           WHERE season = ${season} AND "customerType" IS NOT NULL AND "customerType" != ''
           GROUP BY "customerType"
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
         `
       : await prisma.$queryRaw<Array<{
           channel: string;
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
           FROM "Sale"
           WHERE "customerType" IS NOT NULL AND "customerType" != ''
           GROUP BY "customerType"
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
         `;
 
     const totalRevenue = result.reduce((sum, r) => sum + toNumber(r.total_revenue), 0);

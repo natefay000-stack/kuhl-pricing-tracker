@@ -159,13 +159,13 @@ export function getSeasonInfo(season: string, today: Date = new Date()): SeasonI
 export function getSeasonStatusBadge(status: SeasonStatus): { icon: string; label: string; color: string } {
   switch (status) {
     case 'CLOSED':
-      return { icon: '📁', label: 'Closed', color: 'bg-gray-100 text-gray-600' };
+      return { icon: '📁', label: 'Closed', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' };
     case 'SHIPPING':
-      return { icon: '📦', label: 'Shipping', color: 'bg-emerald-100 text-emerald-700' };
+      return { icon: '📦', label: 'Shipping', color: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' };
     case 'PRE-BOOK':
-      return { icon: '📋', label: 'Pre-Book', color: 'bg-blue-100 text-blue-700' };
+      return { icon: '📋', label: 'Pre-Book', color: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' };
     case 'PLANNING':
-      return { icon: '🔮', label: 'Planning', color: 'bg-purple-100 text-purple-700' };
+      return { icon: '🔮', label: 'Planning', color: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' };
   }
 }
 

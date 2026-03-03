@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
           FROM "Sale"
           WHERE season = ${season} AND customer IS NOT NULL AND customer != ''
           GROUP BY customer, "customerType"
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
           LIMIT ${limit}
         `
       : await prisma.$queryRaw<Array<{
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
           FROM "Sale"
           WHERE customer IS NOT NULL AND customer != ''
           GROUP BY customer, "customerType"
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
           LIMIT ${limit}
         `;
 

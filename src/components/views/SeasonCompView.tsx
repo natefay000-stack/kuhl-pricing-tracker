@@ -1,17 +1,24 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
+import { getSeasonStatus as getCanonicalStatus } from '@/lib/season-utils';
 import { Download, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrencyShort } from '@/utils/format';
+import { matchesDivision } from '@/utils/divisionMap';
+import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 interface SeasonCompViewProps {
   products: Product[];
   sales: SalesRecord[];
+  selectedSeason?: string;
+  selectedDivision?: string;
+  selectedCategory?: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -24,9 +31,54 @@ function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex'
   return 'Unisex';
 }
 
+// Map canonical season status to display labels
+const STATUS_MAP: Record<string, 'Planning' | 'Pre-Book' | 'Selling' | 'Closed'> = {
+  'PLANNING': 'Planning',
+  'PRE-BOOK': 'Pre-Book',
+  'SHIPPING': 'Selling',
+  'CLOSED': 'Closed',
+};
+
+function getSeasonStatusLabel(season: string): 'Planning' | 'Pre-Book' | 'Selling' | 'Closed' {
+  return STATUS_MAP[getCanonicalStatus(season)] || 'Closed';
+}
+
+// Calculate percent change
+function getChange(current: number, previous: number): number {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+// Calculate revenue per style
+function getRevenuePerStyle(data: { styles: number; revenue: number }): number {
+  if (data.styles === 0) return 0;
+  return Math.round(data.revenue / data.styles);
+}
+
+// Get status color classes
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'Closed': return 'bg-surface-tertiary text-text-secondary';
+    case 'Selling': return 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700';
+    case 'Pre-Book': return 'bg-blue-100 dark:bg-blue-900 text-blue-700';
+    case 'Planning': return 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300';
+    default: return 'bg-surface-tertiary text-text-secondary';
+  }
+}
+
+// Grid column class lookup (Tailwind can't detect dynamic classes)
+const GRID_COLS: Record<number, string> = {
+  1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3',
+  4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6',
+};
+
 export default function SeasonCompView({
   products,
   sales,
+  selectedSeason: globalSeason = '',
+  selectedDivision: globalDivision = '',
+  selectedCategory: globalCategory = '',
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: SeasonCompViewProps) {
   const [selectedDivision, setSelectedDivision] = useState<string>('');
@@ -45,6 +97,26 @@ export default function SeasonCompView({
     return sortSeasons(Array.from(seasonSet))
       .filter((s) => isRelevantSeason(s));
   }, [products, sales]);
+
+  // Sync global FilterBar → local state
+  useEffect(() => {
+    if (!globalSeason) return;
+    if (globalSeason === '__ALL_SP__') {
+      setSelectedSeasons(allSeasons.filter(s => s.endsWith('SP')));
+    } else if (globalSeason === '__ALL_FA__') {
+      setSelectedSeasons(allSeasons.filter(s => s.endsWith('FA')));
+    } else if (allSeasons.includes(globalSeason)) {
+      setSelectedSeasons([globalSeason]);
+    }
+  }, [globalSeason, allSeasons]);
+
+  useEffect(() => {
+    if (globalDivision !== selectedDivision) setSelectedDivision(globalDivision);
+  }, [globalDivision]);
+
+  useEffect(() => {
+    if (globalCategory !== selectedCategory) setSelectedCategory(globalCategory);
+  }, [globalCategory]);
 
   // Active seasons for comparison (selected or last 4)
   const seasons = useMemo(() => {
@@ -115,7 +187,7 @@ export default function SeasonCompView({
   const categories = useMemo(() => {
     let filtered = products;
     if (selectedDivision) {
-      filtered = products.filter((p) => p.divisionDesc === selectedDivision);
+      filtered = products.filter((p) => matchesDivision(p.divisionDesc, selectedDivision));
     }
     const all = new Set<string>();
     filtered.forEach((p) => {
@@ -123,23 +195,6 @@ export default function SeasonCompView({
     });
     return Array.from(all).sort();
   }, [products, selectedDivision]);
-
-  // Get season status
-  const getSeasonStatus = (season: string): 'Planning' | 'Pre-Book' | 'Selling' | 'Closed' => {
-    const year = parseInt(season.slice(0, 2));
-    const type = season.slice(2);
-    const currentYear = new Date().getFullYear() % 100;
-    const currentMonth = new Date().getMonth() + 1;
-
-    if (year > currentYear) return 'Planning';
-    if (year === currentYear) {
-      if (type === 'SP' && currentMonth <= 6) return 'Selling';
-      if (type === 'FA' && currentMonth >= 7) return 'Selling';
-      if (type === 'SP' && currentMonth > 6) return 'Closed';
-      return 'Pre-Book';
-    }
-    return 'Closed';
-  };
 
   // Get the same season from the previous year (e.g., 25SP -> 24SP, 25FA -> 24FA)
   const getPreviousYearSeason = (season: string): string | null => {
@@ -168,8 +223,12 @@ export default function SeasonCompView({
     // Aggregate products (style counts)
     products.forEach((p) => {
       if (!allSeasonsForData.has(p.season)) return;
-      if (selectedDivision && p.divisionDesc !== selectedDivision) return;
+      if (selectedDivision && !matchesDivision(p.divisionDesc, selectedDivision)) return;
       if (selectedDesigner && p.designerName !== selectedDesigner) return;
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!p.styleNumber?.toLowerCase().includes(q) && !(p.styleDesc || '').toLowerCase().includes(q)) return;
+      }
 
       const category = normalizeCategory(p.categoryDesc) || 'Other';
       const seasonMap = data.get(p.season);
@@ -197,6 +256,10 @@ export default function SeasonCompView({
       if (selectedCustomerType && s.customerType !== selectedCustomerType) return;
       // Filter by customer
       if (selectedCustomer && s.customer !== selectedCustomer) return;
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!s.styleNumber?.toLowerCase().includes(q) && !(s.styleDesc || '').toLowerCase().includes(q)) return;
+      }
 
       const category = normalizeCategory(s.categoryDesc) || 'Other';
       const seasonMap = data.get(s.season);
@@ -211,7 +274,7 @@ export default function SeasonCompView({
     });
 
     return data;
-  }, [products, sales, seasons, selectedDivision, selectedDesigner, selectedCustomerType, selectedCustomer, allSeasons]);
+  }, [products, sales, seasons, selectedDivision, selectedDesigner, selectedCustomerType, selectedCustomer, allSeasons, globalSearchQuery]);
 
   // Get data for a specific season/category
   const getData = (season: string, category: string) => {
@@ -233,29 +296,6 @@ export default function SeasonCompView({
     return { styles: catData.styles.size, units: catData.units, revenue: catData.revenue };
   };
 
-  // Calculate percent change
-  const getChange = (current: number, previous: number): number => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 100);
-  };
-
-  // Calculate revenue per style
-  const getRevenuePerStyle = (data: { styles: number; revenue: number }): number => {
-    if (data.styles === 0) return 0;
-    return Math.round(data.revenue / data.styles);
-  };
-
-  // Get status color classes
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Closed': return 'bg-surface-tertiary text-text-secondary';
-      case 'Selling': return 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700';
-      case 'Pre-Book': return 'bg-blue-100 dark:bg-blue-900 text-blue-700';
-      case 'Planning': return 'bg-purple-100 text-purple-700';
-      default: return 'bg-surface-tertiary text-text-secondary';
-    }
-  };
-
   // Generate contextual insight for a category
   const getCategoryInsight = (category: string): { type: 'warning' | 'success'; text: string } | null => {
     if (seasons.length < 1) return null;
@@ -273,7 +313,7 @@ export default function SeasonCompView({
     const rpsPrev = getRevenuePerStyle(previous);
 
     // Planning season with lots more styles but previous season had flat/declining revenue
-    if (getSeasonStatus(mostRecentSeason) === 'Planning' && stylesChange > 30 && revenueChange < 5) {
+    if (getSeasonStatusLabel(mostRecentSeason) === 'Planning' && stylesChange > 30 && revenueChange < 5) {
       return { type: 'warning', text: `+${stylesChange}% styles planned but recent revenue flat` };
     }
     if (stylesChange > 20 && revenueChange < 0) {
@@ -301,7 +341,7 @@ export default function SeasonCompView({
 
     const current = getData(mostRecentSeason, selectedCategory);
     const previous = getData(prevYearSeason, selectedCategory);
-    const isPlanning = getSeasonStatus(mostRecentSeason) === 'Planning';
+    const isPlanning = getSeasonStatusLabel(mostRecentSeason) === 'Planning';
 
     const stylesChange = getChange(current.styles, previous.styles);
     const revenueChange = getChange(previous.revenue, getData(getPreviousYearSeason(prevYearSeason) || '', selectedCategory).revenue);
@@ -348,10 +388,11 @@ export default function SeasonCompView({
 
   return (
     <div className="p-6 space-y-6">
+      <SalesLoadingBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black text-text-primary tracking-tight">Season Comp</h1>
+          <h2 className="text-4xl font-display font-bold text-text-primary">Season Comp</h2>
           <p className="text-base text-text-muted mt-1">
             Compare performance across seasons by category, division & designer
           </p>
@@ -389,7 +430,7 @@ export default function SeasonCompView({
               className={`text-sm font-bold px-4 py-1.5 rounded-lg transition-colors ${
                 allSeasons.filter((s) => s.includes('FA')).every((s) => selectedSeasons.includes(s)) && allSeasons.filter((s) => s.includes('FA')).length > 0
                   ? 'bg-orange-500 text-white'
-                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                  : 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800'
               }`}
             >
               All Fall
@@ -410,7 +451,7 @@ export default function SeasonCompView({
             const isSelected = selectedSeasons.length === 0
               ? seasons.includes(season)
               : selectedSeasons.includes(season);
-            const status = getSeasonStatus(season);
+            const status = getSeasonStatusLabel(season);
             const isSpring = season.includes('SP');
 
             return (
@@ -490,7 +531,7 @@ export default function SeasonCompView({
             <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer Type</label>
             <select
               className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[160px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                selectedCustomerType ? 'border-blue-300 bg-blue-50' : 'border-border-primary'
+                selectedCustomerType ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/50' : 'border-border-primary'
               }`}
               value={selectedCustomerType}
               onChange={(e) => {
@@ -508,7 +549,7 @@ export default function SeasonCompView({
             <label className="block text-sm font-bold text-text-muted uppercase tracking-wide mb-2">Customer</label>
             <select
               className={`border-2 rounded-xl px-4 py-3 text-base font-semibold bg-surface min-w-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 ${
-                selectedCustomer ? 'border-blue-300 bg-blue-50' : 'border-border-primary'
+                selectedCustomer ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/50' : 'border-border-primary'
               }`}
               value={selectedCustomer}
               onChange={(e) => setSelectedCustomer(e.target.value)}
@@ -523,14 +564,14 @@ export default function SeasonCompView({
       </div>
 
       {/* Season Summary Cards - Total Revenue is Hero */}
-      <div className={`grid gap-5 ${seasons.length <= 4 ? 'grid-cols-4' : `grid-cols-${Math.min(seasons.length, 6)}`}`}>
+      <div className={`grid gap-5 ${GRID_COLS[Math.min(seasons.length, 6)] || 'grid-cols-4'}`}>
         {seasons.map((season) => {
           const data = getData(season, selectedCategory);
           const prevYearSeason = getPreviousYearSeason(season);
           const prevYearData = prevYearSeason ? getData(prevYearSeason, selectedCategory) : null;
           const revenueChange = prevYearData ? getChange(data.revenue, prevYearData.revenue) : null;
           const stylesChange = prevYearData ? getChange(data.styles, prevYearData.styles) : null;
-          const status = getSeasonStatus(season);
+          const status = getSeasonStatusLabel(season);
           const isPlanning = status === 'Planning';
           const revenuePerStyle = getRevenuePerStyle(data);
 
@@ -538,13 +579,13 @@ export default function SeasonCompView({
             <div
               key={season}
               className={`rounded-2xl border-2 p-6 ${
-                isPlanning ? 'bg-purple-50 border-purple-200' : 'bg-surface border-border-primary'
+                isPlanning ? 'bg-purple-50 dark:bg-purple-950/50 border-purple-200 dark:border-purple-800' : 'bg-surface border-border-primary'
               }`}
             >
               {/* Season Header */}
               <div className="flex items-center justify-between mb-4">
                 <span className={`text-2xl font-mono font-black ${
-                  isPlanning ? 'text-purple-700' : 'text-emerald-600'
+                  isPlanning ? 'text-purple-700 dark:text-purple-400' : 'text-emerald-600'
                 }`}>
                   {season}
                 </span>
@@ -563,8 +604,8 @@ export default function SeasonCompView({
                 <div className="h-7 mt-2">
                   {revenueChange !== null && !isPlanning && prevYearSeason ? (
                     <div className={`text-base font-bold ${
-                      revenueChange > 0 ? 'text-emerald-600' :
-                      revenueChange < 0 ? 'text-red-500' : 'text-text-muted'
+                      revenueChange > 0 ? 'text-emerald-600 dark:text-emerald-400' :
+                      revenueChange < 0 ? 'text-red-500 dark:text-red-400' : 'text-text-muted'
                     }`}>
                       {revenueChange > 0 ? '↑' : revenueChange < 0 ? '↓' : '→'} {Math.abs(revenueChange)}% vs {prevYearSeason}
                     </div>
@@ -583,8 +624,8 @@ export default function SeasonCompView({
                   <div className="h-5 mt-1">
                     {stylesChange !== null && prevYearSeason ? (
                       <div className={`text-sm font-bold ${
-                        stylesChange > 0 ? 'text-emerald-600' :
-                        stylesChange < 0 ? 'text-red-500' : 'text-text-faint'
+                        stylesChange > 0 ? 'text-emerald-600 dark:text-emerald-400' :
+                        stylesChange < 0 ? 'text-red-500 dark:text-red-400' : 'text-text-faint'
                       }`}>
                         {stylesChange > 0 ? '+' : ''}{stylesChange}%
                       </div>
@@ -613,22 +654,22 @@ export default function SeasonCompView({
       {mainInsight && (
         <div className={`rounded-xl border-2 p-5 flex items-start gap-4 ${
           mainInsight.type === 'warning'
-            ? 'bg-amber-50 dark:bg-amber-950 border-amber-200'
-            : 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200'
+            ? 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
+            : 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800'
         }`}>
           {mainInsight.type === 'warning' ? (
-            <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           ) : (
-            <TrendingUp className="w-6 h-6 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <TrendingUp className="w-6 h-6 text-emerald-500 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
           )}
           <div>
             <div className={`font-bold text-lg ${
-              mainInsight.type === 'warning' ? 'text-amber-800' : 'text-emerald-800'
+              mainInsight.type === 'warning' ? 'text-amber-800 dark:text-amber-200' : 'text-emerald-800 dark:text-emerald-200'
             }`}>
               {mainInsight.title}
             </div>
             <div className={`text-base mt-1 ${
-              mainInsight.type === 'warning' ? 'text-amber-700' : 'text-emerald-700'
+              mainInsight.type === 'warning' ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'
             }`}>
               {mainInsight.text}
             </div>
@@ -638,7 +679,7 @@ export default function SeasonCompView({
 
       {/* Category Breakdown Table */}
       <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden shadow-lg">
-        <div className="p-6 border-b-2 border-border-strong bg-gradient-to-r from-gray-50 to-white">
+        <div className="p-6 border-b-2 border-border-strong bg-gradient-to-r from-gray-50 to-white dark:from-slate-800 dark:to-slate-900">
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-4">
@@ -649,7 +690,7 @@ export default function SeasonCompView({
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
                       breakdownMetric === 'all'
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-slate-600'
                     }`}
                   >
                     All
@@ -659,7 +700,7 @@ export default function SeasonCompView({
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
                       breakdownMetric === 'styles'
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-slate-600'
                     }`}
                   >
                     Qty
@@ -669,7 +710,7 @@ export default function SeasonCompView({
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
                       breakdownMetric === 'revenue'
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-slate-600'
                     }`}
                   >
                     Rev
@@ -679,7 +720,7 @@ export default function SeasonCompView({
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
                       breakdownMetric === 'revPerStyle'
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-slate-600'
                     }`}
                   >
                     Rev/Style
@@ -699,18 +740,18 @@ export default function SeasonCompView({
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-b from-gray-100 to-gray-50 border-b-2 border-border-strong">
+            <thead className="bg-gradient-to-b from-gray-100 to-gray-50 dark:from-slate-800 dark:to-slate-900 border-b-2 border-border-strong">
               <tr>
-                <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4 w-56 sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-10">
+                <th className="text-left text-xs font-black text-text-secondary uppercase tracking-wider px-6 py-4 w-56 sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 dark:from-slate-800 dark:to-slate-900 z-10">
                   Category
                 </th>
                 {seasons.map((season) => {
                   const prevYearSeason = getPreviousYearSeason(season);
-                  const status = getSeasonStatus(season);
+                  const status = getSeasonStatusLabel(season);
                   const isPlanning = status === 'Planning';
                   return (
-                    <th key={season} className={`text-center text-xs font-black uppercase tracking-wider px-6 py-4 border-l-2 ${isPlanning ? 'border-purple-200 bg-purple-50' : 'border-border-primary'}`}>
-                      <div className={`font-mono text-base font-black ${isPlanning ? 'text-purple-700' : 'text-text-primary'}`}>{season}</div>
+                    <th key={season} className={`text-center text-xs font-black uppercase tracking-wider px-6 py-4 border-l-2 ${isPlanning ? 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/50' : 'border-border-primary'}`}>
+                      <div className={`font-mono text-base font-black ${isPlanning ? 'text-purple-700 dark:text-purple-400' : 'text-text-primary'}`}>{season}</div>
                       {prevYearSeason && (
                         <div className="text-xs text-text-faint font-semibold mt-1">vs {prevYearSeason}</div>
                       )}
@@ -731,7 +772,7 @@ export default function SeasonCompView({
                     key={category}
                     className={`cursor-pointer transition-all duration-150 ${
                       isSelected
-                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 shadow-inner'
+                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-950/50 dark:to-emerald-900/50 shadow-inner'
                         : idx % 2 === 0
                         ? 'bg-surface hover:bg-hover'
                         : 'bg-surface-secondary/50 hover:bg-surface-tertiary'
@@ -740,14 +781,14 @@ export default function SeasonCompView({
                   >
                     <td className={`px-6 py-5 sticky left-0 z-10 ${
                       isSelected
-                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100'
+                        ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-950/50 dark:to-emerald-900/50'
                         : idx % 2 === 0
                         ? 'bg-surface'
                         : 'bg-surface-secondary/50'
                     }`}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-1 h-8 rounded-full ${isSelected ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
-                        <span className={`text-base font-bold ${isSelected ? 'text-emerald-900' : 'text-text-primary'}`}>
+                        <div className={`w-1 h-8 rounded-full ${isSelected ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+                        <span className={`text-base font-bold ${isSelected ? 'text-emerald-900 dark:text-emerald-300' : 'text-text-primary'}`}>
                           {category}
                         </span>
                       </div>
@@ -757,23 +798,23 @@ export default function SeasonCompView({
                       const prevYearSeason = getPreviousYearSeason(season);
                       const prevYearData = prevYearSeason ? getData(prevYearSeason, category) : null;
                       const stylesChange = prevYearData ? getChange(data.styles, prevYearData.styles) : null;
-                      const isPlanning = getSeasonStatus(season) === 'Planning';
+                      const isPlanning = getSeasonStatusLabel(season) === 'Planning';
 
                       return (
-                        <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-100' : 'border-border-secondary'}`}>
+                        <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-100 dark:border-purple-900' : 'border-border-secondary'}`}>
                           {breakdownMetric === 'all' ? (
                             <div className="space-y-0.5">
                               <div className="relative">
-                                <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-text-primary'}`}>
+                                <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-700 dark:text-purple-400' : 'text-text-primary'}`}>
                                   {data.styles}
                                 </div>
                                 {stylesChange !== null && prevYearSeason && (
                                   <div className="absolute left-1/2 top-0 ml-6">
                                     <div className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                                       stylesChange > 0
-                                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
+                                        ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
                                         : stylesChange < 0
-                                        ? 'bg-red-100 dark:bg-red-900 text-red-700'
+                                        ? 'bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300'
                                         : 'bg-surface-tertiary text-text-muted'
                                     }`}>
                                       {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
@@ -781,11 +822,11 @@ export default function SeasonCompView({
                                   </div>
                                 )}
                               </div>
-                              <div className={`text-sm font-semibold ${isPlanning ? 'text-purple-500' : 'text-text-muted'}`}>
+                              <div className={`text-sm font-semibold ${isPlanning ? 'text-purple-500 dark:text-purple-400' : 'text-text-muted'}`}>
                                 {isPlanning ? 'planned' : formatCurrencyShort(data.revenue)}
                               </div>
                               {!isPlanning && data.styles > 0 ? (
-                                <div className="text-xs font-medium text-blue-600">
+                                <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
                                   {formatCurrencyShort(data.revenue / data.styles)}/style
                                 </div>
                               ) : (
@@ -794,16 +835,16 @@ export default function SeasonCompView({
                             </div>
                           ) : breakdownMetric === 'styles' ? (
                             <div className="relative">
-                              <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-text-primary'}`}>
+                              <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700 dark:text-purple-400' : 'text-text-primary'}`}>
                                 {data.styles}
                               </div>
                               {stylesChange !== null && prevYearSeason && (
                                 <div className="absolute left-1/2 top-0 ml-8">
                                   <div className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                                     stylesChange > 0
-                                      ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
+                                      ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
                                       : stylesChange < 0
-                                      ? 'bg-red-100 dark:bg-red-900 text-red-700'
+                                      ? 'bg-red-100 dark:bg-red-900/60 text-red-700 dark:text-red-300'
                                       : 'bg-surface-tertiary text-text-muted'
                                   }`}>
                                     {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
@@ -812,11 +853,11 @@ export default function SeasonCompView({
                               )}
                             </div>
                           ) : breakdownMetric === 'revenue' ? (
-                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : 'text-text-primary'}`}>
+                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700 dark:text-purple-400' : 'text-text-primary'}`}>
                               {isPlanning ? '—' : formatCurrencyShort(data.revenue)}
                             </div>
                           ) : (
-                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700' : data.styles > 0 ? 'text-blue-700' : 'text-text-faint'}`}>
+                            <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-700 dark:text-purple-400' : data.styles > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-text-faint'}`}>
                               {!isPlanning && data.styles > 0 ? formatCurrencyShort(data.revenue / data.styles) : '—'}
                             </div>
                           )}
@@ -827,8 +868,8 @@ export default function SeasonCompView({
                       {insight && (
                         <div className={`inline-flex items-center gap-2 text-xs font-bold px-4 py-2 rounded-lg shadow-sm ${
                           insight.type === 'warning'
-                            ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 border border-amber-200'
-                            : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 border border-emerald-200'
+                            ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-700'
+                            : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-700'
                         }`}>
                           <span className="text-lg">{insight.type === 'warning' ? '⚠️' : '✨'}</span>
                           <span>{insight.text}</span>
@@ -839,9 +880,9 @@ export default function SeasonCompView({
                 );
               })}
             </tbody>
-            <tfoot className="bg-gradient-to-b from-gray-100 to-gray-200">
+            <tfoot className="bg-gradient-to-b from-gray-100 to-gray-200 dark:from-slate-800 dark:to-slate-700">
               <tr className="border-t-4 border-border-strong">
-                <td className="px-6 py-5 text-base font-black text-text-primary uppercase tracking-wide sticky left-0 bg-gradient-to-b from-gray-100 to-gray-200 z-10">
+                <td className="px-6 py-5 text-base font-black text-text-primary uppercase tracking-wide sticky left-0 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-slate-800 dark:to-slate-700 z-10">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-8 rounded-full bg-surface-secondary0"></div>
                     Total
@@ -852,35 +893,35 @@ export default function SeasonCompView({
                   const prevYearSeason = getPreviousYearSeason(season);
                   const prevYearData = prevYearSeason ? getData(prevYearSeason, '') : null;
                   const stylesChange = prevYearData ? getChange(data.styles, prevYearData.styles) : null;
-                  const isPlanning = getSeasonStatus(season) === 'Planning';
+                  const isPlanning = getSeasonStatusLabel(season) === 'Planning';
 
                   return (
-                    <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-200' : 'border-border-strong'}`}>
+                    <td key={season} className={`px-6 py-4 text-center border-l-2 ${isPlanning ? 'border-purple-200 dark:border-purple-800' : 'border-border-strong'}`}>
                       {breakdownMetric === 'all' ? (
                         <div className="space-y-0.5">
                           <div className="relative">
-                            <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-text-primary'}`}>
+                            <div className={`text-2xl font-black text-center ${isPlanning ? 'text-purple-800 dark:text-purple-300' : 'text-text-primary'}`}>
                               {data.styles}
                             </div>
                             {stylesChange !== null && prevYearSeason && (
                               <div className="absolute left-1/2 top-0 ml-6">
                                 <div className={`inline-flex items-center gap-0.5 text-xs font-black px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                                   stylesChange > 0
-                                    ? 'bg-emerald-200 text-emerald-900'
+                                    ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-200'
                                     : stylesChange < 0
-                                    ? 'bg-red-200 text-red-900'
-                                    : 'bg-gray-300 text-text-secondary'
+                                    ? 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-200'
+                                    : 'bg-gray-300 dark:bg-slate-600 text-text-secondary'
                                 }`}>
                                   {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
                                 </div>
                               </div>
                             )}
                           </div>
-                          <div className={`text-sm font-bold ${isPlanning ? 'text-purple-600' : 'text-text-secondary'}`}>
+                          <div className={`text-sm font-bold ${isPlanning ? 'text-purple-600 dark:text-purple-400' : 'text-text-secondary'}`}>
                             {isPlanning ? 'planned' : formatCurrencyShort(data.revenue)}
                           </div>
                           {!isPlanning && data.styles > 0 ? (
-                            <div className="text-xs font-bold text-blue-700">
+                            <div className="text-xs font-bold text-blue-700 dark:text-blue-400">
                               {formatCurrencyShort(data.revenue / data.styles)}/style
                             </div>
                           ) : (
@@ -889,17 +930,17 @@ export default function SeasonCompView({
                         </div>
                       ) : breakdownMetric === 'styles' ? (
                         <div className="relative">
-                          <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-text-primary'}`}>
+                          <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800 dark:text-purple-300' : 'text-text-primary'}`}>
                             {data.styles}
                           </div>
                           {stylesChange !== null && prevYearSeason && (
                             <div className="absolute left-1/2 top-0 ml-8">
                               <div className={`inline-flex items-center gap-0.5 text-xs font-black px-1.5 py-0.5 rounded-full whitespace-nowrap ${
                                 stylesChange > 0
-                                  ? 'bg-emerald-200 text-emerald-900'
+                                  ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-200'
                                   : stylesChange < 0
-                                  ? 'bg-red-200 text-red-900'
-                                  : 'bg-gray-300 text-text-secondary'
+                                  ? 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-200'
+                                  : 'bg-gray-300 dark:bg-slate-600 text-text-secondary'
                               }`}>
                                 {stylesChange > 0 ? '↑' : stylesChange < 0 ? '↓' : '→'}{Math.abs(stylesChange)}%
                               </div>
@@ -907,11 +948,11 @@ export default function SeasonCompView({
                           )}
                         </div>
                       ) : breakdownMetric === 'revenue' ? (
-                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : 'text-text-primary'}`}>
+                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800 dark:text-purple-300' : 'text-text-primary'}`}>
                           {isPlanning ? '—' : formatCurrencyShort(data.revenue)}
                         </div>
                       ) : (
-                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800' : data.styles > 0 ? 'text-blue-700' : 'text-text-faint'}`}>
+                        <div className={`text-3xl font-black text-center ${isPlanning ? 'text-purple-800 dark:text-purple-300' : data.styles > 0 ? 'text-blue-700 dark:text-blue-400' : 'text-text-faint'}`}>
                           {!isPlanning && data.styles > 0 ? formatCurrencyShort(data.revenue / data.styles) : '—'}
                         </div>
                       )}
@@ -938,7 +979,7 @@ export default function SeasonCompView({
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
           {categories.slice(0, 8).map((category) => {
             // Find most recent non-planning season
-            const recentSeason = [...seasons].reverse().find(s => getSeasonStatus(s) !== 'Planning') || seasons[0];
+            const recentSeason = [...seasons].reverse().find(s => getSeasonStatusLabel(s) !== 'Planning') || seasons[0];
             const prevYearSeason = recentSeason ? getPreviousYearSeason(recentSeason) : null;
 
             const current = getData(recentSeason || '', category);
@@ -973,13 +1014,13 @@ export default function SeasonCompView({
                 </div>
                 {change !== 0 && rpsPrev > 0 && prevYearSeason && (
                   <div className={`text-sm font-bold mt-1 ${
-                    change > 0 ? 'text-emerald-600' : 'text-red-500'
+                    change > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
                   }`}>
                     {change > 0 ? '↑' : '↓'} {Math.abs(change)}% vs {prevYearSeason}
                   </div>
                 )}
-                {isHigh && <div className="text-xs text-emerald-600 font-bold mt-2">★ Top performer</div>}
-                {isLow && <div className="text-xs text-amber-600 font-bold mt-2">Review assortment</div>}
+                {isHigh && <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-2">★ Top performer</div>}
+                {isLow && <div className="text-xs text-amber-600 dark:text-amber-400 font-bold mt-2">Review assortment</div>}
               </div>
             );
           })}
@@ -1012,7 +1053,7 @@ export default function SeasonCompView({
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
           {categories.slice(0, 8).map((category) => {
             // Filter out planning seasons for the chart
-            const chartSeasons = seasons.filter(s => getSeasonStatus(s) !== 'Planning');
+            const chartSeasons = seasons.filter(s => getSeasonStatusLabel(s) !== 'Planning');
             const seasonValues = chartSeasons.map((s) => getData(s, category));
             const maxStyles = Math.max(...seasonValues.map((d) => d.styles), 1);
             const maxRevenue = Math.max(...seasonValues.map((d) => d.revenue), 1);

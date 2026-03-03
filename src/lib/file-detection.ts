@@ -2,7 +2,7 @@
  * File type detection utilities for smart import
  */
 
-export type FileType = 'lineList' | 'costs' | 'sales' | 'pricing' | 'inventory' | 'unknown';
+export type FileType = 'lineList' | 'costs' | 'sales' | 'invoice' | 'pricing' | 'inventory' | 'unknown';
 
 export interface DetectionResult {
   type: FileType;
@@ -41,6 +41,15 @@ const SALES_COLUMNS = [
   'Customer', 'Customer Name',
   'Ship Date', 'Date',
   'Customer Type',
+];
+
+const INVOICE_COLUMNS = [
+  '$ Shipped at Net Price', '$ Returned at Net Price', '$ Total Price',
+  'Invoice Number', 'Invoice Date',
+  'Ship To State', 'Units Shipped', 'Units Returned',
+  'Accounting Period', 'YTD Net Invoicing', 'YTD Sales',
+  'Bill-To State', 'Bill-To City', 'Bill-To Zip',
+  'Customer Name', 'Price - MSRP', 'Price - Net',
 ];
 
 const PRICING_COLUMNS = [
@@ -88,6 +97,7 @@ export function detectFileType(headers: string[]): DetectionResult {
   const lineListMatches = countMatches(normalizedHeaders, LINE_LIST_COLUMNS);
   const costsMatches = countMatches(normalizedHeaders, COSTS_COLUMNS);
   const salesMatches = countMatches(normalizedHeaders, SALES_COLUMNS);
+  const invoiceMatches = countMatches(normalizedHeaders, INVOICE_COLUMNS);
   const pricingMatches = countMatches(normalizedHeaders, PRICING_COLUMNS);
   const inventoryMatches = countMatches(normalizedHeaders, INVENTORY_COLUMNS);
 
@@ -116,8 +126,17 @@ export function detectFileType(headers: string[]): DetectionResult {
     };
   }
 
-  // Determine type based on match counts and thresholds
-  // Sales detection is most specific (3+ matches required)
+  // Invoice detection (4+ matches required) — check before sales since columns are more specific
+  if (invoiceMatches >= 4) {
+    return {
+      type: 'invoice',
+      confidence: invoiceMatches >= 7 ? 'high' : invoiceMatches >= 5 ? 'medium' : 'low',
+      matchedColumns: getMatchedColumns(INVOICE_COLUMNS),
+      allColumns: normalizedHeaders,
+    };
+  }
+
+  // Sales detection (3+ matches required)
   if (salesMatches >= 3) {
     return {
       type: 'sales',

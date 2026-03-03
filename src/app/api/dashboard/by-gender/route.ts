@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
         `
       : await prisma.$queryRaw<Array<{
           gender: string;
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
               WHEN LOWER("divisionDesc") LIKE '%men%' AND LOWER("divisionDesc") NOT LIKE '%women%' THEN 'Men''s'
               ELSE 'Unisex'
             END
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
         `;
 
     const totalRevenue = result.reduce((sum, r) => sum + toNumber(r.total_revenue), 0);

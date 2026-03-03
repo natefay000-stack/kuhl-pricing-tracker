@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
+import { compareSeasons, matchesSeason } from '@/lib/store';
+import { matchesDivision } from '@/utils/divisionMap';
 import {
   Search,
   ChevronLeft,
@@ -10,15 +12,17 @@ import {
   Circle,
   Package,
 } from 'lucide-react';
-import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
+import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 
 interface StyleMasterViewProps {
   products: Product[];
   sales: SalesRecord[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  selectedSeason?: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   initialStyleNumber?: string;
 }
 
@@ -74,12 +78,23 @@ export default function StyleMasterView({
   sales,
   pricing,
   costs,
+  selectedSeason = '',
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   initialStyleNumber,
 }: StyleMasterViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // Sync global search → local search
+  useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+      if (globalSearchQuery.trim()) setShowSearchResults(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSearchQuery]);
   const [selectedStyleNumber, setSelectedStyleNumber] = useState<string | null>(initialStyleNumber || null);
   const [activeTab, setActiveTab] = useState<TabId>('codes');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -97,14 +112,15 @@ export default function StyleMasterView({
     );
   }, [products]);
 
-  // Filter styles by division/category
+  // Filter styles by season/division/category
   const filteredStyles = useMemo(() => {
     return uniqueStyles.filter(s => {
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+      if (selectedSeason && !matchesSeason(s.season, selectedSeason)) return false;
+      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
       return true;
     });
-  }, [uniqueStyles, selectedDivision, selectedCategory]);
+  }, [uniqueStyles, selectedSeason, selectedDivision, selectedCategory]);
 
   // Search results
   const searchResults = useMemo(() => {
@@ -242,7 +258,7 @@ export default function StyleMasterView({
           topChannelPct,
         };
       })
-      .sort((a, b) => a.season.localeCompare(b.season));
+      .sort((a, b) => compareSeasons(a.season, b.season));
 
     return {
       style: baseStyle,
@@ -303,7 +319,7 @@ export default function StyleMasterView({
       <div className="p-6">
         <h2 className="text-4xl font-display font-bold text-text-primary mb-4">Style Master</h2>
         <div className="bg-surface rounded-xl border-2 border-border-primary p-12 text-center">
-          <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <Package className="w-16 h-16 text-text-faint mx-auto mb-4" />
           <p className="text-text-muted text-lg">No styles found matching your filters.</p>
           <p className="text-text-faint text-sm mt-2">Try adjusting the division or category filters.</p>
         </div>
@@ -385,7 +401,7 @@ export default function StyleMasterView({
                   {style.styleNumber}
                 </span>
                 <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
-                  isActive ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700' : 'bg-red-100 dark:bg-red-900 text-red-700'
+                  isActive ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
                 }`}>
                   <Circle className={`w-2 h-2 fill-current`} />
                   {isActive ? 'Active' : 'Discontinued'}
@@ -416,7 +432,7 @@ export default function StyleMasterView({
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-3 text-sm font-bold uppercase tracking-wide transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-surface text-cyan-600 border-b-2 border-cyan-600 -mb-[2px]'
+                    ? 'bg-surface text-cyan-600 dark:text-cyan-400 border-b-2 border-cyan-600 dark:border-cyan-400 -mb-[2px]'
                     : 'text-text-muted hover:text-text-secondary hover:bg-hover'
                 }`}
               >
@@ -514,7 +530,7 @@ export default function StyleMasterView({
                     <span className="px-4 py-3 text-sm font-medium text-text-muted bg-surface-secondary border-r border-border-secondary">Carry Over</span>
                     <span className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-sm font-semibold ${
-                        style.carryOver ? 'bg-blue-100 dark:bg-blue-900 text-blue-700' : 'bg-surface-tertiary text-text-secondary'
+                        style.carryOver ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400' : 'bg-surface-tertiary text-text-secondary'
                       }`}>
                         {style.carryOver ? 'Yes' : 'No'}
                       </span>
@@ -524,7 +540,7 @@ export default function StyleMasterView({
                     <span className="px-4 py-3 text-sm font-medium text-text-muted bg-surface-secondary border-r border-border-secondary">Carry Forward</span>
                     <span className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-sm font-semibold ${
-                        style.carryForward ? 'bg-blue-100 dark:bg-blue-900 text-blue-700' : 'bg-surface-tertiary text-text-secondary'
+                        style.carryForward ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400' : 'bg-surface-tertiary text-text-secondary'
                       }`}>
                         {style.carryForward ? 'Yes' : 'No'}
                       </span>
@@ -544,7 +560,7 @@ export default function StyleMasterView({
                     <span className="px-4 py-3 text-sm font-medium text-text-muted bg-surface-secondary border-r border-border-secondary">Style Disc</span>
                     <span className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-sm font-semibold ${
-                        style.styleDisc === 'Y' ? 'bg-red-100 dark:bg-red-900 text-red-700' : 'bg-surface-tertiary text-text-secondary'
+                        style.styleDisc === 'Y' ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' : 'bg-surface-tertiary text-text-secondary'
                       }`}>
                         {style.styleDisc === 'Y' ? 'Yes' : 'No'}
                       </span>
@@ -560,7 +576,7 @@ export default function StyleMasterView({
                     <span className="px-4 py-3 text-sm font-medium text-text-muted bg-surface-secondary border-r border-border-secondary">Web Available</span>
                     <span className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-sm font-semibold ${
-                        style.colorAvailWeb === 'Y' ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700' : 'bg-surface-tertiary text-text-secondary'
+                        style.colorAvailWeb === 'Y' ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-surface-tertiary text-text-secondary'
                       }`}>
                         {style.colorAvailWeb === 'Y' ? 'Yes' : 'No'}
                       </span>
@@ -677,8 +693,8 @@ export default function StyleMasterView({
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                             c.status === 'Active'
-                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
-                              : 'bg-red-100 dark:bg-red-900 text-red-700'
+                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
                           }`}>
                             {c.status}
                           </span>
@@ -687,7 +703,7 @@ export default function StyleMasterView({
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                             c.webAvailable
-                              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700'
+                              ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400'
                               : 'bg-surface-tertiary text-text-muted'
                           }`}>
                             {c.webAvailable ? 'Yes' : 'No'}
@@ -725,13 +741,13 @@ export default function StyleMasterView({
                     <tr
                       key={p.season + i}
                       className={`${
-                        p.season === style.season ? 'bg-cyan-50' : 'hover:bg-hover'
+                        p.season === style.season ? 'bg-cyan-50 dark:bg-cyan-950' : 'hover:bg-hover'
                       }`}
                     >
                       <td className="px-4 py-3">
                         <span className="font-mono font-semibold text-text-primary text-sm">{p.season}</span>
                         {p.season === style.season && (
-                          <span className="ml-2 text-xs bg-cyan-200 text-cyan-800 px-1.5 py-0.5 rounded">Current</span>
+                          <span className="ml-2 text-xs bg-cyan-200 dark:bg-cyan-800 text-cyan-800 dark:text-cyan-200 px-1.5 py-0.5 rounded">Current</span>
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-sm text-text-secondary text-right">{formatCurrency(p.cost)}</td>
@@ -739,13 +755,7 @@ export default function StyleMasterView({
                       <td className="px-4 py-3 font-mono text-sm text-text-primary text-right">{formatCurrency(p.msrp)}</td>
                       <td className="px-4 py-3 text-right">
                         {p.margin > 0 ? (
-                          <span className={`font-mono font-semibold text-sm px-2 py-0.5 rounded ${
-                            p.margin >= 50
-                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
-                              : p.margin >= 40
-                              ? 'bg-amber-100 dark:bg-amber-900 text-amber-700'
-                              : 'bg-red-100 dark:bg-red-900 text-red-700'
-                          }`}>
+                          <span className={`font-mono font-semibold text-sm px-2 py-0.5 rounded ${getMarginBg(p.margin)} ${getMarginColor(p.margin)}`}>
                             {formatPercent(p.margin)}
                           </span>
                         ) : (
@@ -821,7 +831,7 @@ export default function StyleMasterView({
             disabled={currentStyleIndex <= 0}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
               currentStyleIndex <= 0
-                ? 'text-gray-300 cursor-not-allowed'
+                ? 'text-text-faint cursor-not-allowed'
                 : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >
@@ -843,7 +853,7 @@ export default function StyleMasterView({
             disabled={currentStyleIndex >= filteredStyles.length - 1}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
               currentStyleIndex >= filteredStyles.length - 1
-                ? 'text-gray-300 cursor-not-allowed'
+                ? 'text-text-faint cursor-not-allowed'
                 : 'text-text-secondary hover:bg-surface-tertiary'
             }`}
           >

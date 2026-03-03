@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Product, PricingRecord, CostRecord, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { formatCurrency, formatPercentRaw, formatNumber } from '@/utils/format';
+import { matchesDivision } from '@/utils/divisionMap';
+import { formatCurrency, formatCurrencyShort, formatPercentRaw, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
+import { buildCSV } from '@/utils/exportData';
+import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 import {
   DollarSign,
   TrendingUp,
@@ -31,6 +34,7 @@ interface CostsViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -43,35 +47,17 @@ function calculateMargin(wholesale: number, landed: number): number | null {
   return (wholesale - landed) / wholesale;
 }
 
-// Get margin color class
+// CostsView stores margins as ratios (0-1) — convert to percentage for shared color utilities
 function getMarginColorClass(margin: number | null | undefined): string {
   if (margin === null || margin === undefined) return 'text-text-faint';
-  const pct = margin * 100;
-  if (pct >= 50) return 'text-emerald-600';
-  if (pct >= 45) return 'text-cyan-600';
-  if (pct >= 40) return 'text-amber-600';
-  return 'text-red-600';
+  return getMarginColor(margin * 100);
 }
-
 function getMarginBgClass(margin: number | null | undefined): string {
   if (margin === null || margin === undefined) return 'bg-surface-tertiary';
-  const pct = margin * 100;
-  if (pct >= 50) return 'bg-emerald-50 dark:bg-emerald-950';
-  if (pct >= 45) return 'bg-cyan-50 dark:bg-cyan-950';
-  if (pct >= 40) return 'bg-amber-50 dark:bg-amber-950';
-  return 'bg-red-50 dark:bg-red-950';
+  return getMarginBg(margin * 100);
 }
 
-function formatRevenue(value: number): string {
-  if (value === 0) return '$0';
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`;
-  }
-  return `$${value.toFixed(0)}`;
-}
+// Use centralized formatCurrencyShort from @/utils/format
 
 export default function CostsView({
   products,
@@ -81,6 +67,7 @@ export default function CostsView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: CostsViewProps) {
   // Filters
@@ -91,11 +78,29 @@ export default function CostsView({
   const [filterTeam, setFilterTeam] = useState<string>('');
   const [filterDeveloper, setFilterDeveloper] = useState<string>('');
 
+  // Sync global season filter → local filterSeason
+  useEffect(() => {
+    if (!selectedSeason) return;
+    if (selectedSeason === '__ALL_SP__' || selectedSeason === '__ALL_FA__') {
+      // "All Spring" / "All Fall" → clear local season (show all matching)
+      setFilterSeason('');
+    } else {
+      setFilterSeason(selectedSeason);
+    }
+  }, [selectedSeason]);
+
   // Table state
   const [sortField, setSortField] = useState<SortField>('revenue');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
+
+  // Product lookup for division/category filtering
+  const productLookup = useMemo(() => {
+    const map = new Map<string, Product>();
+    products.forEach(p => map.set(p.styleNumber, p));
+    return map;
+  }, [products]);
 
   // Calculate sales by style+season (keyed by "styleNumber-season")
   // This ensures each season's costs show only that season's sales
@@ -245,7 +250,7 @@ export default function CostsView({
       });
     });
 
-    // Apply factory/country/team/developer filters after merge
+    // Apply factory/country/team/developer + global division/category filters after merge
     const filtered = Array.from(grouped.values()).filter((g) => {
       const factory = g.factories.size === 1 ? Array.from(g.factories)[0] : g.factories.size > 1 ? 'Multiple' : '';
       const coo = g.countries.size === 1 ? Array.from(g.countries)[0] : g.countries.size > 1 ? 'Multiple' : '';
@@ -256,6 +261,20 @@ export default function CostsView({
       if (filterCountry && coo !== filterCountry) return false;
       if (filterTeam && team !== filterTeam) return false;
       if (filterDeveloper && dev !== filterDeveloper) return false;
+
+      // Global division/category filters (lookup from product data)
+      if (selectedDivision || selectedCategory) {
+        const prod = productLookup.get(g.styleNumber);
+        if (selectedDivision && prod && !matchesDivision(prod.divisionDesc, selectedDivision)) return false;
+        if (selectedCategory && prod && prod.categoryDesc !== selectedCategory) return false;
+      }
+
+      // Global search filter
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!g.styleNumber.toLowerCase().includes(q) && !(g.styleName || '').toLowerCase().includes(q)) return false;
+      }
+
       return true;
     });
 
@@ -284,7 +303,7 @@ export default function CostsView({
         costSource: g.costSource,
       };
     });
-  }, [costs, products, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason]);
+  }, [costs, products, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason, selectedDivision, selectedCategory, productLookup, globalSearchQuery]);
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -561,7 +580,7 @@ export default function CostsView({
 
     const rows = sortedData.map((c) => [
       c.styleNumber,
-      `"${c.styleName || ''}"`,
+      c.styleName || '',
       c.season,
       c.factory,
       c.countryOfOrigin,
@@ -572,7 +591,7 @@ export default function CostsView({
       c.margin ? (c.margin * 100).toFixed(1) : '',
     ]);
 
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csv = buildCSV(headers, rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -600,13 +619,14 @@ export default function CostsView({
 
   return (
     <div className="p-6 space-y-6">
+      <SalesLoadingBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-4xl font-display font-bold text-text-primary">
             Landed Costs
             {(filterSeason || selectedSeason) && (
-              <span className="ml-3 text-2xl font-mono text-cyan-600">
+              <span className="ml-3 text-2xl font-mono text-cyan-600 dark:text-cyan-400">
                 {filterSeason || selectedSeason}
               </span>
             )}
@@ -614,7 +634,7 @@ export default function CostsView({
           <p className="text-base text-text-muted mt-2">
             FOB, landed costs, and margins from the Landed Request Sheet
             {(filterSeason || selectedSeason) && (
-              <span className="ml-2 text-cyan-600 font-medium">
+              <span className="ml-2 text-cyan-600 dark:text-cyan-400 font-medium">
                 • Revenue/Units for {filterSeason || selectedSeason} only
               </span>
             )}
@@ -842,7 +862,7 @@ export default function CostsView({
             <AlertTriangle className={`w-6 h-6 ${summary.missingCosts > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
           </div>
           <div className={`text-3xl font-display font-bold ${
-            summary.missingCosts > 0 ? 'text-amber-600' : 'text-emerald-600'
+            summary.missingCosts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
           }`}>
             {summary.missingCosts}
           </div>
@@ -1026,10 +1046,10 @@ export default function CostsView({
                       cost.revenue === 0
                         ? 'text-text-faint italic'
                         : cost.revenue >= 100000
-                        ? 'text-emerald-600 font-bold'
+                        ? 'text-emerald-600 dark:text-emerald-400 font-bold'
                         : 'text-text-primary font-medium'
                     }`}>
-                      {formatRevenue(cost.revenue)}
+                      {formatCurrencyShort(cost.revenue)}
                     </td>
                     <td className={`px-4 py-4 text-right font-mono text-base border-l border-border-primary ${
                       cost.units === 0

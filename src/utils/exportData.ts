@@ -4,6 +4,24 @@
 
 import * as XLSX from 'xlsx';
 
+/** Escape a value for safe CSV embedding (handles commas, quotes, newlines) */
+export function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const s = String(value);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/** Build a CSV string from header array and row arrays, properly escaping all values */
+export function buildCSV(headers: string[], rows: unknown[][]): string {
+  return [
+    headers.map(csvEscape).join(','),
+    ...rows.map(row => row.map(csvEscape).join(',')),
+  ].join('\n');
+}
+
 export function exportToExcel(data: any[], filename: string) {
   if (!data || data.length === 0) {
     alert('No data to export');
@@ -67,6 +85,7 @@ export function exportToCSV(data: any[], filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export function exportTableToCSV(tableId: string, filename: string) {
@@ -99,4 +118,5 @@ export function exportTableToCSV(tableId: string, filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

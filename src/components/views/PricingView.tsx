@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Product, PricingRecord, CostRecord, SalesRecord } from '@/types/product';
 import {
   TrendingUp,
@@ -14,15 +14,17 @@ import {
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
-import { formatCurrency, formatDelta, formatNumber } from '@/utils/format';
+import { formatCurrency, formatDelta, formatNumber, formatPercent, getMarginColor, getMarginBg } from '@/utils/format';
 
 interface PricingViewProps {
   products: Product[];
   pricing: PricingRecord[];
   costs: CostRecord[];
   sales: SalesRecord[];
+  selectedSeason?: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -73,8 +75,10 @@ export default function PricingView({
   pricing,
   costs,
   sales,
+  selectedSeason: globalSeason = '',
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: PricingViewProps) {
   // Available seasons from ALL data sources
@@ -97,6 +101,23 @@ export default function PricingView({
   // Local filters
   const [filterDivision, setFilterDivision] = useState<string>(selectedDivision || '');
   const [filterCategory, setFilterCategory] = useState<string>(selectedCategory || '');
+  const [displayLimit, setDisplayLimit] = useState(50);
+
+  // Sync global FilterBar → local state
+  useEffect(() => {
+    if (!globalSeason || globalSeason === '__ALL_SP__' || globalSeason === '__ALL_FA__') return;
+    if (availableSeasons.includes(globalSeason) && globalSeason !== toSeason) {
+      setToSeason(globalSeason);
+    }
+  }, [globalSeason, availableSeasons]);
+
+  useEffect(() => {
+    if (selectedDivision !== filterDivision) setFilterDivision(selectedDivision);
+  }, [selectedDivision]);
+
+  useEffect(() => {
+    if (selectedCategory !== filterCategory) setFilterCategory(selectedCategory);
+  }, [selectedCategory]);
 
   // Get unique divisions and categories
   const divisions = useMemo(() => {
@@ -317,9 +338,13 @@ export default function PricingView({
     return data.filter(d => {
       if (filterDivision && d.division !== filterDivision) return false;
       if (filterCategory && d.category !== filterCategory) return false;
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!d.styleNumber.toLowerCase().includes(q) && !d.styleDesc.toLowerCase().includes(q)) return false;
+      }
       return true;
     });
-  }, [pricing, costs, products, sales, fromSeason, toSeason, filterDivision, filterCategory]);
+  }, [pricing, costs, products, sales, fromSeason, toSeason, filterDivision, filterCategory, globalSearchQuery]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -407,18 +432,18 @@ export default function PricingView({
   // Export pricing data
   const handleExport = () => {
     exportToExcel(
-      sortedData.slice(0, 100).map(style => ({
+      sortedData.map(style => ({
         Style: style.styleNumber,
         Description: style.styleDesc,
         Category: style.category,
         Division: style.division,
         'From Season': fromSeason,
-        'From Price': style.fromPrice?.toFixed(2) || 'N/A',
+        'From Price': formatCurrency(style.fromPrice),
         'To Season': toSeason,
-        'To Price': style.toPrice?.toFixed(2) || 'N/A',
-        'Price Delta $': style.priceDelta?.toFixed(2) || 'N/A',
-        'Price % Change': style.pricePercentChange?.toFixed(1) || 'N/A',
-        'Margin %': style.margin?.toFixed(1) || 'N/A',
+        'To Price': formatCurrency(style.toPrice),
+        'Price Delta $': formatDelta(style.priceDelta),
+        'Price % Change': formatPercent(style.pricePercentChange),
+        'Margin %': formatPercent(style.margin),
       })),
       `pricing_analysis_${fromSeason}_to_${toSeason}`
     );
@@ -509,7 +534,7 @@ export default function PricingView({
               <TrendingUp className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono text-emerald-600">
+              <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                 {formatNumber(stats.priceIncreases)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
@@ -525,8 +550,8 @@ export default function PricingView({
               <DollarSign className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono text-emerald-600">
-                +${stats.avgIncrease.toFixed(2)}
+              <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                {formatDelta(stats.avgIncrease)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Avg Increase
@@ -541,7 +566,7 @@ export default function PricingView({
               <TrendingDown className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold font-mono text-red-600">
+              <p className="text-2xl font-bold font-mono text-red-600 dark:text-red-400">
                 {formatNumber(stats.priceDecreases)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
@@ -553,12 +578,12 @@ export default function PricingView({
 
         <div className="bg-surface rounded-xl border-2 border-border-primary p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
               <Percent className="w-5 h-5 text-purple-600" />
             </div>
             <div>
               <p className="text-2xl font-bold font-mono text-text-primary">
-                {stats.avgMargin.toFixed(1)}%
+                {formatPercent(stats.avgMargin)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Avg Margin
@@ -660,7 +685,7 @@ export default function PricingView({
               </tr>
             </thead>
             <tbody>
-              {sortedData.slice(0, 50).map((style, index) => (
+              {sortedData.slice(0, displayLimit).map((style, index) => (
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
@@ -693,8 +718,8 @@ export default function PricingView({
                       <span
                         className={`text-base font-mono font-bold px-3 py-1 rounded ${
                           style.priceDelta > 0
-                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
-                            : 'bg-red-100 dark:bg-red-900 text-red-700'
+                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
                         }`}
                       >
                         {formatDelta(style.priceDelta)}
@@ -720,8 +745,8 @@ export default function PricingView({
                       <span
                         className={`text-base font-mono font-bold px-3 py-1 rounded ${
                           style.msrpDelta > 0
-                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
-                            : 'bg-red-100 dark:bg-red-900 text-red-700'
+                            ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
                         }`}
                       >
                         {formatDelta(style.msrpDelta)}
@@ -734,15 +759,9 @@ export default function PricingView({
                     {style.margin !== null ? (
                       <div className="inline-flex items-center gap-1">
                         <span
-                          className={`text-base font-mono font-bold px-3 py-1 rounded ${
-                            style.margin >= 50
-                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700'
-                              : style.margin >= 40
-                              ? 'bg-amber-100 dark:bg-amber-900 text-amber-700'
-                              : 'bg-red-100 dark:bg-red-900 text-red-700'
-                          }`}
+                          className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginBg(style.margin)} ${getMarginColor(style.margin)}`}
                         >
-                          {style.margin.toFixed(1)}%
+                          {formatPercent(style.margin)}
                         </span>
                         {style.costEstimated && (
                           <span
@@ -768,11 +787,21 @@ export default function PricingView({
         <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">MSRP/Price Source Legend</span>
-            {sortedData.length > 50 && (
-              <span className="text-base text-text-secondary font-medium">
-                Showing 50 of {formatNumber(sortedData.length)} styles
-              </span>
-            )}
+            {sortedData.length > displayLimit ? (
+              <button
+                onClick={() => setDisplayLimit(prev => Math.min(prev + 50, sortedData.length))}
+                className="text-base text-accent hover:text-accent-hover font-medium transition-colors"
+              >
+                Showing {displayLimit} of {formatNumber(sortedData.length)} — Show More
+              </button>
+            ) : sortedData.length > 50 ? (
+              <button
+                onClick={() => setDisplayLimit(50)}
+                className="text-base text-text-secondary hover:text-text-primary font-medium transition-colors"
+              >
+                Showing all {formatNumber(sortedData.length)} styles — Show Less
+              </button>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-6 text-sm">
             <div className="flex items-center gap-2">

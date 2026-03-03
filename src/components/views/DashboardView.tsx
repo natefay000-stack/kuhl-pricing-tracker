@@ -5,7 +5,27 @@ import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/pro
 import { SalesAggregations } from '@/app/page';
 import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
 import { SourceLegend } from '@/components/SourceBadge';
-import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
+import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
+import { matchesSeason } from '@/lib/store';
+import { matchesDivision } from '@/utils/divisionMap';
+
+// Helper to derive gender from divisionDesc (pure function, module-level)
+function getGenderFromDivision(divisionDesc: string): string {
+  if (!divisionDesc) return 'Unknown';
+  const lower = divisionDesc.toLowerCase();
+  if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
+  if (lower.includes("women's") || lower.includes("woman")) return "Women's";
+  if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
+  return "Unknown";
+}
+
+// Gender colors for chart (static constant, module-level)
+const GENDER_COLORS: Record<string, string> = {
+  "Men's": '#2563eb',    // blue-600
+  "Women's": '#9333ea',  // purple-600
+  "Unisex": '#6b7280',   // gray-500
+  "Unknown": '#6b7280',  // gray-500
+};
 
 interface DashboardViewProps {
   products: Product[];
@@ -15,6 +35,7 @@ interface DashboardViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -26,6 +47,7 @@ export default function DashboardView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: DashboardViewProps) {
   // Use raw sales when available, otherwise fall back to aggregations
@@ -34,12 +56,16 @@ export default function DashboardView({
   // Filter sales by selected filters
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
-      if (selectedSeason && s.season !== selectedSeason) return false;
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+      if (!matchesSeason(s.season, selectedSeason)) return false;
+      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!s.styleNumber?.toLowerCase().includes(q) && !(s.styleDesc || '').toLowerCase().includes(q)) return false;
+      }
       return true;
     });
-  }, [sales, selectedSeason, selectedDivision, selectedCategory]);
+  }, [sales, selectedSeason, selectedDivision, selectedCategory, globalSearchQuery]);
 
   // Calculate summary stats — use aggregations as fallback when sales haven't loaded
   const stats = useMemo(() => {
@@ -67,10 +93,11 @@ export default function DashboardView({
     }
 
     // Fallback: compute from aggregations (available before raw sales load)
-    if (salesAggregations) {
+    // Note: aggregations don't include division, so skip fallback when division is filtered
+    if (salesAggregations && !selectedDivision) {
       const aggs = salesAggregations.byCategory || [];
       const filtered = aggs.filter((a) => {
-        if (selectedSeason && a.season !== selectedSeason) return false;
+        if (!matchesSeason(a.season, selectedSeason)) return false;
         if (selectedCategory && normalizeCategory(a.category) !== selectedCategory) return false;
         return true;
       });
@@ -80,7 +107,7 @@ export default function DashboardView({
     }
 
     return { totalRevenue: 0, totalUnits: 0, uniqueStyles: 0, margin: 0 };
-  }, [hasSalesData, filteredSales, costs, salesAggregations, selectedSeason, selectedCategory]);
+  }, [hasSalesData, filteredSales, costs, salesAggregations, selectedSeason, selectedDivision, selectedCategory]);
 
   // Sales by category — use aggregations as fallback
   const salesByCategory = useMemo(() => {
@@ -94,10 +121,12 @@ export default function DashboardView({
         .sort((a, b) => b[1] - a[1])
         .slice(0, 6);
     }
-    if (salesAggregations) {
+    // Skip aggregation fallback when division is filtered (aggregations lack division info)
+    if (salesAggregations && !selectedDivision) {
       const grouped = new Map<string, number>();
       (salesAggregations.byCategory || []).forEach((a) => {
-        if (selectedSeason && a.season !== selectedSeason) return;
+        if (!matchesSeason(a.season, selectedSeason)) return;
+        if (selectedCategory && normalizeCategory(a.category) !== selectedCategory) return;
         const cat = normalizeCategory(a.category) || 'Unknown';
         grouped.set(cat, (grouped.get(cat) || 0) + (a.revenue || 0));
       });
@@ -106,17 +135,7 @@ export default function DashboardView({
         .slice(0, 6);
     }
     return [];
-  }, [hasSalesData, filteredSales, salesAggregations, selectedSeason]);
-
-  // Helper to derive gender from divisionDesc
-  const getGenderFromDivision = (divisionDesc: string): string => {
-    if (!divisionDesc) return 'Unknown';
-    const lower = divisionDesc.toLowerCase();
-    if (lower.includes("men's") && !lower.includes("women's")) return "Men's";
-    if (lower.includes("women's") || lower.includes("woman")) return "Women's";
-    if (lower.includes("unisex") || lower.includes("accessories")) return "Unisex";
-    return "Unknown";
-  };
+  }, [hasSalesData, filteredSales, salesAggregations, selectedSeason, selectedDivision, selectedCategory]);
 
   // Build gender lookup from products (Line List priority)
   const productGenderMap = useMemo(() => {
@@ -153,12 +172,12 @@ export default function DashboardView({
         .sort((a, b) => b.revenue - a.revenue);
     }
 
-    // Fallback: use gender aggregations
-    if (salesAggregations) {
+    // Fallback: use gender aggregations (skip when division filtered — aggregations lack division info)
+    if (salesAggregations && !selectedDivision) {
       const grouped = new Map<string, number>();
       let totalRevenue = 0;
       (salesAggregations.byGender || []).forEach((a) => {
-        if (selectedSeason && a.season !== selectedSeason) return;
+        if (!matchesSeason(a.season, selectedSeason)) return;
         const gender = a.gender || 'Unknown';
         grouped.set(gender, (grouped.get(gender) || 0) + (a.revenue || 0));
         totalRevenue += a.revenue || 0;
@@ -173,13 +192,13 @@ export default function DashboardView({
     }
 
     return [];
-  }, [hasSalesData, filteredSales, productGenderMap, salesAggregations, selectedSeason]);
+  }, [hasSalesData, filteredSales, productGenderMap, salesAggregations, selectedSeason, selectedDivision]);
 
   // Cost summary stats
   const costStats = useMemo(() => {
     // Filter costs by selected season
     const filteredCosts = selectedSeason
-      ? costs.filter((c) => c.season === selectedSeason)
+      ? costs.filter((c) => matchesSeason(c.season, selectedSeason))
       : costs;
 
     const stylesWithCosts = filteredCosts.filter((c) => c.landed > 0);
@@ -238,10 +257,13 @@ export default function DashboardView({
       }
     });
 
-    // Build cost lookup for margin
+    // Build cost lookup for margin — when "All Seasons" use all costs, pick best (lowest positive landed)
     const costLookup = new Map<string, number>();
     costs.forEach((c) => {
-      if (c.season === selectedSeason && c.landed > 0) {
+      if (c.landed <= 0) return;
+      if (!matchesSeason(c.season, selectedSeason)) return;
+      const existing = costLookup.get(c.styleNumber);
+      if (existing === undefined || c.landed < existing) {
         costLookup.set(c.styleNumber, c.landed);
       }
     });
@@ -257,13 +279,7 @@ export default function DashboardView({
       .slice(0, 10);
   }, [filteredSales, costs, selectedSeason]);
 
-  // Gender colors for chart
-  const genderColors: Record<string, string> = {
-    "Men's": '#2563eb',    // blue-600
-    "Women's": '#9333ea',  // purple-600
-    "Unisex": '#6b7280',   // gray-500
-    "Unknown": '#6b7280',  // gray-500
-  };
+  const genderColors = GENDER_COLORS;
 
   return (
     <div className="p-6 space-y-6">
@@ -349,30 +365,37 @@ export default function DashboardView({
 
       {/* Two Column Row */}
       <div className="grid grid-cols-2 gap-6">
-        {/* By Category */}
+        {/* By Category — vertical bar chart */}
         <div className="bg-surface rounded-xl border border-border-strong shadow-sm">
           <div className="px-6 py-4 border-b border-border-strong">
             <h3 className="text-xl font-bold text-text-primary">By Category</h3>
           </div>
-          <div className="p-6 space-y-4">
-            {salesByCategory.map(([category, revenue]) => {
+          <div className="p-6">
+            {(() => {
+              const totalCatRevenue = stats.totalRevenue || salesByCategory.reduce((sum, [, rev]) => sum + rev, 0) || 1;
               const maxRevenue = salesByCategory[0]?.[1] || 1;
-              const width = (revenue / maxRevenue) * 100;
+              const barColors = ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
               return (
-                <div key={category} className="flex items-center gap-4">
-                  <div className="w-32 text-base text-text-secondary truncate font-medium">{category}</div>
-                  <div className="flex-1 bg-surface-tertiary rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-cyan-500 h-full rounded-full transition-all"
-                      style={{ width: `${width}%` }}
-                    />
-                  </div>
-                  <div className="w-20 text-right text-base font-mono font-semibold text-text-primary">
-                    {formatCurrencyShort(revenue)}
-                  </div>
+                <div className="flex items-end justify-between gap-3" style={{ height: '200px' }}>
+                  {salesByCategory.map(([category, revenue], i) => {
+                    const heightPct = (revenue / maxRevenue) * 100;
+                    const pctOfTotal = (revenue / totalCatRevenue) * 100;
+                    const color = barColors[i % barColors.length];
+                    return (
+                      <div key={category} className="flex-1 flex flex-col items-center h-full justify-end gap-1">
+                        <div className="text-xs font-semibold text-text-primary font-mono">{formatCurrencyShort(revenue)}</div>
+                        <div className="text-xs font-medium text-text-muted">{pctOfTotal.toFixed(0)}%</div>
+                        <div
+                          className="w-full rounded-t-md transition-all min-h-[4px]"
+                          style={{ height: `${heightPct}%`, backgroundColor: color }}
+                        />
+                        <div className="text-xs text-text-secondary font-medium text-center truncate w-full mt-2">{category}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
-            })}
+            })()}
           </div>
         </div>
 
@@ -433,7 +456,7 @@ export default function DashboardView({
             {/* Avg FOB */}
             <div className="text-center">
               <p className="text-3xl font-bold font-mono text-text-primary">
-                ${costStats.avgFob.toFixed(2)}
+                {formatCurrency(costStats.avgFob)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Avg FOB
@@ -443,7 +466,7 @@ export default function DashboardView({
             {/* Avg Landed */}
             <div className="text-center">
               <p className="text-3xl font-bold font-mono text-text-primary">
-                ${costStats.avgLanded.toFixed(2)}
+                {formatCurrency(costStats.avgLanded)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
                 Avg Landed
@@ -452,15 +475,11 @@ export default function DashboardView({
 
             {/* Avg Margin */}
             <div className="text-center">
-              <p className={`text-3xl font-bold font-mono ${
-                costStats.avgMargin >= 50 ? 'text-emerald-600' :
-                costStats.avgMargin >= 45 ? 'text-amber-600' :
-                costStats.avgMargin >= 40 ? 'text-orange-600' : 'text-red-600'
-              }`}>
+              <p className={`text-3xl font-bold font-mono ${getMarginColor(costStats.avgMargin)}`}>
                 {formatPercent(costStats.avgMargin)}
               </p>
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide mt-1">
-                Avg Margin
+                Avg Cost Margin
               </p>
             </div>
           </div>
@@ -473,28 +492,28 @@ export default function DashboardView({
               </p>
               <div className="flex gap-4">
                 <div className="flex-1 bg-emerald-50 dark:bg-emerald-950 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-emerald-700">
+                  <p className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">
                     {costStats.marginBuckets.excellent}
                   </p>
-                  <p className="text-xs font-semibold text-emerald-600 mt-1">50%+ Excellent</p>
+                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">50%+ Excellent</p>
                 </div>
                 <div className="flex-1 bg-amber-50 dark:bg-amber-950 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-amber-700">
+                  <p className="text-2xl font-bold font-mono text-amber-700 dark:text-amber-300">
                     {costStats.marginBuckets.good}
                   </p>
-                  <p className="text-xs font-semibold text-amber-600 mt-1">45-50% Good</p>
+                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1">45-50% Good</p>
                 </div>
                 <div className="flex-1 bg-orange-50 dark:bg-orange-950 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-orange-700">
+                  <p className="text-2xl font-bold font-mono text-orange-700 dark:text-orange-300">
                     {costStats.marginBuckets.fair}
                   </p>
-                  <p className="text-xs font-semibold text-orange-600 mt-1">40-45% Fair</p>
+                  <p className="text-xs font-semibold text-orange-600 dark:text-orange-400 mt-1">40-45% Fair</p>
                 </div>
                 <div className="flex-1 bg-red-50 dark:bg-red-950 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold font-mono text-red-700">
+                  <p className="text-2xl font-bold font-mono text-red-700 dark:text-red-300">
                     {costStats.marginBuckets.poor}
                   </p>
-                  <p className="text-xs font-semibold text-red-600 mt-1">&lt;40% Poor</p>
+                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 mt-1">&lt;40% Poor</p>
                 </div>
               </div>
             </div>
@@ -555,13 +574,7 @@ export default function DashboardView({
                   </td>
                   <td className="px-4 py-4 text-right border-l border-border-primary">
                     <span
-                      className={`text-base font-mono font-bold px-3 py-1 rounded ${
-                        style.margin >= 50
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-400'
-                          : style.margin >= 40
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-400'
-                      }`}
+                      className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginBg(style.margin)} ${getMarginColor(style.margin)}`}
                     >
                       {formatPercent(style.margin)}
                     </span>

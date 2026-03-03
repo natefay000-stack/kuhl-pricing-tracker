@@ -127,7 +127,7 @@ async function seedProducts() {
       });
 
     if (batch.length > 0) {
-      await prisma.product.createMany({ data: batch, skipDuplicates: true });
+      await prisma.product.createMany({ data: batch });
       count += batch.length;
       console.log(`  Imported ${count} products...`);
     }
@@ -239,7 +239,7 @@ async function seedPricing() {
       });
 
     if (batch.length > 0) {
-      await prisma.pricing.createMany({ data: batch, skipDuplicates: true });
+      await prisma.pricing.createMany({ data: batch });
       count += batch.length;
       console.log(`  Imported ${count} pricing records...`);
     }
@@ -297,7 +297,7 @@ async function seedCosts() {
       });
 
     if (batch.length > 0) {
-      await prisma.cost.createMany({ data: batch, skipDuplicates: true });
+      await prisma.cost.createMany({ data: batch });
       count += batch.length;
       console.log(`  Imported ${count} cost records...`);
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Product, FilterState, SeasonSummary, SalesRecord, PricingRecord } from '@/types/product';
+import { Product, SeasonSummary, SalesRecord, PricingRecord } from '@/types/product';
 
 // Season sorting: 25SP, 25FA, 26SP, 26FA (Spring before Fall within same year)
 export function sortSeasons(seasons: string[]): string[] {
@@ -46,103 +46,16 @@ export function compareSeasons(a: string, b: string): number {
   return aParsed.order - bParsed.order;
 }
 
-const STORAGE_KEY = 'kuhl_pricing_data';
-
-// Load products from localStorage
-export function loadProducts(): Product[] {
-  if (typeof window === 'undefined') return [];
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
-}
-
-// Save products to localStorage
-export function saveProducts(products: Product[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-  } catch (e) {
-    console.warn('Failed to save products to localStorage:', e);
-  }
-}
-
-// Generate unique ID
-export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Add or update products (upsert based on styleColor)
-export function upsertProducts(newProducts: Product[]): Product[] {
-  const existing = loadProducts();
-  const existingMap = new Map(existing.map(p => [p.styleColor, p]));
-  
-  newProducts.forEach(product => {
-    const id = existingMap.get(product.styleColor)?.id || generateId();
-    existingMap.set(product.styleColor, {
-      ...product,
-      id,
-      updatedAt: new Date().toISOString(),
-      createdAt: existingMap.get(product.styleColor)?.createdAt || new Date().toISOString(),
-    });
-  });
-  
-  const allProducts = Array.from(existingMap.values());
-  saveProducts(allProducts);
-  return allProducts;
-}
-
-// Delete a product
-export function deleteProduct(id: string): Product[] {
-  const products = loadProducts().filter(p => p.id !== id);
-  saveProducts(products);
-  return products;
-}
-
-// Clear all products
-export function clearAllProducts(): void {
-  saveProducts([]);
-}
-
-// Filter products
-export function filterProducts(products: Product[], filters: FilterState): Product[] {
-  return products.filter(product => {
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const searchable = [
-        product.styleNumber,
-        product.styleDesc,
-        product.colorDesc,
-        product.styleColor,
-        product.designerName,
-      ].join(' ').toLowerCase();
-      if (!searchable.includes(searchLower)) return false;
-    }
-    
-    // Division filter
-    if (filters.division && product.divisionDesc !== filters.division) return false;
-    
-    // Category filter
-    if (filters.category && product.categoryDesc !== filters.category) return false;
-    
-    // Season filter
-    if (filters.season && product.season !== filters.season) return false;
-    
-    // Product Line filter
-    if (filters.productLine && product.productLineDesc !== filters.productLine) return false;
-    
-    // Designer filter
-    if (filters.designer && product.designerName !== filters.designer) return false;
-    
-    // Carry Over filter
-    if (filters.carryOver === 'yes' && !product.carryOver) return false;
-    if (filters.carryOver === 'no' && product.carryOver) return false;
-    
-    // Price range filters
-    if (filters.priceMin !== null && product.price < filters.priceMin) return false;
-    if (filters.priceMax !== null && product.price > filters.priceMax) return false;
-    
-    return true;
-  });
+/**
+ * Match a record's season against the global season filter.
+ * Supports individual codes ("25SP"), __ALL_SP__ (all Spring), __ALL_FA__ (all Fall).
+ * Returns true if the record should be included.
+ */
+export function matchesSeason(recordSeason: string | undefined | null, filterValue: string): boolean {
+  if (!filterValue) return true; // No filter = show all
+  if (filterValue === '__ALL_SP__') return !!recordSeason && recordSeason.toUpperCase().endsWith('SP');
+  if (filterValue === '__ALL_FA__') return !!recordSeason && recordSeason.toUpperCase().endsWith('FA');
+  return recordSeason === filterValue;
 }
 
 // Get unique values for filter dropdowns
@@ -412,7 +325,7 @@ export interface PricingBySeason {
 export function getPricingForStyle(pricing: PricingRecord[], styleNumber: string): PricingRecord[] {
   return pricing
     .filter(p => p.styleNumber === styleNumber)
-    .sort((a, b) => a.season.localeCompare(b.season));
+    .sort((a, b) => compareSeasons(a.season, b.season));
 }
 
 // Get all pricing with changes calculated
@@ -430,7 +343,7 @@ export function getPricingWithChanges(pricing: PricingRecord[]): PricingBySeason
 
   byStyle.forEach((records, styleNumber) => {
     // Sort by season
-    const sorted = records.sort((a, b) => a.season.localeCompare(b.season));
+    const sorted = records.sort((a, b) => compareSeasons(a.season, b.season));
 
     sorted.forEach((record, index) => {
       const prev = index > 0 ? sorted[index - 1] : null;

@@ -73,6 +73,7 @@ interface SmartImportModalProps {
     sales: Record<string, unknown>[];
     seasons: string[];
   }) => void;
+  onImportDirectToDb?: () => void; // Called when large files are imported directly to DB — triggers a data refresh
   onClose: () => void;
 }
 
@@ -83,6 +84,7 @@ const FILE_TYPE_LABELS: Record<FileType, string> = {
   lineList: 'Line List',
   costs: 'Landed Costs',
   sales: 'Sales Data',
+  invoice: 'Invoice Data',
   pricing: 'Pricing',
   inventory: 'Inventory',
   unknown: 'Unknown',
@@ -110,6 +112,7 @@ export default function SmartImportModal({
   onImportSalesOnly,
   onImportMultiSeason,
   onImportSalesReplace,
+  onImportDirectToDb,
   onClose,
 }: SmartImportModalProps) {
   // Single file state
@@ -210,15 +213,20 @@ export default function SmartImportModal({
           body: formData,
         });
 
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '(no body)');
+          throw new Error(`Detection failed (${response.status}): ${errText}`);
+        }
+
         const result = await response.json();
 
         if (!result.success) {
           throw new Error(result.error || 'Detection failed');
         }
 
-        // Check if it's a sales file
-        if (result.detectedType !== 'sales') {
-          throw new Error(`Expected Sales Data, got ${FILE_TYPE_LABELS[result.detectedType as FileType]}`);
+        // Check if it's a sales or invoice file
+        if (result.detectedType !== 'sales' && result.detectedType !== 'invoice') {
+          throw new Error(`Expected Sales/Invoice Data, got ${FILE_TYPE_LABELS[result.detectedType as FileType]}`);
         }
 
         // Update with detection results
@@ -281,6 +289,7 @@ export default function SmartImportModal({
     const readyFiles = multiFiles.filter(f => f.status === 'ready');
     const allSales: Record<string, unknown>[] = [];
     const allSeasons: string[] = [];
+    let needsDbReload = false;
 
     // Process files sequentially
     for (let i = 0; i < readyFiles.length; i++) {
@@ -323,8 +332,25 @@ export default function SmartImportModal({
 
         const data = await response.json();
 
-        // Add to all sales
-        if (data.sales && data.sales.length > 0) {
+        if (data.directToDb) {
+          // Large file was imported directly to DB — track its seasons
+          console.log('Multi-file: direct-to-DB import for', fileItem.filename, data.recordCount, 'records');
+          if (data.seasons) {
+            allSeasons.push(...data.seasons);
+          }
+          needsDbReload = true;
+
+          // Update status to complete
+          setMultiFiles(prev => prev.map((item, idx) =>
+            idx === fileIndex ? {
+              ...item,
+              status: 'complete',
+              progress: 100,
+              importedCount: data.recordCount || 0,
+            } : item
+          ));
+        } else if (data.sales && data.sales.length > 0) {
+          // Normal flow: accumulate sales records
           allSales.push(...data.sales);
 
           // Extract seasons from the actual sales records
@@ -339,17 +365,27 @@ export default function SmartImportModal({
             // Fallback to filename-detected season
             allSeasons.push(fileItem.season);
           }
-        }
 
-        // Update status to complete
-        setMultiFiles(prev => prev.map((item, idx) =>
-          idx === fileIndex ? {
-            ...item,
-            status: 'complete',
-            progress: 100,
-            importedCount: data.sales?.length || 0,
-          } : item
-        ));
+          // Update status to complete
+          setMultiFiles(prev => prev.map((item, idx) =>
+            idx === fileIndex ? {
+              ...item,
+              status: 'complete',
+              progress: 100,
+              importedCount: data.sales?.length || 0,
+            } : item
+          ));
+        } else {
+          // Update status to complete even if no data returned
+          setMultiFiles(prev => prev.map((item, idx) =>
+            idx === fileIndex ? {
+              ...item,
+              status: 'complete',
+              progress: 100,
+              importedCount: 0,
+            } : item
+          ));
+        }
 
       } catch (err) {
         setMultiFiles(prev => prev.map((item, idx) =>
@@ -362,7 +398,7 @@ export default function SmartImportModal({
       }
     }
 
-    // Call the replace handler with all sales data
+    // Call the replace handler with all client-side sales data
     if (allSales.length > 0) {
       onImportSalesReplace({
         sales: allSales,
@@ -370,7 +406,13 @@ export default function SmartImportModal({
       });
     }
 
-    setMultiFileTotalRecords(allSales.length);
+    // If any files went direct-to-DB, trigger a data reload so frontend picks up the DB records
+    if (needsDbReload && onImportDirectToDb) {
+      onImportDirectToDb();
+    }
+
+    const totalRecords = allSales.length + (needsDbReload ? multiFiles.filter(f => f.status === 'complete').reduce((sum, f) => sum + (f.importedCount || 0), 0) - allSales.length : 0);
+    setMultiFileTotalRecords(totalRecords > 0 ? totalRecords : allSales.length);
     setMultiFileState('complete');
   };
 
@@ -393,6 +435,11 @@ export default function SmartImportModal({
         method: 'POST',
         body: formData,
       });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '(no body)');
+        throw new Error(`File analysis failed (${response.status}): ${errText}`);
+      }
 
       const result = await response.json();
 
@@ -447,19 +494,27 @@ export default function SmartImportModal({
       setImportProgress(90);
 
       // Route to appropriate handler based on type
-      if (selectedType === 'sales') {
-        // Extract unique seasons from the sales data for season-aware replace
-        const allSeasonValues = (data.sales || [])
-          .map((s: Record<string, unknown>) => s.season as string)
-          .filter((s: string) => s && s.length > 0);
-        const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
-        console.log('Sales import - detected seasons:', salesSeasons);
+      if (selectedType === 'sales' || selectedType === 'invoice') {
+        if (data.directToDb) {
+          // Large file was imported directly to DB — trigger a data refresh
+          console.log(`${selectedType} imported directly to DB:`, data.recordCount, 'records, seasons:', data.seasons);
+          if (onImportDirectToDb) {
+            onImportDirectToDb();
+          }
+        } else {
+          // Normal flow: pass records through for client-side processing
+          const allSeasonValues = (data.sales || [])
+            .map((s: Record<string, unknown>) => s.season as string)
+            .filter((s: string) => s && s.length > 0);
+          const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
+          console.log(`${selectedType} import - detected seasons:`, salesSeasons);
 
-        // Use season-aware replace (keeps other seasons intact)
-        onImportSalesReplace({
-          sales: data.sales,
-          seasons: salesSeasons,
-        });
+          // Use season-aware replace (keeps other seasons intact)
+          onImportSalesReplace({
+            sales: data.sales,
+            seasons: salesSeasons,
+          });
+        }
       } else if (selectedType === 'lineList') {
         // Line List now imports with seasons from the file
         // Each product has its own season field
@@ -796,7 +851,7 @@ export default function SmartImportModal({
                 Select File(s)
               </button>
               <p className="text-xs text-text-faint mt-4">
-                Supports Line List, Sales, Costs, and Pricing files
+                Supports Line List, Sales, Invoice, Costs, and Pricing files
               </p>
               <p className="text-xs text-cyan-600 mt-1">
                 Drop multiple Sales files for batch import with REPLACE mode
@@ -844,7 +899,7 @@ export default function SmartImportModal({
                   )}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['lineList', 'sales', 'costs', 'pricing', 'inventory'] as FileType[]).map(type => (
+                  {(['lineList', 'sales', 'invoice', 'costs', 'pricing', 'inventory'] as FileType[]).map(type => (
                     <label
                       key={type}
                       className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${

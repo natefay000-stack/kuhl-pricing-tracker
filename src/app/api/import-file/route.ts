@@ -8,6 +8,8 @@ import {
   convertToAppFormats,
 } from '@/lib/xlsx-import';
 import { normalizeCategory } from '@/types/product';
+import prisma from '@/lib/prisma';
+import { rebuildSnapshots } from '@/lib/rebuild-snapshots';
 
 export const maxDuration = 300; // 5 minutes
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,7 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer();
 
     switch (fileType) {
+      case 'invoice':
       case 'sales': {
         const salesData = parseSalesXLSX(buffer);
         console.log('Parsed sales:', salesData.length, 'records');
@@ -42,6 +45,126 @@ export async function POST(request: NextRequest) {
           seasonCounts[s] = (seasonCounts[s] || 0) + 1;
         }
 
+        const seasons = Object.keys(seasonCounts).filter(s => s !== 'Unknown');
+        const seasonSummary = Object.entries(seasonCounts)
+          .sort(([a], [b]) => b.localeCompare(a))
+          .map(([s, count]) => `${s}: ${count.toLocaleString()}`)
+          .join(', ');
+
+        // For large files (>50K records), write directly to DB to avoid huge JSON response
+        if (salesData.length > 50000) {
+          console.log(`Large sales file (${salesData.length} records) — writing directly to database`);
+
+          // Prepare all batches upfront
+          const BATCH_SIZE = 5000;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const batches: any[][] = [];
+          for (let i = 0; i < salesData.length; i += BATCH_SIZE) {
+            batches.push(salesData.slice(i, i + BATCH_SIZE).map(s => ({
+              styleNumber: s.styleNumber,
+              styleDesc: s.styleDesc,
+              colorCode: s.colorCode,
+              colorDesc: s.colorDesc,
+              season: s.season,
+              seasonType: 'Main',
+              customer: s.customer,
+              customerType: s.customerType,
+              unitsBooked: s.unitsBooked,
+              unitsOpen: s.unitsOpen || 0,
+              revenue: s.revenue,
+              shipped: s.shipped || 0,
+              cost: s.cost || 0,
+              wholesalePrice: s.wholesalePrice || 0,
+              msrp: s.msrp || 0,
+              netUnitPrice: s.netUnitPrice || (s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0),
+              divisionDesc: s.divisionDesc,
+              categoryDesc: normalizeCategory(s.categoryDesc),
+              gender: s.gender || '',
+              salesRep: s.salesRep || '',
+              orderType: s.orderType || '',
+              invoiceDate: s.invoiceDate ? new Date(s.invoiceDate) : null,
+              accountingPeriod: s.accountingPeriod || null,
+              invoiceNumber: s.invoiceNumber || null,
+              shipToState: s.shipToState || null,
+              returnedAtNet: s.returnedAtNet || 0,
+              shippedAtNet: s.shippedAtNet || 0,
+              totalPrice: s.totalPrice || 0,
+              commissionRate: s.commissionRate || 0,
+              ytdNetInvoicing: s.ytdNetInvoicing || 0,
+              ytdCreditMemos: s.ytdCreditMemos || 0,
+              ytdSales: s.ytdSales || 0,
+              warehouse: s.warehouse || null,
+              warehouseDesc: s.warehouseDesc || null,
+              openAtNet: s.openAtNet || 0,
+              openOrder: s.openOrder || 0,
+              returned: s.returned || 0,
+              shippedAtMsrp: s.shippedAtMsrp || 0,
+              totalAtNet: s.totalAtNet || 0,
+              totalAtWholesale: s.totalAtWholesale || 0,
+              returnedAtWholesale: s.returnedAtWholesale || 0,
+              shipToCity: s.shipToCity || null,
+              shipToZip: s.shipToZip || null,
+              billToState: s.billToState || null,
+              billToCity: s.billToCity || null,
+              billToZip: s.billToZip || null,
+              unitsShipped: s.unitsShipped || 0,
+              unitsReturned: s.unitsReturned || 0,
+            })));
+          }
+
+          // Wrap delete + insert in a transaction so partial failures don't lose data
+          let insertedCount = 0;
+          await prisma.$transaction(async (tx) => {
+            // Delete existing sales for each season in the file
+            for (const s of seasons) {
+              console.log(`Deleting existing sales for season: ${s}`);
+              await tx.sale.deleteMany({ where: { season: s } });
+            }
+
+            // Insert all batches
+            for (const batch of batches) {
+              await tx.sale.createMany({ data: batch });
+              insertedCount += batch.length;
+              if (insertedCount % 10000 === 0) {
+                console.log(`  Inserted ${insertedCount.toLocaleString()} / ${salesData.length.toLocaleString()} records`);
+              }
+            }
+
+            // Log the import inside the transaction
+            await tx.importLog.create({
+              data: {
+                fileName: file.name,
+                fileType: 'sales',
+                season: seasons.join(','),
+                recordCount: insertedCount,
+              },
+            });
+          }, {
+            maxWait: 30000, // 30s max wait for transaction slot
+            timeout: 240000, // 4 minute transaction timeout for large imports
+          });
+
+          console.log(`Direct DB insert complete: ${insertedCount} records`);
+
+          // Auto-rebuild snapshots after import
+          try {
+            await rebuildSnapshots();
+          } catch (snapErr) {
+            console.error('[Snapshot] Rebuild failed (non-fatal):', snapErr);
+          }
+
+          return NextResponse.json({
+            success: true,
+            fileType: 'sales',
+            directToDb: true,
+            summary: `${insertedCount.toLocaleString()} sales records across ${seasons.length} seasons (${seasonSummary})`,
+            seasonBreakdown: seasonCounts,
+            seasons,
+            recordCount: insertedCount,
+          });
+        }
+
+        // For smaller files, return data as before (fits in response)
         const salesAppData = salesData.map((s, index) => ({
           id: `sale-${index}`,
           styleNumber: s.styleNumber,
@@ -65,12 +188,34 @@ export async function POST(request: NextRequest) {
           gender: s.gender || '',
           salesRep: s.salesRep || '',
           orderType: s.orderType || '',
+          invoiceDate: s.invoiceDate || null,
+          accountingPeriod: s.accountingPeriod || null,
+          invoiceNumber: s.invoiceNumber || null,
+          shipToState: s.shipToState || null,
+          returnedAtNet: s.returnedAtNet || 0,
+          shippedAtNet: s.shippedAtNet || 0,
+          totalPrice: s.totalPrice || 0,
+          commissionRate: s.commissionRate || 0,
+          ytdNetInvoicing: s.ytdNetInvoicing || 0,
+          ytdCreditMemos: s.ytdCreditMemos || 0,
+          ytdSales: s.ytdSales || 0,
+          warehouse: s.warehouse || null,
+          warehouseDesc: s.warehouseDesc || null,
+          openAtNet: s.openAtNet || 0,
+          openOrder: s.openOrder || 0,
+          returned: s.returned || 0,
+          shippedAtMsrp: s.shippedAtMsrp || 0,
+          totalAtNet: s.totalAtNet || 0,
+          totalAtWholesale: s.totalAtWholesale || 0,
+          returnedAtWholesale: s.returnedAtWholesale || 0,
+          shipToCity: s.shipToCity || null,
+          shipToZip: s.shipToZip || null,
+          billToState: s.billToState || null,
+          billToCity: s.billToCity || null,
+          billToZip: s.billToZip || null,
+          unitsShipped: s.unitsShipped || 0,
+          unitsReturned: s.unitsReturned || 0,
         }));
-
-        const seasonSummary = Object.entries(seasonCounts)
-          .sort(([a], [b]) => b.localeCompare(a))
-          .map(([s, count]) => `${s}: ${count.toLocaleString()}`)
-          .join(', ');
 
         return NextResponse.json({
           success: true,

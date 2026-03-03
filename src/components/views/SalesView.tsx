@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useMemo, useCallback, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { SalesRecord, Product, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { formatCurrencyShort, formatNumber } from '@/utils/format';
+import { matchesDivision } from '@/utils/divisionMap';
+import { buildCSV } from '@/utils/exportData';
 import {
   ChevronRight as ChevronRightIcon,
   Download,
@@ -56,6 +58,7 @@ interface SalesViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -123,6 +126,7 @@ export default function SalesView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: SalesViewProps) {
   // Season comparison state
@@ -144,6 +148,32 @@ export default function SalesView({
     return getYoYSeason(initial) || allSeasons[1] || '';
   });
 
+  // Update activeSeason when sales data loads and activeSeason is still empty
+  useEffect(() => {
+    if (!activeSeason && allSeasons.length > 0) {
+      setActiveSeason(selectedSeason || allSeasons[0]);
+      const initial = selectedSeason || allSeasons[0];
+      setCompareSeason(getYoYSeason(initial) || allSeasons[1] || '');
+    }
+  }, [allSeasons, activeSeason, selectedSeason]);
+
+  // Sync global season filter → local activeSeason
+  useEffect(() => {
+    if (!selectedSeason || allSeasons.length === 0) return;
+    let target = '';
+    if (selectedSeason === '__ALL_SP__') {
+      target = allSeasons.find(s => s.endsWith('SP')) || '';
+    } else if (selectedSeason === '__ALL_FA__') {
+      target = allSeasons.find(s => s.endsWith('FA')) || '';
+    } else if (allSeasons.includes(selectedSeason)) {
+      target = selectedSeason;
+    }
+    if (target && target !== activeSeason) {
+      setActiveSeason(target);
+      setCompareSeason(getYoYSeason(target) || allSeasons[allSeasons.indexOf(target) + 1] || '');
+    }
+  }, [selectedSeason, allSeasons]);
+
   // Sub-tabs and view mode
   const [subTab, setSubTab] = useState<SubTab>('style');
   const [viewMode, setViewMode] = useState<ViewMode>('units');
@@ -154,6 +184,15 @@ export default function SalesView({
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set());
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const pageSize = 25;
+
+  // Sync global search → local search
+  useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+      setCurrentPage(1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSearchQuery]);
 
   // Season pill click handler
   const handleSeasonClick = useCallback((season: string) => {
@@ -183,7 +222,7 @@ export default function SalesView({
   const activeSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.season !== activeSeason) return false;
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
       return true;
     });
@@ -194,7 +233,7 @@ export default function SalesView({
     if (!compareSeason) return [];
     return sales.filter((s) => {
       if (s.season !== compareSeason) return false;
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
       return true;
     });
@@ -332,22 +371,31 @@ export default function SalesView({
     }));
   }, [activeSales, salesAggregations, activeSeason]);
 
-  // Monthly Trend (grouped bars) - mock months for now
-  // Sales data doesn't have month info, so we show season-level comparison
-  const monthlyTrend = useMemo(() => {
-    // Use month labels as a visual pattern (the wireframe has Jul-Dec)
-    const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const activeTotal = metrics.revenue.current;
-    const compareTotal = metrics.revenue.compare;
+  // Category Revenue Breakdown - real data grouped by category
+  const categoryBreakdown = useMemo(() => {
+    const activeByCategory = new Map<string, number>();
+    const compareByCategory = new Map<string, number>();
 
-    // Generate proportional bars - use a smooth curve
-    const weights = [0.10, 0.13, 0.18, 0.24, 0.22, 0.13];
-    return months.map((label, i) => ({
-      label,
-      current: activeTotal * weights[i],
-      compare: compareTotal * weights[i],
+    activeSales.forEach(s => {
+      const cat = s.categoryDesc || 'Other';
+      activeByCategory.set(cat, (activeByCategory.get(cat) || 0) + (s.revenue || 0));
+    });
+
+    if (compareSeason) {
+      sales.filter(s => s.season === compareSeason).forEach(s => {
+        const cat = s.categoryDesc || 'Other';
+        compareByCategory.set(cat, (compareByCategory.get(cat) || 0) + (s.revenue || 0));
+      });
+    }
+
+    // Top 6 categories by revenue
+    const sorted = Array.from(activeByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    return sorted.map(([label, current]) => ({
+      label: label.length > 6 ? label.slice(0, 6) : label,
+      current,
+      compare: compareByCategory.get(label) || 0,
     }));
-  }, [metrics]);
+  }, [activeSales, sales, compareSeason]);
 
   // ── Style Performance Table ──
   const styleData = useMemo(() => {
@@ -482,7 +530,7 @@ export default function SalesView({
     const headers = ['Style', 'Description', 'Category', `${activeSeason} Units`, `${activeSeason} Revenue`, `${compareSeason} Units`, `${compareSeason} Revenue`, 'Change %'];
     const rows = filteredStyles.map((s) => [
       s.styleNumber,
-      `"${s.styleDesc}"`,
+      s.styleDesc,
       s.categoryDesc,
       s.units,
       s.revenue.toFixed(2),
@@ -490,7 +538,7 @@ export default function SalesView({
       s.compareRevenue.toFixed(2),
       s.change !== null ? s.change.toFixed(1) : '',
     ]);
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csv = buildCSV(headers, rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -535,29 +583,27 @@ export default function SalesView({
     );
   };
 
-  // Sparkline helper
-  const renderSparkline = (change: number | null) => {
-    // Generate 5 bars that trend up or down based on change
-    const isPositive = (change || 0) >= 0;
-    const heights = isPositive
-      ? [40, 55, 70, 85, 100]
-      : [100, 85, 70, 55, 45];
-
+  // Change indicator (replaces fake sparkline with actual change badge)
+  const renderChangeIndicator = (change: number | null) => {
+    if (change === null) return <span className="text-xs text-text-faint">—</span>;
+    const isPositive = change >= 0;
     return (
-      <div className="flex items-end gap-[2px] w-[50px] h-[20px]">
-        {heights.map((h, i) => (
-          <div
-            key={i}
-            className={`flex-1 rounded-t-sm ${isPositive ? 'bg-[#0a84ff]' : 'bg-[#ff453a]'} opacity-70`}
-            style={{ height: `${h}%` }}
-          />
-        ))}
-      </div>
+      <span className={`inline-flex items-center gap-0.5 text-xs font-semibold ${isPositive ? 'text-emerald-500' : 'text-red-400'}`}>
+        {isPositive ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
+      </span>
     );
   };
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-4xl font-display font-bold text-text-primary">Sales Analysis</h2>
+        <p className="text-base text-text-muted mt-2">
+          Compare sales performance across seasons, categories, and styles
+        </p>
+      </div>
+
       {/* ── Season Comparison Bar ── */}
       <div className="flex items-center gap-4 px-5 py-3.5 bg-surface rounded-xl border border-border-strong">
         <span className="text-[13px] font-medium text-text-muted">Seasons:</span>
@@ -565,6 +611,7 @@ export default function SalesView({
           {allSeasons.map((season) => (
             <button
               key={season}
+              title={season === activeSeason ? `Active season` : `Click to switch · Right-click to compare`}
               onClick={() => handleSeasonClick(season)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -783,10 +830,10 @@ export default function SalesView({
           </div>
         </div>
 
-        {/* Monthly Trend (Grouped Bars) */}
+        {/* Category Breakdown (Grouped Bars) */}
         <div className="bg-surface rounded-xl border border-border-strong p-5">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-[13px] font-semibold text-text-primary">Monthly Trend</h3>
+            <h3 className="text-[13px] font-semibold text-text-primary">Revenue by Category</h3>
             <div className="flex gap-3">
               <span className="flex items-center gap-1.5 text-[10px] text-text-muted">
                 <span className="w-2 h-2 rounded-sm bg-[#0a84ff]" /> {activeSeason}
@@ -800,23 +847,23 @@ export default function SalesView({
           </div>
           <div className="h-[140px] pt-2">
             <div className="flex justify-between h-full gap-1.5">
-              {monthlyTrend.map((month) => {
-                const maxVal = Math.max(...monthlyTrend.map((m) => Math.max(m.current, m.compare)), 1);
+              {categoryBreakdown.map((cat) => {
+                const maxVal = Math.max(...categoryBreakdown.map((c) => Math.max(c.current, c.compare)), 1);
                 return (
-                  <div key={month.label} className="flex-1 flex flex-col items-center h-full">
+                  <div key={cat.label} className="flex-1 flex flex-col items-center h-full">
                     <div className="flex-1 flex items-end gap-[3px] w-full pb-1.5">
                       <div
                         className="flex-1 bg-[#0a84ff] rounded-t min-h-[4px]"
-                        style={{ height: `${(month.current / maxVal) * 100}%` }}
+                        style={{ height: `${(cat.current / maxVal) * 100}%` }}
                       />
                       {compareSeason && (
                         <div
                           className="flex-1 bg-[#ff9f0a] opacity-60 rounded-t min-h-[4px]"
-                          style={{ height: `${(month.compare / maxVal) * 100}%` }}
+                          style={{ height: `${(cat.compare / maxVal) * 100}%` }}
                         />
                       )}
                     </div>
-                    <span className="text-[9px] text-text-faint uppercase">{month.label}</span>
+                    <span className="text-[9px] text-text-faint uppercase">{cat.label}</span>
                   </div>
                 );
               })}
@@ -974,7 +1021,7 @@ export default function SalesView({
                           )}
                         </td>
                         <td className="px-3.5 py-3 text-right">
-                          {renderSparkline(style.change)}
+                          {renderChangeIndicator(style.change)}
                         </td>
                       </tr>
 

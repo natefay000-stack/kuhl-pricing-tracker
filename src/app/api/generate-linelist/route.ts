@@ -149,7 +149,6 @@ export async function POST(request: NextRequest) {
       const batch = productsToCreate.slice(i, i + batchSize);
       await prisma.product.createMany({
         data: batch,
-        skipDuplicates: true,
       });
       createdCount += batch.length;
       console.log(`Created batch ${Math.floor(i / batchSize) + 1}, total: ${createdCount}`);

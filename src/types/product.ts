@@ -147,6 +147,35 @@ export interface SalesRecord {
   salesRep?: string;
   orderType?: string;
   customerCount?: number;   // Number of unique customers (for aggregated data)
+  // New fields from detailed sales report
+  invoiceDate?: string;
+  accountingPeriod?: string;
+  invoiceNumber?: string;
+  shipToState?: string;
+  returnedAtNet?: number;
+  shippedAtNet?: number;
+  totalPrice?: number;
+  commissionRate?: number;
+  ytdNetInvoicing?: number;
+  ytdCreditMemos?: number;
+  ytdSales?: number;
+  warehouse?: string;
+  warehouseDesc?: string;
+  openAtNet?: number;
+  openOrder?: number;
+  returned?: number;
+  shippedAtMsrp?: number;
+  totalAtNet?: number;
+  totalAtWholesale?: number;
+  returnedAtWholesale?: number;
+  // Geographic fields
+  shipToCity?: string;
+  shipToZip?: string;
+  billToState?: string;
+  billToCity?: string;
+  billToZip?: string;
+  // Unit counts (unitsShipped already above)
+  unitsReturned?: number;
   createdAt?: string;
 }
 
@@ -235,6 +264,43 @@ export interface InventoryRecord {
   costCode?: string;
   costDesc?: string;
   createdAt?: string;
+}
+
+// On-Hand inventory snapshot (style-color level, with size breakdown)
+export interface InventoryOHRecord {
+  id: string;
+  snapshotDate: string;
+  styleNumber: string;
+  styleDesc?: string;
+  season?: string;
+  category?: string;
+  division?: number;
+  prodType?: string;
+  prodLine?: string;
+  stdPrice: number;
+  msrp: number;
+  outletMsrp: number;
+  stdCost: number;
+  color?: string;
+  colorDesc?: string;
+  colorType?: string;
+  segmentCode?: string;
+  garmentClass?: string;
+  garmentClassDesc?: string;
+  warehouse?: number;
+  sizeType?: string;
+  inventoryClassification?: string;
+  sizeBreakdown: Record<string, number>;
+  totalQty: number;
+}
+
+export interface InventoryOHAggregations {
+  totalCount: number;
+  totalUnits: number;
+  totalValue: number;
+  byCategory: { category: string; styles: number; colors: number; total_qty: number; total_value: number }[];
+  bySeason: { season: string; styles: number; colors: number; total_qty: number; total_value: number }[];
+  topStyles: { styleNumber: string; style_desc: string; category: string; colors: number; total_qty: number; total_value: number; std_price: number; msrp: number }[];
 }
 
 export interface PriceHistory {
@@ -352,15 +418,4 @@ export function getMarginClass(margin: number | null): string {
   return 'margin-poor';
 }
 
-export function formatCurrency(value: number | null | undefined, currency: string = 'USD'): string {
-  if (value === null || value === undefined) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-  }).format(value);
-}
-
-export function formatPercent(value: number | null): string {
-  if (value === null) return '—';
-  return `${value.toFixed(1)}%`;
-}
+// Formatting utilities moved to @/utils/format — use formatCurrency/formatPercent from there

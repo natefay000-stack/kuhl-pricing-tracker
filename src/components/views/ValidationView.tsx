@@ -3,7 +3,8 @@
 import { useState, useMemo } from 'react';
 import { Product, SalesRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { isHistoricalSeason as isHistoricalSeasonUtil } from '@/utils/season';
+import { buildCSV } from '@/utils/exportData';
+import { getSeasonStatus } from '@/lib/season-utils';
 import { formatCurrencyShort, formatNumber } from '@/utils/format';
 import {
   AlertTriangle,
@@ -19,6 +20,7 @@ import {
 interface ValidationViewProps {
   products: Product[];
   sales: SalesRecord[];
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -39,15 +41,17 @@ interface NoSalesHistory {
   lastLineListSeason: string;
 }
 
-// Use dynamic season detection instead of hardcoded arrays
-function isHistoricalSeason(season: string): boolean {
-  return isHistoricalSeasonUtil(season);
+// A season should have sales data if it's closed or currently shipping
+function shouldHaveSalesData(season: string): boolean {
+  const status = getSeasonStatus(season);
+  return status === 'CLOSED' || status === 'SHIPPING';
 }
 
 
 export default function ValidationView({
   products,
   sales,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: ValidationViewProps) {
   const [expandMissing, setExpandMissing] = useState(true);
@@ -62,8 +66,8 @@ export default function ValidationView({
   }, [products, sales]);
 
   // Get historical seasons (before 27SP)
-  const historicalSeasons = useMemo(() => {
-    return allSeasons.filter(isHistoricalSeason);
+  const seasonsWithExpectedSales = useMemo(() => {
+    return allSeasons.filter(shouldHaveSalesData);
   }, [allSeasons]);
 
   // RULE 1: Find styles with wholesale sales but missing from Line List
@@ -118,8 +122,13 @@ export default function ValidationView({
     });
 
     // Sort by revenue descending
-    return missing.sort((a, b) => b.whRevenue - a.whRevenue);
-  }, [products, sales]);
+    const sorted = missing.sort((a, b) => b.whRevenue - a.whRevenue);
+    if (globalSearchQuery) {
+      const q = globalSearchQuery.toLowerCase();
+      return sorted.filter(m => m.styleNumber.toLowerCase().includes(q) || m.styleDesc.toLowerCase().includes(q));
+    }
+    return sorted;
+  }, [products, sales, globalSearchQuery]);
 
   // RULE 2: Find historical Line List styles with no sales
   const noSalesHistory = useMemo(() => {
@@ -147,7 +156,7 @@ export default function ValidationView({
     products.forEach(p => {
       if (!p.styleNumber) return;
       // Only consider historical seasons
-      if (!isHistoricalSeason(p.season)) return;
+      if (!shouldHaveSalesData(p.season)) return;
 
       if (!styleInfo.has(p.styleNumber)) {
         styleInfo.set(p.styleNumber, {
@@ -183,14 +192,19 @@ export default function ValidationView({
     });
 
     // Sort by season (oldest first), then style number
-    return noSales.sort((a, b) => {
+    const sorted = noSales.sort((a, b) => {
       const seasonCompare = sortSeasons([a.lastLineListSeason, b.lastLineListSeason]);
       if (seasonCompare[0] !== seasonCompare[1]) {
         return a.lastLineListSeason === seasonCompare[0] ? -1 : 1;
       }
       return a.styleNumber.localeCompare(b.styleNumber);
     });
-  }, [products, sales]);
+    if (globalSearchQuery) {
+      const q = globalSearchQuery.toLowerCase();
+      return sorted.filter(n => n.styleNumber.toLowerCase().includes(q) || n.styleDesc.toLowerCase().includes(q));
+    }
+    return sorted;
+  }, [products, sales, globalSearchQuery]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -215,13 +229,13 @@ export default function ValidationView({
     const headers = ['Style #', 'Style Name', 'WH Revenue', 'Units', 'Last Season', 'All Seasons'];
     const rows = missingFromLineList.map(m => [
       m.styleNumber,
-      `"${m.styleDesc}"`,
+      m.styleDesc,
       m.whRevenue.toFixed(2),
       m.totalUnits,
       m.lastSeason,
-      `"${m.seasons.join(', ')}"`,
+      m.seasons.join(', '),
     ]);
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csv = buildCSV(headers, rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -235,12 +249,12 @@ export default function ValidationView({
     const headers = ['Style #', 'Style Name', 'Category', 'Division', 'Last in Line List'];
     const rows = noSalesHistory.map(n => [
       n.styleNumber,
-      `"${n.styleDesc}"`,
+      n.styleDesc,
       n.category,
       n.division,
       n.lastLineListSeason,
     ]);
-    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csv = buildCSV(headers, rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -274,8 +288,8 @@ export default function ValidationView({
             )}
           </div>
           <div className={`text-4xl font-display font-bold ${
-            stats.healthScore >= 80 ? 'text-green-600' :
-            stats.healthScore >= 50 ? 'text-amber-600' : 'text-red-600'
+            stats.healthScore >= 80 ? 'text-green-600 dark:text-green-400' :
+            stats.healthScore >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
           }`}>
             {stats.healthScore.toFixed(0)}%
           </div>
@@ -291,15 +305,15 @@ export default function ValidationView({
           </div>
         </div>
 
-        <div className="bg-amber-50 dark:bg-amber-950 rounded-xl border-2 border-amber-200 p-5">
+        <div className="bg-amber-50 dark:bg-amber-950 rounded-xl border-2 border-amber-200 dark:border-amber-700 p-5">
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-amber-700 uppercase tracking-wide">Missing</span>
+            <span className="text-sm font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Missing</span>
             <AlertTriangle className="w-6 h-6 text-amber-600" />
           </div>
-          <div className="text-4xl font-display font-bold text-amber-700">
+          <div className="text-4xl font-display font-bold text-amber-700 dark:text-amber-300">
             {stats.missingCount}
           </div>
-          <div className="text-sm text-amber-600 mt-1">
+          <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
             {formatCurrencyShort(stats.totalMissingRevenue)} WH revenue
           </div>
         </div>
@@ -319,18 +333,18 @@ export default function ValidationView({
       </div>
 
       {/* Rule 1: Missing from Line List */}
-      <div className="bg-surface rounded-xl border-2 border-amber-200 overflow-hidden">
+      <div className="bg-surface rounded-xl border-2 border-amber-200 dark:border-amber-700 overflow-hidden">
         <button
           onClick={() => setExpandMissing(!expandMissing)}
-          className="w-full bg-amber-50 dark:bg-amber-950 px-6 py-4 border-b-2 border-amber-200 flex items-center justify-between hover:bg-amber-100 transition-colors"
+          className="w-full bg-amber-50 dark:bg-amber-950 px-6 py-4 border-b-2 border-amber-200 dark:border-amber-700 flex items-center justify-between hover:bg-amber-100 dark:hover:bg-amber-900 transition-colors"
         >
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-6 h-6 text-amber-600" />
             <div className="text-left">
-              <h3 className="text-xl font-bold text-amber-800">
+              <h3 className="text-xl font-bold text-amber-800 dark:text-amber-200">
                 Missing from Line List
               </h3>
-              <p className="text-sm text-amber-600">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
                 {missingFromLineList.length} styles have Wholesale sales but are not in Line List
               </p>
             </div>
@@ -339,7 +353,7 @@ export default function ValidationView({
             {missingFromLineList.length > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); exportMissingCSV(); }}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-200 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800 rounded-lg transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Export
@@ -352,7 +366,7 @@ export default function ValidationView({
         {expandMissing && (
           <div className="p-6">
             {missingFromLineList.length === 0 ? (
-              <div className="text-center py-8 text-green-600">
+              <div className="text-center py-8 text-green-600 dark:text-green-400">
                 <CheckCircle className="w-12 h-12 mx-auto mb-3" />
                 <p className="text-lg font-semibold">All wholesale styles are in Line List</p>
               </div>
@@ -376,13 +390,13 @@ export default function ValidationView({
                         onClick={() => onStyleClick(item.styleNumber)}
                         className={`border-b border-border-primary cursor-pointer transition-colors ${
                           index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
-                        } hover:bg-amber-50 hover:dark:bg-amber-950`}
+                        } hover:bg-amber-50 dark:hover:bg-amber-950`}
                       >
                         <td className="px-4 py-3">
                           <span className="font-mono text-lg font-bold text-text-primary">{item.styleNumber}</span>
                         </td>
                         <td className="px-4 py-3 text-base text-text-secondary truncate max-w-[200px]">{item.styleDesc}</td>
-                        <td className="px-4 py-3 text-right font-mono text-base font-bold text-amber-700">
+                        <td className="px-4 py-3 text-right font-mono text-base font-bold text-amber-700 dark:text-amber-300">
                           {formatCurrencyShort(item.whRevenue)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-base text-text-secondary">
@@ -445,7 +459,7 @@ export default function ValidationView({
         {expandNoSales && (
           <div className="p-6">
             {noSalesHistory.length === 0 ? (
-              <div className="text-center py-8 text-green-600">
+              <div className="text-center py-8 text-green-600 dark:text-green-400">
                 <CheckCircle className="w-12 h-12 mx-auto mb-3" />
                 <p className="text-lg font-semibold">All historical styles have sales data</p>
               </div>
@@ -497,9 +511,9 @@ export default function ValidationView({
       </div>
 
       {/* Info Box */}
-      <div className="bg-blue-50 rounded-xl border-2 border-blue-200 p-5">
-        <h4 className="font-bold text-blue-800 mb-2">Validation Rules</h4>
-        <ul className="text-sm text-blue-700 space-y-1">
+      <div className="bg-blue-50 dark:bg-blue-950/50 rounded-xl border-2 border-blue-200 dark:border-blue-800 p-5">
+        <h4 className="font-bold text-blue-800 dark:text-blue-300 mb-2">Validation Rules</h4>
+        <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
           <li><strong>Rule 1:</strong> Styles with Wholesale (WH) sales MUST be in the Line List.</li>
           <li><strong>Rule 2:</strong> Historical styles (before 27SP) with no sales may be discontinued.</li>
           <li><strong>Note:</strong> 27SP and 27FA are future seasons and excluded from validation.</li>

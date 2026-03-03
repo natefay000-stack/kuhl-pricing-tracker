@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
           FROM "Sale"
           WHERE season = ${season}
           GROUP BY COALESCE("categoryDesc", 'Other')
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
           LIMIT 20
         `
       : await prisma.$queryRaw<Array<{
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
             COUNT(DISTINCT "styleNumber") as style_count
           FROM "Sale"
           GROUP BY COALESCE("categoryDesc", 'Other')
-          ORDER BY SUM(revenue) DESC NULLS LAST
+          ORDER BY SUM(revenue) DESC
           LIMIT 20
         `;
 

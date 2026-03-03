@@ -1,60 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import prisma from '@/lib/prisma';
 
 // Allow longer timeout for large data loads
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-// Supabase REST has a max of 1000 rows per request
-// We use range() to paginate larger datasets
-async function fetchAll(table: string, orderCol: string, orderDir: 'asc' | 'desc' = 'desc', selectCols = '*') {
-  const PAGE = 1000;
-  // eslint-disable-next-line
-  const rows: any[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(selectCols)
-      .order(orderCol, { ascending: orderDir === 'asc' })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`${table} fetch error: ${error.message}`);
-    if (!data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return rows;
-}
-
-// Fetch sales via direct PostgREST RPC call — bypasses supabase-js row limit
-// Single HTTP call per page (up to 50K+ rows per call)
-async function fetchSalesRPC(pageSize: number, startOffset = 0): Promise<ReturnType<typeof transformSale>[]> {
-  const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/get_sales_page`;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'apikey': key,
-      'Authorization': `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({ p_offset: startOffset, p_limit: pageSize }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Sales RPC error (${res.status}): ${text}`);
-  }
-  const rows = await res.json();
-  return (rows || []).map(transformSale);
-}
-
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformSale(s: any) {
   return {
     styleNumber: s.styleNumber || '',
     styleDesc: s.styleDesc || '',
+    colorCode: s.colorCode || '',
+    colorDesc: s.colorDesc || '',
     season: s.season || '',
     seasonType: s.seasonType || 'Main',
     customer: s.customer || '',
@@ -62,17 +19,47 @@ function transformSale(s: any) {
     divisionDesc: s.divisionDesc || '',
     categoryDesc: s.categoryDesc || '',
     gender: s.gender || '',
+    salesRep: s.salesRep || '',
+    orderType: s.orderType || '',
     unitsBooked: s.unitsBooked || 0,
     unitsOpen: s.unitsOpen || 0,
-    revenue: s.revenue || 0,
+    revenue: s.revenue ?? 0,
     shipped: s.shipped || 0,
-    cost: s.cost || 0,
-    wholesalePrice: s.wholesalePrice || 0,
-    msrp: s.msrp || 0,
+    cost: s.cost ?? 0,
+    wholesalePrice: s.wholesalePrice ?? 0,
+    msrp: s.msrp ?? 0,
+    netUnitPrice: s.netUnitPrice ?? 0,
+    invoiceDate: s.invoiceDate || null,
+    accountingPeriod: s.accountingPeriod || null,
+    invoiceNumber: s.invoiceNumber || null,
+    shipToState: s.shipToState || null,
+    returnedAtNet: s.returnedAtNet ?? 0,
+    shippedAtNet: s.shippedAtNet ?? 0,
+    totalPrice: s.totalPrice ?? 0,
+    commissionRate: s.commissionRate ?? 0,
+    ytdNetInvoicing: s.ytdNetInvoicing ?? 0,
+    ytdCreditMemos: s.ytdCreditMemos ?? 0,
+    ytdSales: s.ytdSales ?? 0,
+    warehouse: s.warehouse || null,
+    warehouseDesc: s.warehouseDesc || null,
+    openAtNet: s.openAtNet ?? 0,
+    openOrder: s.openOrder ?? 0,
+    returned: s.returned ?? 0,
+    shippedAtMsrp: s.shippedAtMsrp ?? 0,
+    totalAtNet: s.totalAtNet ?? 0,
+    totalAtWholesale: s.totalAtWholesale ?? 0,
+    returnedAtWholesale: s.returnedAtWholesale ?? 0,
+    shipToCity: s.shipToCity || null,
+    shipToZip: s.shipToZip || null,
+    billToState: s.billToState || null,
+    billToCity: s.billToCity || null,
+    billToZip: s.billToZip || null,
+    unitsShipped: s.unitsShipped ?? 0,
+    unitsReturned: s.unitsReturned ?? 0,
   };
 }
 
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformProduct(p: any) {
   return {
     id: p.id,
@@ -106,7 +93,7 @@ function transformProduct(p: any) {
   };
 }
 
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformPricing(p: any) {
   return {
     id: p.id,
@@ -123,7 +110,7 @@ function transformPricing(p: any) {
   };
 }
 
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformCost(c: any) {
   return {
     id: c.id,
@@ -144,10 +131,11 @@ function transformCost(c: any) {
     suggestedMsrp: c.suggestedMsrp || 0,
     suggestedWholesale: c.suggestedWholesale || 0,
     margin: c.margin || 0,
+    costSource: c.costSource || '',
   };
 }
 
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformInventory(inv: any) {
   return {
     id: inv.id,
@@ -194,7 +182,86 @@ function transformInventory(inv: any) {
   };
 }
 
-// GET - Load all data from database via Supabase REST + RPC
+// Compute inventory aggregations in-process (replaces Supabase RPC)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeInventoryAggregations(inventory: any[]) {
+  const typeMap = new Map<string, { count: number; totalQty: number; totalExtension: number }>();
+  const whMap = new Map<string, { count: number; totalQty: number; totalExtension: number }>();
+  const periodMap = new Map<string, { count: number; totalQty: number; totalExtension: number }>();
+
+  for (const r of inventory) {
+    const mt = r.movementType || 'Unknown';
+    const te = typeMap.get(mt) || { count: 0, totalQty: 0, totalExtension: 0 };
+    te.count++; te.totalQty += r.qty || 0; te.totalExtension += r.extension || 0;
+    typeMap.set(mt, te);
+
+    const wh = r.warehouse || 'Unknown';
+    const we = whMap.get(wh) || { count: 0, totalQty: 0, totalExtension: 0 };
+    we.count++; we.totalQty += r.qty || 0; we.totalExtension += r.extension || 0;
+    whMap.set(wh, we);
+
+    const p = r.period || 'Unknown';
+    const pe = periodMap.get(p) || { count: 0, totalQty: 0, totalExtension: 0 };
+    pe.count++; pe.totalQty += r.qty || 0; pe.totalExtension += r.extension || 0;
+    periodMap.set(p, pe);
+  }
+
+  return {
+    totalCount: inventory.length,
+    byType: Array.from(typeMap.entries()).map(([k, v]) => ({ movementType: k, ...v })),
+    byWarehouse: Array.from(whMap.entries()).map(([k, v]) => ({ warehouse: k, ...v })),
+    byPeriod: Array.from(periodMap.entries()).map(([k, v]) => ({ period: k, ...v }))
+      .sort((a, b) => a.period.localeCompare(b.period)),
+  };
+}
+
+// Compute sales aggregations in-process (replaces Supabase RPC)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computeSalesAggregations(sales: any[]) {
+  const channelMap = new Map<string, { channel: string; season: string; revenue: number; units: number }>();
+  const categoryMap = new Map<string, { category: string; season: string; revenue: number; units: number }>();
+  const genderMap = new Map<string, { gender: string; season: string; revenue: number; units: number }>();
+  const customerMap = new Map<string, { customer: string; customerType: string; season: string; revenue: number; units: number }>();
+
+  for (const s of sales) {
+    if (s.customerType) {
+      const ck = `${s.season}-${s.customerType}`;
+      const ce = channelMap.get(ck);
+      if (ce) { ce.revenue += s.revenue || 0; ce.units += s.unitsBooked || 0; }
+      else channelMap.set(ck, { channel: s.customerType, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+    }
+
+    const catKey = `${s.season}-${s.categoryDesc || 'Other'}`;
+    const catE = categoryMap.get(catKey);
+    if (catE) { catE.revenue += s.revenue || 0; catE.units += s.unitsBooked || 0; }
+    else categoryMap.set(catKey, { category: s.categoryDesc || 'Other', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+
+    const div = (s.divisionDesc || '').toLowerCase();
+    let gender = 'Unisex';
+    if (div.includes('women') || div.includes('woman')) gender = "Women's";
+    else if (div.includes("men's") || div.includes('mens')) gender = "Men's";
+    const gk = `${s.season}-${gender}`;
+    const ge = genderMap.get(gk);
+    if (ge) { ge.revenue += s.revenue || 0; ge.units += s.unitsBooked || 0; }
+    else genderMap.set(gk, { gender, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+
+    if (s.customer) {
+      const custKey = `${s.season}-${s.customer}`;
+      const custE = customerMap.get(custKey);
+      if (custE) { custE.revenue += s.revenue || 0; custE.units += s.unitsBooked || 0; }
+      else customerMap.set(custKey, { customer: s.customer, customerType: s.customerType || '', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+    }
+  }
+
+  return {
+    byChannel: Array.from(channelMap.values()),
+    byCategory: Array.from(categoryMap.values()),
+    byGender: Array.from(genderMap.values()),
+    byCustomer: Array.from(customerMap.values()),
+  };
+}
+
+// GET - Load all data from SQLite database via Prisma
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -208,14 +275,14 @@ export async function GET(request: NextRequest) {
     const inventoryOnly = searchParams.get('inventoryOnly') === 'true';
 
     if (inventoryOnly && invPageSize > 0) {
-      const from = invPage * invPageSize;
-      const to = from + invPageSize - 1;
-      const [invResult, countResult] = await Promise.all([
-        supabase.from('Inventory').select('*').order('movementDate', { ascending: false }).order('styleNumber').range(from, to),
-        supabase.from('Inventory').select('id', { count: 'exact', head: true }),
+      const [invData, totalInv] = await Promise.all([
+        prisma.inventory.findMany({
+          orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }],
+          skip: invPage * invPageSize,
+          take: invPageSize,
+        }),
+        prisma.inventory.count(),
       ]);
-      if (invResult.error) throw new Error(invResult.error.message);
-      const totalInv = countResult.count || 0;
       return NextResponse.json({
         success: true,
         inventoryOnly: true,
@@ -223,18 +290,21 @@ export async function GET(request: NextRequest) {
         pageSize: invPageSize,
         totalInventory: totalInv,
         totalPages: Math.ceil(totalInv / invPageSize),
-        inventory: (invResult.data || []).map(transformInventory),
+        inventory: invData.map(transformInventory),
       });
     }
 
     // ── Sales-only mode (for progressive loading of additional pages) ──
     if (salesOnly && salesPageSize > 0) {
       const startOffset = salesPage * salesPageSize;
-      const [countResult, salesData] = await Promise.all([
-        supabase.from('Sale').select('id', { count: 'exact', head: true }),
-        fetchSalesRPC(salesPageSize, startOffset),
+      const [totalSales, salesData] = await Promise.all([
+        prisma.sale.count(),
+        prisma.sale.findMany({
+          orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }, { customer: 'asc' }],
+          skip: startOffset,
+          take: salesPageSize,
+        }),
       ]);
-      const totalSales = countResult.count || 0;
 
       return NextResponse.json({
         success: true,
@@ -243,127 +313,77 @@ export async function GET(request: NextRequest) {
         pageSize: salesPageSize,
         totalSales,
         totalPages: Math.ceil(totalSales / salesPageSize),
-        sales: salesData,
+        sales: salesData.map(transformSale),
       });
     }
 
     // ── Full mode: aggregations + small tables (NO bulk sales) ──
-    // Sales are loaded separately via salesOnly mode for progressive loading
     const startTime = Date.now();
 
+    // Fetch counts + all data in parallel
     const [
       prodCount,
       salesCount,
       pricingCount,
       costsCount,
-      invAggResult,
-      salesAggResult,
       productsRaw,
       pricingRaw,
       costsRaw,
       inventoryRaw,
+      allInventoryForAgg,
+      allSalesForAgg,
     ] = await Promise.all([
-      supabase.from('Product').select('id', { count: 'exact', head: true }),
-      supabase.from('Sale').select('id', { count: 'exact', head: true }),
-      supabase.from('Pricing').select('id', { count: 'exact', head: true }),
-      supabase.from('Cost').select('id', { count: 'exact', head: true }),
-      // Single RPC call for all inventory aggregations (replaces 173+ REST calls)
-      supabase.rpc('get_inventory_aggregations'),
-      // Single RPC call for all sales aggregations (replaces 380+ REST calls + computation)
-      supabase.rpc('get_sales_aggregations'),
-      // Fetch products, pricing, costs (small datasets via REST)
-      fetchAll('Product', 'season', 'desc'),
-      fetchAll('Pricing', 'season', 'desc'),
-      fetchAll('Cost', 'season', 'desc'),
-      // Limited inventory detail records (for the detail views)
-      supabase.from('Inventory').select('*').order('movementDate', { ascending: false }).order('styleNumber').limit(1000),
+      prisma.product.count(),
+      prisma.sale.count(),
+      prisma.pricing.count(),
+      prisma.cost.count(),
+      prisma.product.findMany({ orderBy: { season: 'desc' } }),
+      prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
+      prisma.cost.findMany({ orderBy: { season: 'desc' } }),
+      // Limited inventory for detail views
+      prisma.inventory.findMany({
+        orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }],
+        take: 1000,
+      }),
+      // All inventory for aggregations (only select needed fields)
+      prisma.inventory.findMany({
+        select: { movementType: true, warehouse: true, period: true, qty: true, extension: true },
+      }),
+      // All sales for aggregations (only select needed fields)
+      prisma.sale.findMany({
+        select: {
+          season: true, customerType: true, categoryDesc: true,
+          divisionDesc: true, customer: true, revenue: true, unitsBooked: true,
+        },
+      }),
     ]);
 
-    if (inventoryRaw.error) throw new Error(inventoryRaw.error.message);
+    // Compute aggregations in-process (fast on SQLite — no network overhead)
+    const inventoryAggregations = computeInventoryAggregations(allInventoryForAgg);
+    const salesAggregations = computeSalesAggregations(allSalesForAgg);
 
-    const totalSalesCount = salesCount.count || 0;
-    const inventoryCount = invAggResult.data?.totalCount || 0;
-
-    console.log(`Full mode (aggregations + small tables): ${Date.now() - startTime}ms`);
-
-    // No bulk sales in full mode — frontend loads them progressively via salesOnly
-    const salesRaw: ReturnType<typeof transformSale>[] = [];
-
-    // ── Transform inventory aggregations from RPC ──
-    const invAgg = invAggResult.data || { totalCount: 0, byType: [], byWarehouse: [], byPeriod: [] };
-    const inventoryAggregations = {
-      totalCount: invAgg.totalCount || inventoryCount,
-      // Map RPC column names to what the frontend expects
-      byType: (invAgg.byType || []).map((t: { movementType: string; count: number; sum_qty: number; sum_extension: number }) => ({
-        movementType: t.movementType || 'Unknown',
-        count: t.count,
-        totalQty: t.sum_qty,
-        totalExtension: t.sum_extension,
-      })),
-      byWarehouse: (invAgg.byWarehouse || []).map((w: { warehouse: string; count: number; sum_qty: number; sum_extension: number }) => ({
-        warehouse: w.warehouse || 'Unknown',
-        count: w.count,
-        totalQty: w.sum_qty,
-        totalExtension: w.sum_extension,
-      })),
-      byPeriod: (invAgg.byPeriod || []).map((p: { period: string; count: number; sum_qty: number; sum_extension: number }) => ({
-        period: p.period || 'Unknown',
-        count: p.count,
-        totalQty: p.sum_qty,
-        totalExtension: p.sum_extension,
-      })),
-    };
-
-    // ── Transform sales aggregations from RPC ──
-    const salesAgg = salesAggResult.data || { byChannel: [], byCategory: [], byGender: [], byCustomer: [] };
-    const salesAggregations = {
-      byChannel: (salesAgg.byChannel || []).map((c: { season: string; customerType: string; sum_revenue: number; sum_units_booked: number }) => ({
-        channel: c.customerType || '',
-        season: c.season || '',
-        revenue: c.sum_revenue || 0,
-        units: c.sum_units_booked || 0,
-      })),
-      byCategory: (salesAgg.byCategory || []).map((c: { season: string; categoryDesc: string; sum_revenue: number; sum_units_booked: number }) => ({
-        category: c.categoryDesc || 'Other',
-        season: c.season || '',
-        revenue: c.sum_revenue || 0,
-        units: c.sum_units_booked || 0,
-      })),
-      byGender: (salesAgg.byGender || []).map((g: { season: string; gender: string; sum_revenue: number; sum_units_booked: number }) => ({
-        gender: g.gender || 'Unknown',
-        season: g.season || '',
-        revenue: g.sum_revenue || 0,
-        units: g.sum_units_booked || 0,
-      })),
-      byCustomer: (salesAgg.byCustomer || []).map((c: { season: string; customer: string; customerType: string; sum_revenue: number; sum_units_booked: number }) => ({
-        customer: c.customer || '',
-        customerType: c.customerType || '',
-        season: c.season || '',
-        revenue: c.sum_revenue || 0,
-        units: c.sum_units_booked || 0,
-      })),
-    };
-
-    console.log(`Total API time: ${Date.now() - startTime}ms`);
+    console.log(`Full mode (Prisma/SQLite): ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       success: true,
       counts: {
-        products: prodCount.count || 0,
-        sales: totalSalesCount,
-        pricing: pricingCount.count || 0,
-        costs: costsCount.count || 0,
-        inventory: inventoryCount,
+        products: prodCount,
+        sales: salesCount,
+        pricing: pricingCount,
+        costs: costsCount,
+        inventory: inventoryAggregations.totalCount,
       },
       data: {
         products: productsRaw.map(transformProduct),
-        sales: salesRaw,
+        sales: [], // Sales loaded progressively via salesOnly mode
         pricing: pricingRaw.map(transformPricing),
         costs: costsRaw.map(transformCost),
-        inventory: (inventoryRaw.data || []).map(transformInventory),
+        inventory: inventoryRaw.map(transformInventory),
+        inventoryOH: [], // InventoryOH not in SQLite schema — was Supabase-only
       },
       salesAggregations,
       inventoryAggregations,
+      ohAggregations: null,
     });
   } catch (error) {
     console.error('Error loading data from database:', error);

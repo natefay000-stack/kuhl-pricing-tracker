@@ -83,6 +83,36 @@ export interface ImportedSalesItem {
   cost: number;
   salesRep: string;
   orderType: string;
+  // New fields from detailed sales report
+  invoiceDate: string;
+  accountingPeriod: string;
+  invoiceNumber: string;
+  shipToState: string;
+  returnedAtNet: number;
+  shippedAtNet: number;
+  totalPrice: number;
+  commissionRate: number;
+  ytdNetInvoicing: number;
+  ytdCreditMemos: number;
+  ytdSales: number;
+  warehouse: string;
+  warehouseDesc: string;
+  openAtNet: number;
+  openOrder: number;
+  returned: number;
+  shippedAtMsrp: number;
+  totalAtNet: number;
+  totalAtWholesale: number;
+  returnedAtWholesale: number;
+  // Geographic fields
+  shipToCity: string;
+  shipToZip: string;
+  billToState: string;
+  billToCity: string;
+  billToZip: string;
+  // Unit counts
+  unitsShipped: number;
+  unitsReturned: number;
 }
 
 export interface SeasonImportResult {
@@ -389,7 +419,7 @@ function getColumn(row: Record<string, unknown>, ...names: string[]): unknown {
 }
 
 export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 
   // Use Sheet1 which has the raw data
   const sheetName = workbook.SheetNames.includes('Sheet1')
@@ -414,11 +444,21 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
       const rawSeason = parseString(getColumn(row, 'Season', 'Seas'));
       const season = normalizeSeasonCode(rawSeason);
 
+      // Parse Invoice Date — could be a Date object (cellDates: true) or a string
+      const rawInvoiceDate = getColumn(row, 'Invoice Date', 'InvoiceDate', 'Inv Date');
+      let invoiceDate = '';
+      if (rawInvoiceDate instanceof Date) {
+        invoiceDate = rawInvoiceDate.toISOString();
+      } else if (rawInvoiceDate && String(rawInvoiceDate).trim()) {
+        const parsed = new Date(String(rawInvoiceDate));
+        invoiceDate = isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+      }
+
       return {
         styleNumber: parseString(getColumn(row, 'Style', 'Style #', 'Style#')),
         styleDesc: parseString(getColumn(row, 'Style Description', 'Style Desc', 'Description')),
         colorCode: parseString(getColumn(row, 'Color', 'Color Code', 'Clr')),
-        colorDesc: parseString(getColumn(row, 'Color Desc. From Clr Mst', 'Color Desc', 'Clr Desc')),
+        colorDesc: parseString(getColumn(row, 'Color Desc. From Clr Mst', 'Color Desc', 'Clr Desc', 'Color Description')),
         season,
         customer: parseString(getColumn(row, 'Customer Name', 'Customer', 'Cust Name', 'Cust', 'Account Name', 'Account', 'Ship To', 'Ship To Name', 'Sold To', 'Sold To Name', 'Bill To', 'Bill To Name', 'Company', 'Company Name', 'Retailer', 'Client')),
         customerType: parseString(getColumn(row, 'Customer Type', 'Cust Type', 'Type')),
@@ -426,15 +466,45 @@ export function parseSalesXLSX(buffer: ArrayBuffer): ImportedSalesItem[] {
         unitsOpen: parseNumber(getColumn(row, 'Units Open', 'Open Units')),
         revenue: parseNumber(getColumn(row, '$ Current Booked Net', 'Revenue', 'Booked Net', 'Net Revenue')),
         shipped: parseNumber(getColumn(row, '$ Shipped Net', 'Shipped', 'Shipped Net')),
-        divisionDesc: parseString(getColumn(row, 'Division', 'Div', 'Division Desc')),
+        divisionDesc: parseString(getColumn(row, 'Division', 'Div', 'Division Desc', "Gender (Style's Division)")),
         categoryDesc: parseString(getColumn(row, 'Category Description', 'Category', 'Cat Desc', 'Category Desc')),
         gender: parseString(getColumn(row, 'Gender Descripton', 'Gender Description', 'Gender', 'Gender Desc')),
         wholesalePrice: parseNumber(getColumn(row, 'Wholesale Price', 'Wholesale', 'WHSL', 'Price')),
-        msrp: parseNumber(getColumn(row, 'MSRP (Style)', 'MSRP (Order)', 'MSRP', 'Retail')),
-        netUnitPrice: parseNumber(getColumn(row, 'Net Unit Price', 'Net Price', 'Unit Price')),
+        msrp: parseNumber(getColumn(row, 'MSRP (Style)', 'MSRP (Order)', 'MSRP', 'Retail', 'Price - MSRP')),
+        netUnitPrice: parseNumber(getColumn(row, 'Net Unit Price', 'Net Price', 'Unit Price', 'Price - Net')),
         cost: parseNumber(getColumn(row, 'Cost', 'Unit Cost', 'COGS')),
         salesRep: parseString(getColumn(row, 'Sales Rep 1', 'Sales Rep', 'Rep', 'Salesperson')),
-        orderType: parseString(getColumn(row, 'Order Type', 'Type')),
+        orderType: parseString(getColumn(row, 'Order Type', 'Order Type Description')),
+        // New fields
+        invoiceDate,
+        accountingPeriod: parseString(getColumn(row, 'Accounting Period', 'Accounting Per', 'Acct Period', 'Period')),
+        invoiceNumber: parseString(getColumn(row, 'Invoice Number', 'Invoice #', 'Invoice No', 'Inv #')),
+        shipToState: parseString(getColumn(row, 'Ship To State', 'Ship State', 'State')),
+        returnedAtNet: parseNumber(getColumn(row, '$ Returned at Net Price', '$ Returned at Net', 'Returned at Net')),
+        shippedAtNet: parseNumber(getColumn(row, '$ Shipped at Net Price', '$ Shipped at Net', 'Shipped at Net')),
+        totalPrice: parseNumber(getColumn(row, '$ Total Price', 'Total Price')),
+        commissionRate: parseNumber(getColumn(row, '% Commission Rate 1', 'Commission Rate', '% Commission')),
+        ytdNetInvoicing: parseNumber(getColumn(row, 'YTD Net Invoicing', 'YTD Net Inv', 'YTD Invoicing')),
+        ytdCreditMemos: parseNumber(getColumn(row, 'YTD Credit Memos', 'YTD Credits', 'Credit Memos')),
+        ytdSales: parseNumber(getColumn(row, 'YTD Sales')),
+        warehouse: parseString(getColumn(row, 'Warehouse', 'Whse')),
+        warehouseDesc: parseString(getColumn(row, 'Warehouse Description', 'Warehouse Desc', 'Whse Desc')),
+        openAtNet: parseNumber(getColumn(row, '$ Open at Net Price', '$ Open at Net', 'Open at Net')),
+        openOrder: parseNumber(getColumn(row, '$ Open Order', 'Open Order')),
+        returned: parseNumber(getColumn(row, '$ Returned', 'Returned')),
+        shippedAtMsrp: parseNumber(getColumn(row, '$ Shipped at MSRP', 'Shipped at MSRP')),
+        totalAtNet: parseNumber(getColumn(row, '$ Total at Net Price', '$ Total at Net', 'Total at Net')),
+        totalAtWholesale: parseNumber(getColumn(row, '$ Total at Wholesale', 'Total at Wholesale')),
+        returnedAtWholesale: parseNumber(getColumn(row, '$ Returned at Wholesale Price', '$ Returned at Wholesale', 'Returned at Wholesale')),
+        // Geographic fields
+        shipToCity: parseString(getColumn(row, 'Ship To City', 'Ship City')),
+        shipToZip: parseString(getColumn(row, 'Zip Code', 'Ship To Zip', 'Ship Zip', 'Postal Code')),
+        billToState: parseString(getColumn(row, 'Bill-To State', 'Bill To State', 'Billing State')),
+        billToCity: parseString(getColumn(row, 'Bill-To City', 'Bill To City', 'Billing City')),
+        billToZip: parseString(getColumn(row, 'Bill-To Zip', 'Bill To Zip', 'Billing Zip')),
+        // Unit counts
+        unitsShipped: parseNumber(getColumn(row, 'Units Shipped', 'Shipped Units', 'Ship Qty')),
+        unitsReturned: parseNumber(getColumn(row, 'Units Returned', 'Returned Units', 'Return Qty')),
       };
     });
 

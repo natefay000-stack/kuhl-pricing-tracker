@@ -1,56 +1,23 @@
 #!/usr/bin/env node
 /**
- * Build a static JSON snapshot of all data from Supabase.
- * Output: public/data-snapshot.json
+ * Build static JSON snapshots of all data from SQLite (via Prisma).
+ * Output:
+ *   public/data-core.json   — products, pricing, costs, inventory + aggregations
+ *   public/data-sales.json  — all sales records
  *
- * The frontend loads this directly — no API calls needed on page load.
+ * The frontend loads these directly — no API calls needed on page load.
  * Run this whenever data changes: node scripts/build-snapshot.js
+ *
+ * Also called automatically after file imports.
  */
 
+const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
 
-const SUPABASE_URL = 'https://bphoxjpfwdarlexrvgcg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwaG94anBmd2RhcmxleHJ2Z2NnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzNTI5NDYsImV4cCI6MjA4MTkyODk0Nn0.WUUB29yvD3PrM23fClfI0xtC5yt8ZaIe9z-L8jdq2cU';
+const prisma = new PrismaClient();
 
-const headers = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Content-Type': 'application/json',
-  'Accept': 'application/json',
-};
-
-async function fetchTable(table, select = '*', order = '') {
-  const rows = [];
-  const PAGE = 1000;
-  let offset = 0;
-  while (true) {
-    let url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}&limit=${PAGE}&offset=${offset}`;
-    if (order) url += `&order=${encodeURIComponent(order)}`;
-    const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`${table} fetch failed: ${res.status} ${await res.text()}`);
-    const data = await res.json();
-    if (!data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < PAGE) break;
-    offset += PAGE;
-    process.stdout.write(`\r  ${table}: ${rows.length} rows...`);
-  }
-  console.log(`\r  ${table}: ${rows.length} rows`);
-  return rows;
-}
-
-async function fetchSalesRPC(offset, limit) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_sales_page`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ p_offset: offset, p_limit: limit }),
-  });
-  if (!res.ok) throw new Error(`Sales RPC failed: ${res.status} ${await res.text()}`);
-  return res.json();
-}
-
-// Compute aggregations in-process (avoids Supabase statement timeout)
+// Compute aggregations in-process
 function computeInventoryAggregations(inventory) {
   const typeMap = new Map();
   const whMap = new Map();
@@ -102,8 +69,8 @@ function computeSalesAggregations(sales) {
 
     const div = (s.divisionDesc || '').toLowerCase();
     let gender = 'Unisex';
-    if (div.includes("women") || div.includes("woman")) gender = "Women's";
-    else if (div.includes("men's") || div.includes("mens")) gender = "Men's";
+    if (div.includes('women') || div.includes('woman')) gender = "Women's";
+    else if (div.includes("men's") || div.includes('mens')) gender = "Men's";
     const gk = `${s.season}-${gender}`;
     const ge = genderMap.get(gk);
     if (ge) { ge.revenue += s.revenue || 0; ge.units += s.unitsBooked || 0; }
@@ -127,41 +94,32 @@ function computeSalesAggregations(sales) {
 
 async function main() {
   const startTime = Date.now();
-  console.log('Building data snapshot from Supabase...\n');
+  console.log('Building data snapshot from SQLite (Prisma)...\n');
 
-  // Fetch small tables in parallel
+  // Fetch all tables in parallel
   console.log('Fetching tables...');
-  const [products, pricing, costs] = await Promise.all([
-    fetchTable('Product', '*', 'season.desc'),
-    fetchTable('Pricing', '*', 'season.desc'),
-    fetchTable('Cost', '*', 'season.desc'),
+  const [products, pricing, costs, inventory, sales] = await Promise.all([
+    prisma.product.findMany({ orderBy: { season: 'desc' } }),
+    prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
+    prisma.cost.findMany({ orderBy: { season: 'desc' } }),
+    prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
+    prisma.sale.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
   ]);
 
-  // Fetch inventory
-  const inventory = await fetchTable('Inventory', '*', 'movementDate.desc,styleNumber.asc');
+  console.log(`  Products: ${products.length} rows`);
+  console.log(`  Pricing: ${pricing.length} rows`);
+  console.log(`  Costs: ${costs.length} rows`);
+  console.log(`  Inventory: ${inventory.length} rows`);
+  console.log(`  Sales: ${sales.length} rows`);
 
-  // Fetch all sales via RPC (50K per call, no row limit)
-  console.log('  Fetching sales via RPC...');
-  const sales = [];
-  const SALES_PAGE = 50000;
-  let offset = 0;
-  while (true) {
-    const batch = await fetchSalesRPC(offset, SALES_PAGE);
-    if (!batch || batch.length === 0) break;
-    sales.push(...batch);
-    process.stdout.write(`\r  Sales: ${sales.length} rows...`);
-    if (batch.length < SALES_PAGE) break;
-    offset += SALES_PAGE;
-  }
-  console.log(`\r  Sales: ${sales.length} rows`);
-
-  // Compute aggregations locally (fast — avoids Supabase timeout)
+  // Compute aggregations locally
   console.log('\nComputing aggregations...');
   const inventoryAggregations = computeInventoryAggregations(inventory);
   const salesAggregations = computeSalesAggregations(sales);
   console.log('  Done.');
 
-  const snapshot = {
+  // Build core snapshot (everything except bulk sales)
+  const coreSnapshot = {
     success: true,
     buildTime: new Date().toISOString(),
     counts: {
@@ -173,7 +131,6 @@ async function main() {
     },
     data: {
       products,
-      sales,
       pricing,
       costs,
       inventory,
@@ -182,17 +139,42 @@ async function main() {
     inventoryAggregations,
   };
 
-  const outPath = path.join(__dirname, '..', 'public', 'data-snapshot.json');
-  fs.writeFileSync(outPath, JSON.stringify(snapshot));
-  const sizeMB = (fs.statSync(outPath).size / 1024 / 1024).toFixed(1);
+  // Build sales snapshot (separate file for progressive loading)
+  const salesSnapshot = {
+    success: true,
+    buildTime: new Date().toISOString(),
+    totalSales: sales.length,
+    sales,
+  };
+
+  // Ensure public directory exists
+  const publicDir = path.join(__dirname, '..', 'public');
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+
+  // Write core snapshot
+  const corePath = path.join(publicDir, 'data-core.json');
+  fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
+  const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
+
+  // Write sales snapshot
+  const salesPath = path.join(publicDir, 'data-sales.json');
+  fs.writeFileSync(salesPath, JSON.stringify(salesSnapshot));
+  const salesSizeMB = (fs.statSync(salesPath).size / 1024 / 1024).toFixed(1);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\nSnapshot built in ${elapsed}s`);
-  console.log(`Output: ${outPath} (${sizeMB} MB)`);
+  console.log(`\nSnapshots built in ${elapsed}s`);
+  console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
+  console.log(`  Sales: ${salesPath} (${salesSizeMB} MB)`);
   console.log(`Counts: ${products.length} products, ${sales.length} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
 }
 
-main().catch(err => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
+main()
+  .catch(err => {
+    console.error('FATAL:', err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

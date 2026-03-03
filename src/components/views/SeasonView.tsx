@@ -6,38 +6,21 @@ import { sortSeasons } from '@/lib/store';
 import { ArrowUpDown, TrendingUp, TrendingDown, Minus, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
 import { isRelevantSeason } from '@/utils/season';
+import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
+import { matchesDivision } from '@/utils/divisionMap';
+import { cleanStyleNumber, getBaseStyleNumber, isVariantDescription, getCombineKey } from '@/utils/combineStyles';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
-
-// Helper to clean style number by stripping unwanted suffixes (TES, etc.)
-function cleanStyleNumber(styleNumber: string): string {
-  // Strip "TES" suffix (test styles that shouldn't display with that suffix)
-  return styleNumber.replace(/TES$/i, '');
-}
-
-// Helper to get base style number by stripping R, X, T suffixes (for combining)
-function getBaseStyleNumber(styleNumber: string): string {
-  // First clean the style number
-  const cleaned = cleanStyleNumber(styleNumber);
-  // Match style numbers ending with R, X, or T (case insensitive)
-  const match = cleaned.match(/^(.+?)[RXT]$/i);
-  return match ? match[1] : cleaned;
-}
-
-// Check if style description indicates it's a variant (tall/plus)
-function isVariantDescription(styleDesc: string): boolean {
-  if (!styleDesc) return false;
-  const lower = styleDesc.toLowerCase();
-  return lower.includes('tall') || lower.includes('plus');
-}
 
 interface SeasonViewProps {
   products: Product[];
   sales: SalesRecord[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  selectedSeason?: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -46,19 +29,17 @@ function formatValue(value: number | null, metric: MetricType): string {
 
   switch (metric) {
     case 'sales':
-      if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-      if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
-      return `$${value.toFixed(0)}`;
+      return formatCurrencyShort(value);
     case 'units':
-      return value.toLocaleString();
+      return formatNumber(value);
     case 'msrp':
       // Remove .00 for clean whole numbers on MSRP
       if (value % 1 === 0) return `$${value.toFixed(0)}`;
-      return `$${value.toFixed(2)}`;
+      return formatCurrency(value) || '—';
     case 'cost':
-      return `$${value.toFixed(2)}`;
+      return formatCurrency(value) || '—';
     case 'margin':
-      return `${value.toFixed(1)}%`;
+      return formatPercent(value);
     default:
       return String(value);
   }
@@ -69,8 +50,10 @@ export default function SeasonView({
   sales,
   pricing,
   costs,
+  selectedSeason: globalSeason = '',
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: SeasonViewProps) {
   const [metric, setMetric] = useState<MetricType>('sales');
@@ -88,6 +71,22 @@ export default function SeasonView({
   const [localGenderFilter, setLocalGenderFilter] = useState<string>('');
   const [localCategoryFilter, setLocalCategoryFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<'revenue' | 'units' | 'styles' | 'price' | ''>('');
+
+  // Sync global FilterBar season → local selectedSeasons
+  useEffect(() => {
+    if (!globalSeason) return;
+    const seasonSet = new Set<string>();
+    products.forEach(p => p.season && seasonSet.add(p.season));
+    sales.forEach(s => s.season && seasonSet.add(s.season));
+    const all = sortSeasons(Array.from(seasonSet));
+    if (globalSeason === '__ALL_SP__') {
+      setSelectedSeasons(all.filter(s => s.endsWith('SP')));
+    } else if (globalSeason === '__ALL_FA__') {
+      setSelectedSeasons(all.filter(s => s.endsWith('FA')));
+    } else if (all.includes(globalSeason)) {
+      setSelectedSeasons([globalSeason]);
+    }
+  }, [globalSeason, products, sales]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
@@ -182,7 +181,7 @@ export default function SeasonView({
 
   // Get unique styles from ALL sources (products, sales, pricing, costs)
   const filteredStyles = useMemo(() => {
-    const styleMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string; divisionDesc: string; categoryDesc: string; variantStyles?: Array<{ styleNumber: string; styleDesc: string }> }>();
+    const styleMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string; divisionDesc: string; categoryDesc: string; variantStyles?: Array<{ styleNumber: string; styleDesc: string }>; allStyleNumbers?: string[] }>();
 
     // 1st: Add styles from products (Line List) - has most metadata
     products.forEach((p) => {
@@ -242,7 +241,7 @@ export default function SeasonView({
 
     // Apply filters first
     const filtered = Array.from(styleMap.values()).filter((style) => {
-      if (selectedDivision && style.divisionDesc !== selectedDivision) return false;
+      if (selectedDivision && !matchesDivision(style.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && style.categoryDesc !== selectedCategory) return false;
       if (localCategoryFilter && style.categoryDesc !== localCategoryFilter) return false;
       if (localGenderFilter) {
@@ -254,40 +253,48 @@ export default function SeasonView({
       if (selectedDesigner && style.designerName !== selectedDesigner) return false;
       if (styleNumberFilter && !style.styleNumber.toLowerCase().includes(styleNumberFilter.toLowerCase())) return false;
       if (styleNameFilter && !style.styleDesc?.toLowerCase().includes(styleNameFilter.toLowerCase())) return false;
+      if (globalSearchQuery) {
+        const q = globalSearchQuery.toLowerCase();
+        if (!style.styleNumber.toLowerCase().includes(q) && !(style.styleDesc || '').toLowerCase().includes(q)) return false;
+      }
       return true;
     });
 
-    // If combining styles, group by base style number
+    // If combining styles, group by program name (extracted from styleDesc)
+    // This merges different silhouettes (Jacket, Trench, Vest) AND size variants (R, X, T)
     if (combineStyles) {
-      const combinedMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string; divisionDesc: string; categoryDesc: string; variantStyles: Array<{ styleNumber: string; styleDesc: string }> }>();
+      const combinedMap = new Map<string, { styleNumber: string; styleDesc: string; designerName: string; divisionDesc: string; categoryDesc: string; variantStyles: Array<{ styleNumber: string; styleDesc: string }>; allStyleNumbers: string[] }>();
 
       filtered.forEach((style) => {
-        const baseStyle = getBaseStyleNumber(style.styleNumber);
+        const programKey = getCombineKey(style.styleNumber);
 
-        const existing = combinedMap.get(baseStyle);
+        const existing = combinedMap.get(programKey);
         if (existing) {
-          // Add to variants list if it's a variant (has suffix)
-          if (style.styleNumber !== baseStyle) {
-            existing.variantStyles.push({
-              styleNumber: style.styleNumber,
-              styleDesc: style.styleDesc || '',
-            });
+          // Track all style numbers for data aggregation
+          if (!existing.allStyleNumbers.includes(style.styleNumber)) {
+            existing.allStyleNumbers.push(style.styleNumber);
           }
-          // If this is the base style (no suffix), prefer its metadata
-          if (style.styleNumber === baseStyle) {
+          // Add to variants list
+          existing.variantStyles.push({
+            styleNumber: style.styleNumber,
+            styleDesc: style.styleDesc || '',
+          });
+          // Prefer non-variant metadata (shorter desc = usually the base)
+          if (!isVariantDescription(style.styleDesc) && isVariantDescription(existing.styleDesc)) {
             existing.styleDesc = style.styleDesc || existing.styleDesc;
             existing.designerName = style.designerName || existing.designerName;
             existing.divisionDesc = style.divisionDesc || existing.divisionDesc;
             existing.categoryDesc = style.categoryDesc || existing.categoryDesc;
           }
         } else {
-          combinedMap.set(baseStyle, {
-            styleNumber: baseStyle,
+          combinedMap.set(programKey, {
+            styleNumber: style.styleNumber,
             styleDesc: style.styleDesc,
             designerName: style.designerName,
             divisionDesc: style.divisionDesc,
             categoryDesc: style.categoryDesc,
-            variantStyles: style.styleNumber !== baseStyle ? [{ styleNumber: style.styleNumber, styleDesc: style.styleDesc || '' }] : [],
+            variantStyles: [],
+            allStyleNumbers: [style.styleNumber],
           });
         }
       });
@@ -296,7 +303,16 @@ export default function SeasonView({
     }
 
     return filtered;
-  }, [products, sales, pricing, costs, selectedDivision, selectedCategory, localGenderFilter, localCategoryFilter, selectedDesigner, styleNumberFilter, styleNameFilter, combineStyles]);
+  }, [products, sales, pricing, costs, selectedDivision, selectedCategory, localGenderFilter, localCategoryFilter, selectedDesigner, styleNumberFilter, styleNameFilter, combineStyles, globalSearchQuery]);
+
+  // Helper: get the combine/lookup key for a style number
+  // When combining: uses base style number (strips R/X/T) to group size variants
+  // When not combining: uses cleaned style number as-is
+  function getStyleKey(styleNumber: string): string {
+    const cleaned = cleanStyleNumber(styleNumber);
+    if (!combineStyles) return cleaned;
+    return getCombineKey(styleNumber);
+  }
 
   // Build lookup maps for quick access using WATERFALL LOGIC
   // Pricing: 1st pricebyseason → 2nd Line List → 3rd Sales (calculated)
@@ -309,9 +325,8 @@ export default function SeasonView({
       if (selectedCustomer && s.customer !== selectedCustomer) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(s.season)) return;
 
-      // Clean style number and use base style if combining styles
-      const cleanedStyle = cleanStyleNumber(s.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      // Clean style number and use base style number if combining styles
+      const styleKey = getStyleKey(s.styleNumber);
       const key = `${styleKey}-${s.season}`;
       const existing = salesByStyleSeason.get(key);
       if (existing) {
@@ -335,8 +350,7 @@ export default function SeasonView({
     // 1st Priority: pricebyseason file (Pricing table)
     pricing.forEach((p) => {
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(p.season)) return;
-      const cleanedStyle = cleanStyleNumber(p.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      const styleKey = getStyleKey(p.styleNumber);
       const key = `${styleKey}-${p.season}`;
       if (p.msrp > 0 || p.price > 0) {
         // For combined styles, keep the first pricing found (or could average later)
@@ -349,8 +363,7 @@ export default function SeasonView({
     // 2nd Priority: Sales table (only if not already set from pricing)
     sales.forEach((s) => {
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(s.season)) return;
-      const cleanedStyle = cleanStyleNumber(s.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      const styleKey = getStyleKey(s.styleNumber);
       const key = `${styleKey}-${s.season}`;
       if (!pricingByStyleSeason.has(key) && ((s.msrp && s.msrp > 0) || (s.wholesalePrice && s.wholesalePrice > 0))) {
         pricingByStyleSeason.set(key, {
@@ -365,8 +378,7 @@ export default function SeasonView({
     products.forEach((p) => {
       if (!p.season) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(p.season)) return;
-      const cleanedStyle = cleanStyleNumber(p.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      const styleKey = getStyleKey(p.styleNumber);
       const key = `${styleKey}-${p.season}`;
       if (!pricingByStyleSeason.has(key) && (p.msrp > 0 || p.price > 0)) {
         pricingByStyleSeason.set(key, { msrp: p.msrp, wholesale: p.price, source: 'linelist' });
@@ -388,8 +400,7 @@ export default function SeasonView({
     // 1st Priority: Landed Request Sheet
     costs.forEach((c) => {
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(c.season)) return;
-      const cleanedStyle = cleanStyleNumber(c.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      const styleKey = getStyleKey(c.styleNumber);
       const key = `${styleKey}-${c.season}`;
       if ((c.landed > 0 || c.fob > 0) && !costsByStyleSeason.has(key)) {
         costsByStyleSeason.set(key, { landed: c.landed, fob: c.fob, source: 'landed_sheet' });
@@ -400,8 +411,7 @@ export default function SeasonView({
     products.forEach((p) => {
       if (!p.season) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(p.season)) return;
-      const cleanedStyle = cleanStyleNumber(p.styleNumber);
-      const styleKey = combineStyles ? getBaseStyleNumber(cleanedStyle) : cleanedStyle;
+      const styleKey = getStyleKey(p.styleNumber);
       const key = `${styleKey}-${p.season}`;
       if (!costsByStyleSeason.has(key) && p.cost > 0) {
         costsByStyleSeason.set(key, { landed: p.cost, fob: 0, source: 'linelist' });
@@ -441,8 +451,11 @@ export default function SeasonView({
       const seasonData: Record<string, number | null> = {};
       const seasonSources: Record<string, string> = {};
 
+      // When combining, lookup by base style number (same key used in dataLookups)
+      const lookupKey = getStyleKey(style.styleNumber);
+
       seasons.forEach((season) => {
-        const key = `${style.styleNumber}-${season}`;
+        const key = `${lookupKey}-${season}`;
         const salesData = dataLookups.salesByStyleSeason.get(key);
         const pricingData = dataLookups.pricingByStyleSeason.get(key);
         const costData = dataLookups.costsByStyleSeason.get(key);
@@ -510,7 +523,7 @@ export default function SeasonView({
         isNew,
       };
     });
-  }, [filteredStyles, seasons, metric, dataLookups]);
+  }, [filteredStyles, seasons, metric, dataLookups, combineStyles]);
 
   // Filter to show only styles with data for the CURRENT METRIC in displayed seasons
   const relevantPivotData = useMemo(() => {
@@ -759,7 +772,7 @@ export default function SeasonView({
                 onClick={() => selectSeasonType('FA')}
                 className={`text-sm font-semibold px-3 py-1 rounded transition-colors ${
                   seasons.filter((s) => s.endsWith('FA')).every((s) => selectedSeasons.includes(s)) && seasons.filter((s) => s.endsWith('FA')).length > 0
-                    ? 'bg-orange-100 text-orange-700'
+                    ? 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300'
                     : 'bg-surface-tertiary text-text-secondary hover:bg-surface-tertiary'
                 }`}
               >
@@ -924,7 +937,7 @@ export default function SeasonView({
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-cyan-600 hover:text-cyan-700 hover:bg-hover-accent rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 text-base font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 hover:bg-hover-accent rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
               Clear
@@ -1012,7 +1025,7 @@ export default function SeasonView({
                   return (
                     <th
                       key={season}
-                      className={`px-3 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary min-w-[100px] border-l border-border-primary ${isCurrent ? 'bg-cyan-50' : 'bg-surface-tertiary'}`}
+                      className={`px-3 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary min-w-[100px] border-l border-border-primary ${isCurrent ? 'bg-cyan-500/10 ring-1 ring-inset ring-cyan-500/30' : 'bg-surface-tertiary'}`}
                       onClick={() => handleSort(season)}
                     >
                       <div className="flex items-center justify-end gap-1.5">
@@ -1050,19 +1063,25 @@ export default function SeasonView({
                   <td className={`px-4 py-4 sticky left-0 z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xl font-bold text-text-primary">
-                        {row.styleNumber}
+                        {combineStyles && row.allStyleNumbers && row.allStyleNumbers.length > 1
+                          ? row.allStyleNumbers.join(', ')
+                          : row.styleNumber}
                       </span>
                       {row.variantStyles && row.variantStyles.length > 0 && (
                         <span
-                          className="text-xs font-semibold px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded cursor-help"
-                          title={`Combined styles:\n${row.variantStyles.map((v: { styleNumber: string; styleDesc: string }) => `• ${v.styleNumber}${v.styleDesc ? ` - ${v.styleDesc}` : ''}`).join('\n')}`}
+                          className="text-xs font-semibold px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-full cursor-help whitespace-nowrap"
+                          title={`Combined ${row.allStyleNumbers?.length || row.variantStyles.length + 1} styles:\n${row.variantStyles.map((v: { styleNumber: string; styleDesc: string }) => `• ${v.styleNumber}${v.styleDesc ? ` – ${v.styleDesc}` : ''}`).join('\n')}`}
                         >
-                          +{row.variantStyles.length}
+                          {row.allStyleNumbers?.length || row.variantStyles.length + 1} styles
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className={`px-4 py-4 text-lg text-text-secondary truncate max-w-[280px] sticky left-[100px] z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}>
+                  <td className={`px-4 py-4 text-lg text-text-secondary truncate max-w-[280px] sticky left-[100px] z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}
+                    title={combineStyles && row.variantStyles && row.variantStyles.length > 0
+                      ? `${row.styleDesc}\n${row.variantStyles.map((v: { styleNumber?: string; styleDesc: string }) => `• ${v.styleNumber}: ${v.styleDesc}`).join('\n')}`
+                      : row.styleDesc}
+                  >
                     {row.styleDesc}
                   </td>
                   {displaySeasons.map((season) => {
@@ -1093,7 +1112,7 @@ export default function SeasonView({
                             )}
                           </span>
                         ) : (
-                          <span className="text-gray-300">—</span>
+                          <span className="text-text-faint">—</span>
                         )}
                       </td>
                     );
@@ -1101,16 +1120,16 @@ export default function SeasonView({
                   {displaySeasons.length > 1 && (
                     <td className="px-4 py-4 text-right border-l-2 border-border-strong">
                       {row.isNew ? (
-                        <span className="text-lg font-bold text-cyan-600 bg-cyan-50 px-3 py-1 rounded">
+                        <span className="text-lg font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950 px-3 py-1 rounded">
                           NEW
                         </span>
                       ) : row.delta !== null ? (
                         <span
                           className={`text-lg font-mono font-bold flex items-center justify-end gap-1 ${
                             row.delta > 0
-                              ? 'text-emerald-600'
+                              ? 'text-emerald-600 dark:text-emerald-400'
                               : row.delta < 0
-                              ? 'text-red-600'
+                              ? 'text-red-600 dark:text-red-400'
                               : 'text-text-faint'
                           }`}
                         >
@@ -1125,7 +1144,7 @@ export default function SeasonView({
                           {row.delta.toFixed(0)}%
                         </span>
                       ) : (
-                        <span className="text-gray-300">—</span>
+                        <span className="text-text-faint">—</span>
                       )}
                     </td>
                   )}
@@ -1150,9 +1169,9 @@ export default function SeasonView({
                       <span
                         className={`font-mono text-lg font-bold ${
                           totals.delta > 0
-                            ? 'text-emerald-600'
+                            ? 'text-emerald-600 dark:text-emerald-400'
                             : totals.delta < 0
-                            ? 'text-red-600'
+                            ? 'text-red-600 dark:text-red-400'
                             : 'text-text-faint'
                         }`}
                       >

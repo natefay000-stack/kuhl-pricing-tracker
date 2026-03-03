@@ -55,7 +55,7 @@ export default function DataSourceMapView() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-900">
+              <tr className="bg-gray-200 dark:bg-gray-900">
                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider min-w-[160px]">
                   Field
                 </th>
@@ -402,17 +402,17 @@ export default function DataSourceMapView() {
       </div>
 
       {/* Footer Note */}
-      <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
+      <div className="bg-blue-50 dark:bg-blue-950 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-6">
         <div className="flex gap-3">
-          <Database className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <Database className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-base font-bold text-blue-900 mb-2">Building the Complete Data Picture</h3>
-            <p className="text-sm text-blue-800 leading-relaxed">
+            <h3 className="text-base font-bold text-blue-900 dark:text-blue-200 mb-2">Building the Complete Data Picture</h3>
+            <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">
               The red cells at the bottom make the case clear — without a Customer Master from Full Circle, there&apos;s no source of truth for discount tiers, territories, sales reps, or payment terms.
               Uploading a Customer Master export fills every gap in the customer dimension. Combined with the Style Registry (Line List → Style Master backfill),
               every view in the app can connect the dots: who designed it, who bought it, what they paid, what it cost, and what the margin was.
             </p>
-            <p className="text-sm text-blue-800 leading-relaxed mt-2">
+            <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed mt-2">
               The join key for products is <strong className="font-mono">style_number</strong>. The join key for customers is <strong className="font-mono">customer_name</strong> (or customer ID if available in the ERP export).
             </p>
           </div>

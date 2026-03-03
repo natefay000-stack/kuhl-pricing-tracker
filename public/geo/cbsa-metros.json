@@ -1,0 +1,1428 @@
+{
+  "10420": {
+    "name": "Akron",
+    "shortName": "Akron",
+    "svgX": 745.3,
+    "svgY": 229.9,
+    "countyFips": [
+      "39133",
+      "39153"
+    ]
+  },
+  "10740": {
+    "name": "Albuquerque",
+    "shortName": "Albuquerque",
+    "svgX": 305.8,
+    "svgY": 376.4,
+    "countyFips": [
+      "35001",
+      "35043",
+      "35057",
+      "35061"
+    ]
+  },
+  "11260": {
+    "name": "Anchorage",
+    "shortName": "Anchorage",
+    "svgX": 113,
+    "svgY": 536.1,
+    "countyFips": [
+      "02020",
+      "02170"
+    ]
+  },
+  "12060": {
+    "name": "Atlanta-Sandy Springs-Alpharetta",
+    "shortName": "Atlanta",
+    "svgX": 714.9,
+    "svgY": 406.4,
+    "countyFips": [
+      "13013",
+      "13015",
+      "13035",
+      "13045",
+      "13057",
+      "13063",
+      "13067",
+      "13077",
+      "13085",
+      "13089",
+      "13097",
+      "13113",
+      "13117",
+      "13121",
+      "13135",
+      "13143",
+      "13149",
+      "13151",
+      "13159",
+      "13171",
+      "13199",
+      "13211",
+      "13217",
+      "13223",
+      "13227",
+      "13231",
+      "13247",
+      "13255",
+      "13297"
+    ]
+  },
+  "12420": {
+    "name": "Austin-Round Rock-Georgetown",
+    "shortName": "Austin",
+    "svgX": 465.6,
+    "svgY": 497.6,
+    "countyFips": [
+      "48021",
+      "48055",
+      "48209",
+      "48453",
+      "48491"
+    ]
+  },
+  "12580": {
+    "name": "Baltimore-Columbia-Towson",
+    "shortName": "Baltimore",
+    "svgX": 833.3,
+    "svgY": 256.1,
+    "countyFips": [
+      "24003",
+      "24005",
+      "24013",
+      "24025",
+      "24027",
+      "24035",
+      "24510"
+    ]
+  },
+  "13820": {
+    "name": "Birmingham-Hoover",
+    "shortName": "Birmingham",
+    "svgX": 670,
+    "svgY": 414.5,
+    "countyFips": [
+      "01007",
+      "01009",
+      "01073",
+      "01115",
+      "01117",
+      "01127"
+    ]
+  },
+  "14260": {
+    "name": "Boise City",
+    "shortName": "Boise",
+    "svgX": 168.2,
+    "svgY": 171.4,
+    "countyFips": [
+      "16001",
+      "16015",
+      "16027",
+      "16045",
+      "16073"
+    ]
+  },
+  "14460": {
+    "name": "Boston-Cambridge-Newton",
+    "shortName": "Boston",
+    "svgX": 904.1,
+    "svgY": 166.8,
+    "countyFips": [
+      "25005",
+      "25009",
+      "25017",
+      "25021",
+      "25023",
+      "25025",
+      "25027",
+      "33015",
+      "33017"
+    ]
+  },
+  "15380": {
+    "name": "Buffalo-Cheektowaga",
+    "shortName": "Buffalo",
+    "svgX": 781.7,
+    "svgY": 182.9,
+    "countyFips": [
+      "36029",
+      "36063"
+    ]
+  },
+  "15980": {
+    "name": "Cape Coral-Fort Myers",
+    "shortName": "Fort Myers",
+    "svgX": 786.5,
+    "svgY": 559.7,
+    "countyFips": [
+      "12071"
+    ]
+  },
+  "16700": {
+    "name": "Charleston-North Charleston",
+    "shortName": "Charleston",
+    "svgX": 798.2,
+    "svgY": 409.3,
+    "countyFips": [
+      "45015",
+      "45019",
+      "45035"
+    ]
+  },
+  "16740": {
+    "name": "Charlotte-Concord-Gastonia",
+    "shortName": "Charlotte",
+    "svgX": 776.3,
+    "svgY": 361.6,
+    "countyFips": [
+      "37025",
+      "37071",
+      "37097",
+      "37109",
+      "37119",
+      "37159",
+      "37167",
+      "37179",
+      "45057",
+      "45091"
+    ]
+  },
+  "16980": {
+    "name": "Chicago-Naperville-Elgin",
+    "shortName": "Chicago",
+    "svgX": 634.4,
+    "svgY": 230.9,
+    "countyFips": [
+      "17031",
+      "17043",
+      "17063",
+      "17089",
+      "17093",
+      "17097",
+      "17111",
+      "17197",
+      "18073",
+      "18089",
+      "18111",
+      "18127",
+      "55059"
+    ]
+  },
+  "17140": {
+    "name": "Cincinnati",
+    "shortName": "Cincinnati",
+    "svgX": 699.5,
+    "svgY": 282.8,
+    "countyFips": [
+      "18029",
+      "18047",
+      "18115",
+      "21015",
+      "21023",
+      "21037",
+      "21077",
+      "21081",
+      "21117",
+      "39015",
+      "39017",
+      "39025",
+      "39027",
+      "39061",
+      "39165"
+    ]
+  },
+  "17460": {
+    "name": "Cleveland-Elyria",
+    "shortName": "Cleveland",
+    "svgX": 738.9,
+    "svgY": 225.6,
+    "countyFips": [
+      "39035",
+      "39055",
+      "39085",
+      "39093",
+      "39103"
+    ]
+  },
+  "17820": {
+    "name": "Colorado Springs",
+    "shortName": "Colorado Springs",
+    "svgX": 346.7,
+    "svgY": 294.9,
+    "countyFips": [
+      "08041",
+      "08119"
+    ]
+  },
+  "18140": {
+    "name": "Columbus",
+    "shortName": "Columbus",
+    "svgX": 722.8,
+    "svgY": 261,
+    "countyFips": [
+      "39041",
+      "39045",
+      "39049",
+      "39057",
+      "39073",
+      "39089",
+      "39097",
+      "39117",
+      "39127",
+      "39129",
+      "39159"
+    ]
+  },
+  "18580": {
+    "name": "Corpus Christi",
+    "shortName": "Corpus Christi",
+    "svgX": 466.5,
+    "svgY": 552.2,
+    "countyFips": [
+      "48355",
+      "48409"
+    ]
+  },
+  "19100": {
+    "name": "Dallas-Fort Worth-Arlington",
+    "shortName": "Dallas-Fort Worth",
+    "svgX": 478.9,
+    "svgY": 439.3,
+    "countyFips": [
+      "48085",
+      "48113",
+      "48121",
+      "48139",
+      "48221",
+      "48231",
+      "48251",
+      "48257",
+      "48367",
+      "48397",
+      "48439",
+      "48497"
+    ]
+  },
+  "19740": {
+    "name": "Denver-Aurora-Lakewood",
+    "shortName": "Denver",
+    "svgX": 340.2,
+    "svgY": 279.7,
+    "countyFips": [
+      "08001",
+      "08005",
+      "08014",
+      "08019",
+      "08031",
+      "08035",
+      "08047",
+      "08059",
+      "08093"
+    ]
+  },
+  "19820": {
+    "name": "Detroit-Warren-Dearborn",
+    "shortName": "Detroit",
+    "svgX": 708.9,
+    "svgY": 198.9,
+    "countyFips": [
+      "26087",
+      "26093",
+      "26099",
+      "26125",
+      "26147",
+      "26163"
+    ]
+  },
+  "20260": {
+    "name": "Duluth",
+    "shortName": "Duluth",
+    "svgX": 554,
+    "svgY": 105.6,
+    "countyFips": [
+      "27137",
+      "55031"
+    ]
+  },
+  "20500": {
+    "name": "Durham-Chapel Hill",
+    "shortName": "Durham",
+    "svgX": 803.6,
+    "svgY": 342.5,
+    "countyFips": [
+      "37037",
+      "37063",
+      "37135"
+    ]
+  },
+  "21340": {
+    "name": "El Paso",
+    "shortName": "El Paso",
+    "svgX": 301.8,
+    "svgY": 453,
+    "countyFips": [
+      "48141"
+    ]
+  },
+  "22180": {
+    "name": "Fayetteville-Springdale-Rogers",
+    "shortName": "Fayetteville AR",
+    "svgX": 533,
+    "svgY": 364,
+    "countyFips": [
+      "05007",
+      "05087",
+      "05143"
+    ]
+  },
+  "23420": {
+    "name": "Fresno",
+    "shortName": "Fresno",
+    "svgX": 76.5,
+    "svgY": 296.8,
+    "countyFips": [
+      "06019"
+    ]
+  },
+  "24340": {
+    "name": "Grand Rapids-Kentwood",
+    "shortName": "Grand Rapids",
+    "svgX": 667.4,
+    "svgY": 198.2,
+    "countyFips": [
+      "26081",
+      "26015",
+      "26121",
+      "26139"
+    ]
+  },
+  "24660": {
+    "name": "Greensboro-High Point",
+    "shortName": "Greensboro",
+    "svgX": 791.3,
+    "svgY": 341.2,
+    "countyFips": [
+      "37081",
+      "37151",
+      "37157"
+    ]
+  },
+  "24860": {
+    "name": "Greenville-Anderson",
+    "shortName": "Greenville",
+    "svgX": 750.1,
+    "svgY": 377.5,
+    "countyFips": [
+      "45007",
+      "45045",
+      "45059",
+      "45077",
+      "45083"
+    ]
+  },
+  "25420": {
+    "name": "Harrisburg-Carlisle",
+    "shortName": "Harrisburg",
+    "svgX": 819.9,
+    "svgY": 235.7,
+    "countyFips": [
+      "42041",
+      "42043",
+      "42099"
+    ]
+  },
+  "25540": {
+    "name": "Hartford-East Hartford-Middletown",
+    "shortName": "Hartford",
+    "svgX": 886.5,
+    "svgY": 188.7,
+    "countyFips": [
+      "09003",
+      "09007"
+    ]
+  },
+  "25860": {
+    "name": "Hickory-Lenoir-Morganton",
+    "shortName": "Hickory",
+    "svgX": 763,
+    "svgY": 352.1,
+    "countyFips": [
+      "37003",
+      "37023",
+      "37035"
+    ]
+  },
+  "26420": {
+    "name": "Houston-The Woodlands-Sugar Land",
+    "shortName": "Houston",
+    "svgX": 509.9,
+    "svgY": 508.7,
+    "countyFips": [
+      "48015",
+      "48039",
+      "48071",
+      "48157",
+      "48167",
+      "48201",
+      "48291",
+      "48339",
+      "48473"
+    ]
+  },
+  "26900": {
+    "name": "Indianapolis-Carmel-Anderson",
+    "shortName": "Indianapolis",
+    "svgX": 667,
+    "svgY": 272.3,
+    "countyFips": [
+      "18011",
+      "18013",
+      "18057",
+      "18059",
+      "18063",
+      "18081",
+      "18095",
+      "18097",
+      "18109",
+      "18133",
+      "18145"
+    ]
+  },
+  "27140": {
+    "name": "Jackson MS",
+    "shortName": "Jackson MS",
+    "svgX": 609.2,
+    "svgY": 450.3,
+    "countyFips": [
+      "28029",
+      "28049",
+      "28089",
+      "28121",
+      "28127"
+    ]
+  },
+  "27260": {
+    "name": "Jacksonville",
+    "shortName": "Jacksonville",
+    "svgX": 775.1,
+    "svgY": 477.7,
+    "countyFips": [
+      "12003",
+      "12019",
+      "12031",
+      "12089",
+      "12109"
+    ]
+  },
+  "28140": {
+    "name": "Kansas City",
+    "shortName": "Kansas City",
+    "svgX": 525.2,
+    "svgY": 299.4,
+    "countyFips": [
+      "20091",
+      "20103",
+      "20107",
+      "20121",
+      "20209",
+      "29013",
+      "29025",
+      "29037",
+      "29047",
+      "29049",
+      "29095",
+      "29107",
+      "29165",
+      "29177",
+      "29511"
+    ]
+  },
+  "28420": {
+    "name": "Kennewick-Richland",
+    "shortName": "Kennewick",
+    "svgX": 136.6,
+    "svgY": 85.8,
+    "countyFips": [
+      "53005",
+      "53021"
+    ]
+  },
+  "28940": {
+    "name": "Knoxville",
+    "shortName": "Knoxville",
+    "svgX": 714.8,
+    "svgY": 351.9,
+    "countyFips": [
+      "47001",
+      "47009",
+      "47013",
+      "47063",
+      "47089",
+      "47093",
+      "47105",
+      "47129",
+      "47173"
+    ]
+  },
+  "29460": {
+    "name": "Lakeland-Winter Haven",
+    "shortName": "Lakeland",
+    "svgX": 784.7,
+    "svgY": 528.7,
+    "countyFips": [
+      "12105"
+    ]
+  },
+  "29540": {
+    "name": "Lancaster",
+    "shortName": "Lancaster PA",
+    "svgX": 835.6,
+    "svgY": 239.1,
+    "countyFips": [
+      "42071"
+    ]
+  },
+  "29820": {
+    "name": "Las Vegas-Henderson-Paradise",
+    "shortName": "Las Vegas",
+    "svgX": 155.5,
+    "svgY": 327.6,
+    "countyFips": [
+      "32003"
+    ]
+  },
+  "30460": {
+    "name": "Lexington-Fayette",
+    "shortName": "Lexington",
+    "svgX": 702.9,
+    "svgY": 308.5,
+    "countyFips": [
+      "21017",
+      "21049",
+      "21067",
+      "21113",
+      "21151",
+      "21209",
+      "21239"
+    ]
+  },
+  "30700": {
+    "name": "Lincoln",
+    "shortName": "Lincoln NE",
+    "svgX": 483.2,
+    "svgY": 256.4,
+    "countyFips": [
+      "31109",
+      "31159"
+    ]
+  },
+  "30780": {
+    "name": "Little Rock-North Little Rock-Conway",
+    "shortName": "Little Rock",
+    "svgX": 564.6,
+    "svgY": 394.1,
+    "countyFips": [
+      "05045",
+      "05053",
+      "05085",
+      "05105",
+      "05119",
+      "05125"
+    ]
+  },
+  "31080": {
+    "name": "Los Angeles-Long Beach-Anaheim",
+    "shortName": "Los Angeles",
+    "svgX": 89.4,
+    "svgY": 359.8,
+    "countyFips": [
+      "06037",
+      "06059"
+    ]
+  },
+  "31140": {
+    "name": "Louisville/Jefferson County",
+    "shortName": "Louisville",
+    "svgX": 679.8,
+    "svgY": 302.6,
+    "countyFips": [
+      "18019",
+      "18043",
+      "18061",
+      "18071",
+      "18143",
+      "21015",
+      "21029",
+      "21103",
+      "21111",
+      "21163",
+      "21185",
+      "21211",
+      "21215"
+    ]
+  },
+  "32580": {
+    "name": "McAllen-Edinburg-Mission",
+    "shortName": "McAllen",
+    "svgX": 453.4,
+    "svgY": 584.9,
+    "countyFips": [
+      "48215"
+    ]
+  },
+  "32820": {
+    "name": "Memphis",
+    "shortName": "Memphis",
+    "svgX": 612.2,
+    "svgY": 386.2,
+    "countyFips": [
+      "28033",
+      "28093",
+      "28137",
+      "28143",
+      "47047",
+      "47157",
+      "47167"
+    ]
+  },
+  "33100": {
+    "name": "Miami-Fort Lauderdale-Pompano Beach",
+    "shortName": "Miami",
+    "svgX": 814.9,
+    "svgY": 564.9,
+    "countyFips": [
+      "12011",
+      "12086",
+      "12099"
+    ]
+  },
+  "33340": {
+    "name": "Milwaukee-Waukesha",
+    "shortName": "Milwaukee",
+    "svgX": 626.7,
+    "svgY": 197.4,
+    "countyFips": [
+      "55079",
+      "55089",
+      "55131",
+      "55133"
+    ]
+  },
+  "33460": {
+    "name": "Minneapolis-St. Paul-Bloomington",
+    "shortName": "Minneapolis",
+    "svgX": 541.6,
+    "svgY": 158.2,
+    "countyFips": [
+      "27003",
+      "27019",
+      "27025",
+      "27037",
+      "27053",
+      "27059",
+      "27079",
+      "27095",
+      "27123",
+      "27139",
+      "27141",
+      "27163",
+      "27171",
+      "55093",
+      "55109"
+    ]
+  },
+  "33860": {
+    "name": "Montgomery",
+    "shortName": "Montgomery AL",
+    "svgX": 680.6,
+    "svgY": 440.9,
+    "countyFips": [
+      "01001",
+      "01051",
+      "01085",
+      "01101"
+    ]
+  },
+  "34820": {
+    "name": "Myrtle Beach-Conway-North Myrtle Beach",
+    "shortName": "Myrtle Beach",
+    "svgX": 814.1,
+    "svgY": 386.1,
+    "countyFips": [
+      "45051"
+    ]
+  },
+  "34980": {
+    "name": "Nashville-Davidson-Murfreesboro-Franklin",
+    "shortName": "Nashville",
+    "svgX": 665.7,
+    "svgY": 356.4,
+    "countyFips": [
+      "47021",
+      "47037",
+      "47043",
+      "47081",
+      "47111",
+      "47119",
+      "47147",
+      "47149",
+      "47159",
+      "47165",
+      "47169",
+      "47187",
+      "47189"
+    ]
+  },
+  "35380": {
+    "name": "New Orleans-Metairie",
+    "shortName": "New Orleans",
+    "svgX": 616.9,
+    "svgY": 502.2,
+    "countyFips": [
+      "22051",
+      "22071",
+      "22075",
+      "22087",
+      "22089",
+      "22093",
+      "22095",
+      "22103"
+    ]
+  },
+  "35620": {
+    "name": "New York-Newark-Jersey City",
+    "shortName": "New York",
+    "svgX": 870.5,
+    "svgY": 211.2,
+    "countyFips": [
+      "36061",
+      "36047",
+      "36081",
+      "36005",
+      "36085",
+      "34017",
+      "34013",
+      "34039",
+      "34003",
+      "34031",
+      "34023",
+      "34025",
+      "34029",
+      "34035",
+      "36027",
+      "36071",
+      "36079",
+      "36087",
+      "36103",
+      "36119"
+    ]
+  },
+  "35840": {
+    "name": "North Port-Sarasota-Bradenton",
+    "shortName": "Sarasota",
+    "svgX": 774.2,
+    "svgY": 544,
+    "countyFips": [
+      "12081",
+      "12115"
+    ]
+  },
+  "36260": {
+    "name": "Ogden-Clearfield",
+    "shortName": "Ogden",
+    "svgX": 215.7,
+    "svgY": 217.4,
+    "countyFips": [
+      "49003",
+      "49011",
+      "49029",
+      "49057"
+    ]
+  },
+  "36420": {
+    "name": "Oklahoma City",
+    "shortName": "Oklahoma City",
+    "svgX": 471.7,
+    "svgY": 380.4,
+    "countyFips": [
+      "40017",
+      "40027",
+      "40051",
+      "40081",
+      "40083",
+      "40087",
+      "40109",
+      "40125"
+    ]
+  },
+  "36540": {
+    "name": "Omaha-Council Bluffs",
+    "shortName": "Omaha",
+    "svgX": 498,
+    "svgY": 245.7,
+    "countyFips": [
+      "19085",
+      "19129",
+      "19155",
+      "31025",
+      "31055",
+      "31153",
+      "31155",
+      "31177"
+    ]
+  },
+  "36740": {
+    "name": "Orlando-Kissimmee-Sanford",
+    "shortName": "Orlando",
+    "svgX": 789.7,
+    "svgY": 516.9,
+    "countyFips": [
+      "12069",
+      "12095",
+      "12097",
+      "12117"
+    ]
+  },
+  "37100": {
+    "name": "Oxnard-Thousand Oaks-Ventura",
+    "shortName": "Ventura",
+    "svgX": 73.8,
+    "svgY": 350.4,
+    "countyFips": [
+      "06111"
+    ]
+  },
+  "37340": {
+    "name": "Palm Bay-Melbourne-Titusville",
+    "shortName": "Melbourne",
+    "svgX": 802.6,
+    "svgY": 518,
+    "countyFips": [
+      "12009"
+    ]
+  },
+  "37860": {
+    "name": "Pensacola-Ferry Pass-Brent",
+    "shortName": "Pensacola",
+    "svgX": 674.5,
+    "svgY": 479.9,
+    "countyFips": [
+      "12033",
+      "12091"
+    ]
+  },
+  "37980": {
+    "name": "Philadelphia-Camden-Wilmington",
+    "shortName": "Philadelphia",
+    "svgX": 852.1,
+    "svgY": 238.8,
+    "countyFips": [
+      "34005",
+      "34007",
+      "34015",
+      "34033",
+      "10003",
+      "24015",
+      "42017",
+      "42029",
+      "42045",
+      "42091",
+      "42101"
+    ]
+  },
+  "38060": {
+    "name": "Phoenix-Mesa-Chandler",
+    "shortName": "Phoenix",
+    "svgX": 196.3,
+    "svgY": 405.7,
+    "countyFips": [
+      "04013",
+      "04021"
+    ]
+  },
+  "38300": {
+    "name": "Pittsburgh",
+    "shortName": "Pittsburgh",
+    "svgX": 773,
+    "svgY": 243.1,
+    "countyFips": [
+      "42003",
+      "42005",
+      "42007",
+      "42019",
+      "42051",
+      "42059",
+      "42125",
+      "42129"
+    ]
+  },
+  "38900": {
+    "name": "Portland-Vancouver-Hillsboro",
+    "shortName": "Portland",
+    "svgX": 82.9,
+    "svgY": 89.4,
+    "countyFips": [
+      "41005",
+      "41009",
+      "41051",
+      "41067",
+      "41071",
+      "53011",
+      "53059"
+    ]
+  },
+  "39100": {
+    "name": "Poughkeepsie-Newburgh-Middletown",
+    "shortName": "Poughkeepsie",
+    "svgX": 864.8,
+    "svgY": 196.5,
+    "countyFips": [
+      "36027",
+      "36071"
+    ]
+  },
+  "39300": {
+    "name": "Providence-Warwick",
+    "shortName": "Providence",
+    "svgX": 906.9,
+    "svgY": 182.7,
+    "countyFips": [
+      "44001",
+      "44003",
+      "44005",
+      "44007",
+      "44009",
+      "25005"
+    ]
+  },
+  "39340": {
+    "name": "Provo-Orem",
+    "shortName": "Provo",
+    "svgX": 217.2,
+    "svgY": 254.1,
+    "countyFips": [
+      "49023",
+      "49049"
+    ]
+  },
+  "39580": {
+    "name": "Raleigh-Cary",
+    "shortName": "Raleigh",
+    "svgX": 814.2,
+    "svgY": 342.3,
+    "countyFips": [
+      "37069",
+      "37101",
+      "37135",
+      "37183"
+    ]
+  },
+  "39740": {
+    "name": "Reading",
+    "shortName": "Reading PA",
+    "svgX": 839.2,
+    "svgY": 229.6,
+    "countyFips": [
+      "42011"
+    ]
+  },
+  "40060": {
+    "name": "Richmond",
+    "shortName": "Richmond",
+    "svgX": 826.6,
+    "svgY": 302.3,
+    "countyFips": [
+      "51041",
+      "51075",
+      "51085",
+      "51087",
+      "51127",
+      "51145",
+      "51149",
+      "51183",
+      "51570",
+      "51670",
+      "51730",
+      "51760"
+    ]
+  },
+  "40140": {
+    "name": "Riverside-San Bernardino-Ontario",
+    "shortName": "Riverside",
+    "svgX": 127.7,
+    "svgY": 360.7,
+    "countyFips": [
+      "06065",
+      "06071"
+    ]
+  },
+  "40220": {
+    "name": "Reno",
+    "shortName": "Reno",
+    "svgX": 98.1,
+    "svgY": 211,
+    "countyFips": [
+      "32031",
+      "32510"
+    ]
+  },
+  "40380": {
+    "name": "Rochester",
+    "shortName": "Rochester",
+    "svgX": 801.4,
+    "svgY": 177.8,
+    "countyFips": [
+      "36051",
+      "36055",
+      "36069",
+      "36073",
+      "36117",
+      "36123"
+    ]
+  },
+  "40420": {
+    "name": "Rockford",
+    "shortName": "Rockford",
+    "svgX": 648.9,
+    "svgY": 187.6,
+    "countyFips": [
+      "26007",
+      "17007",
+      "17201"
+    ]
+  },
+  "40900": {
+    "name": "Sacramento-Roseville-Folsom",
+    "shortName": "Sacramento",
+    "svgX": 65.2,
+    "svgY": 245.9,
+    "countyFips": [
+      "06017",
+      "06034",
+      "06061",
+      "06067",
+      "06113"
+    ]
+  },
+  "41180": {
+    "name": "St. Louis",
+    "shortName": "St. Louis",
+    "svgX": 597,
+    "svgY": 301.3,
+    "countyFips": [
+      "17005",
+      "17013",
+      "17027",
+      "17083",
+      "17117",
+      "17119",
+      "17133",
+      "17163",
+      "29071",
+      "29099",
+      "29113",
+      "29183",
+      "29189",
+      "29219",
+      "29510"
+    ]
+  },
+  "41500": {
+    "name": "Salinas",
+    "shortName": "Salinas",
+    "svgX": 45.7,
+    "svgY": 301.5,
+    "countyFips": [
+      "06053"
+    ]
+  },
+  "41620": {
+    "name": "Salt Lake City",
+    "shortName": "Salt Lake City",
+    "svgX": 213,
+    "svgY": 241,
+    "countyFips": [
+      "49035",
+      "49045",
+      "49049"
+    ]
+  },
+  "41700": {
+    "name": "San Antonio-New Braunfels",
+    "shortName": "San Antonio",
+    "svgX": 445.3,
+    "svgY": 515.4,
+    "countyFips": [
+      "48013",
+      "48019",
+      "48029",
+      "48091",
+      "48187",
+      "48259",
+      "48325"
+    ]
+  },
+  "41740": {
+    "name": "San Diego-Chula Vista-Carlsbad",
+    "shortName": "San Diego",
+    "svgX": 109.2,
+    "svgY": 392.1,
+    "countyFips": [
+      "06073"
+    ]
+  },
+  "41860": {
+    "name": "San Francisco-Oakland-Berkeley",
+    "shortName": "San Francisco",
+    "svgX": 39.2,
+    "svgY": 262.5,
+    "countyFips": [
+      "06001",
+      "06013",
+      "06041",
+      "06075",
+      "06081"
+    ]
+  },
+  "41940": {
+    "name": "San Jose-Sunnyvale-Santa Clara",
+    "shortName": "San Jose",
+    "svgX": 47.5,
+    "svgY": 285.5,
+    "countyFips": [
+      "06069",
+      "06085"
+    ]
+  },
+  "42100": {
+    "name": "Santa Cruz-Watsonville",
+    "shortName": "Santa Cruz",
+    "svgX": 37.6,
+    "svgY": 279.3,
+    "countyFips": [
+      "06087"
+    ]
+  },
+  "42200": {
+    "name": "Santa Maria-Santa Barbara",
+    "shortName": "Santa Barbara",
+    "svgX": 58.2,
+    "svgY": 341.4,
+    "countyFips": [
+      "06083"
+    ]
+  },
+  "42540": {
+    "name": "Scranton-Wilkes-Barre",
+    "shortName": "Scranton",
+    "svgX": 836.2,
+    "svgY": 210.3,
+    "countyFips": [
+      "42069",
+      "42079"
+    ]
+  },
+  "42660": {
+    "name": "Seattle-Tacoma-Bellevue",
+    "shortName": "Seattle",
+    "svgX": 104.4,
+    "svgY": 49.4,
+    "countyFips": [
+      "53033",
+      "53053",
+      "53061"
+    ]
+  },
+  "43340": {
+    "name": "Shreveport-Bossier City",
+    "shortName": "Shreveport",
+    "svgX": 542.8,
+    "svgY": 443,
+    "countyFips": [
+      "22017",
+      "22015",
+      "22119"
+    ]
+  },
+  "43580": {
+    "name": "Sioux Falls",
+    "shortName": "Sioux Falls",
+    "svgX": 484.3,
+    "svgY": 193.7,
+    "countyFips": [
+      "46083",
+      "46099",
+      "46101",
+      "46125"
+    ]
+  },
+  "43780": {
+    "name": "South Bend-Mishawaka",
+    "shortName": "South Bend",
+    "svgX": 661.2,
+    "svgY": 229.9,
+    "countyFips": [
+      "18141"
+    ]
+  },
+  "44060": {
+    "name": "Spokane-Spokane Valley",
+    "shortName": "Spokane",
+    "svgX": 171.2,
+    "svgY": 64.9,
+    "countyFips": [
+      "53063"
+    ]
+  },
+  "44140": {
+    "name": "Springfield MA",
+    "shortName": "Springfield MA",
+    "svgX": 883.8,
+    "svgY": 176.6,
+    "countyFips": [
+      "25013",
+      "25015"
+    ]
+  },
+  "44180": {
+    "name": "Springfield MO",
+    "shortName": "Springfield MO",
+    "svgX": 549.1,
+    "svgY": 339.2,
+    "countyFips": [
+      "29043",
+      "29077",
+      "29225"
+    ]
+  },
+  "44700": {
+    "name": "Stockton",
+    "shortName": "Stockton",
+    "svgX": 55.5,
+    "svgY": 263.3,
+    "countyFips": [
+      "06077"
+    ]
+  },
+  "45300": {
+    "name": "Tampa-St. Petersburg-Clearwater",
+    "shortName": "Tampa",
+    "svgX": 769.8,
+    "svgY": 526.2,
+    "countyFips": [
+      "12053",
+      "12057",
+      "12101",
+      "12103"
+    ]
+  },
+  "46060": {
+    "name": "Tucson",
+    "shortName": "Tucson",
+    "svgX": 197.4,
+    "svgY": 431,
+    "countyFips": [
+      "04019"
+    ]
+  },
+  "46140": {
+    "name": "Tulsa",
+    "shortName": "Tulsa",
+    "svgX": 496,
+    "svgY": 361.3,
+    "countyFips": [
+      "40037",
+      "40111",
+      "40113",
+      "40131",
+      "40143",
+      "40145"
+    ]
+  },
+  "46520": {
+    "name": "Urban Honolulu",
+    "shortName": "Honolulu",
+    "svgX": 264.5,
+    "svgY": 545.8,
+    "countyFips": [
+      "15003"
+    ]
+  },
+  "47260": {
+    "name": "Virginia Beach-Norfolk-Newport News",
+    "shortName": "Virginia Beach",
+    "svgX": 844.2,
+    "svgY": 310.8,
+    "countyFips": [
+      "51073",
+      "51093",
+      "51095",
+      "51115",
+      "51175",
+      "51199",
+      "51550",
+      "51650",
+      "51700",
+      "51710",
+      "51735",
+      "51740",
+      "51800",
+      "51810",
+      "51830"
+    ]
+  },
+  "47900": {
+    "name": "Washington-Arlington-Alexandria",
+    "shortName": "Washington DC",
+    "svgX": 821.6,
+    "svgY": 269.9,
+    "countyFips": [
+      "11001",
+      "24009",
+      "24017",
+      "24021",
+      "24031",
+      "24033",
+      "51013",
+      "51043",
+      "51059",
+      "51061",
+      "51107",
+      "51153",
+      "51177",
+      "51179",
+      "51187",
+      "51510",
+      "51600",
+      "51610",
+      "51630",
+      "51683",
+      "51685"
+    ]
+  },
+  "48620": {
+    "name": "Wichita",
+    "shortName": "Wichita",
+    "svgX": 475.8,
+    "svgY": 329.2,
+    "countyFips": [
+      "20015",
+      "20079",
+      "20173",
+      "20191"
+    ]
+  },
+  "49180": {
+    "name": "Winston-Salem",
+    "shortName": "Winston-Salem",
+    "svgX": 779.9,
+    "svgY": 339.5,
+    "countyFips": [
+      "37059",
+      "37067",
+      "37169",
+      "37197"
+    ]
+  }
+}

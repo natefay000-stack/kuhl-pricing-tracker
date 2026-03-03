@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { isRelevantSeason } from '@/utils/season';
+import { matchesSeason } from '@/lib/store';
+import { matchesDivision } from '@/utils/divisionMap';
 import {
   DollarSign,
   TrendingUp,
@@ -23,6 +25,7 @@ import {
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
+import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 interface MarginsViewProps {
   products: Product[];
@@ -31,6 +34,7 @@ interface MarginsViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -144,31 +148,31 @@ const CHANNEL_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CHANNEL_COLORS: Record<string, { bg: string; text: string; light: string }> = {
-  'WH': { bg: 'bg-green-600', text: 'text-green-700', light: 'bg-green-100 dark:bg-green-900' },
-  'BB': { bg: 'bg-red-600', text: 'text-red-700', light: 'bg-red-100 dark:bg-red-900' },
-  'KUHL_STORES': { bg: 'bg-blue-600', text: 'text-blue-700', light: 'bg-blue-100 dark:bg-blue-900' },
-  'EC': { bg: 'bg-purple-600', text: 'text-purple-700', light: 'bg-purple-100' },
-  'PS': { bg: 'bg-amber-600', text: 'text-amber-700', light: 'bg-amber-100 dark:bg-amber-900' },
-  'KI': { bg: 'bg-cyan-600', text: 'text-cyan-700', light: 'bg-cyan-100' },
+  'WH': { bg: 'bg-green-600', text: 'text-green-700 dark:text-green-300', light: 'bg-green-100 dark:bg-green-900' },
+  'BB': { bg: 'bg-red-600', text: 'text-red-700 dark:text-red-300', light: 'bg-red-100 dark:bg-red-900' },
+  'KUHL_STORES': { bg: 'bg-blue-600', text: 'text-blue-700 dark:text-blue-400', light: 'bg-blue-100 dark:bg-blue-900' },
+  'EC': { bg: 'bg-purple-600', text: 'text-purple-700 dark:text-purple-400', light: 'bg-purple-100 dark:bg-purple-900' },
+  'PS': { bg: 'bg-amber-600', text: 'text-amber-700 dark:text-amber-300', light: 'bg-amber-100 dark:bg-amber-900' },
+  'KI': { bg: 'bg-cyan-600', text: 'text-cyan-700 dark:text-cyan-300', light: 'bg-cyan-100 dark:bg-cyan-900' },
 };
 
 const TARGET_MARGIN = 48; // Default target margin percentage
 
 
 function getMarginTier(margin: number): 'excellent' | 'target' | 'watch' | 'problem' {
-  if (margin >= 55) return 'excellent';
+  if (margin >= 50) return 'excellent';
   if (margin >= 45) return 'target';
-  if (margin >= 35) return 'watch';
+  if (margin >= 40) return 'watch';
   return 'problem';
 }
 
 function getMarginColor(margin: number): string {
   const tier = getMarginTier(margin);
   switch (tier) {
-    case 'excellent': return 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700';
-    case 'target': return 'bg-green-100 dark:bg-green-900 text-green-700';
-    case 'watch': return 'bg-amber-100 dark:bg-amber-900 text-amber-700';
-    case 'problem': return 'bg-red-100 dark:bg-red-900 text-red-700';
+    case 'excellent': return 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300';
+    case 'target': return 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300';
+    case 'watch': return 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300';
+    case 'problem': return 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300';
   }
 }
 
@@ -237,6 +241,7 @@ export default function MarginsView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: MarginsViewProps) {
   // Sort by revenue (highest first) by default
@@ -254,9 +259,18 @@ export default function MarginsView({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [styleLevelSeasonFilter, setStyleLevelSeasonFilter] = useState<string>('all');
 
+  // Sync global search → local search
+  useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSearchQuery]);
+
   // Customer filters
   const [customerTypeFilters, setCustomerTypeFilters] = useState<string[]>([]);
   const [showTopN, setShowTopN] = useState<number>(10);
+  const [tableDisplayLimit, setTableDisplayLimit] = useState(50);
 
   // Get available seasons for filter
   const availableSeasons = useMemo(() => {
@@ -296,7 +310,7 @@ export default function MarginsView({
   // Filter sales by season and additional filters
   const filteredSales = useMemo(() => {
     return sales.filter(s => {
-      if (selectedSeason && s.season !== selectedSeason) return false;
+      if (!matchesSeason(s.season, selectedSeason)) return false;
       if (selectedCustomerType && normalizeCustomerType(s.customerType) !== selectedCustomerType) return false;
       if (selectedCustomer && s.customer !== selectedCustomer) return false;
       return true;
@@ -318,7 +332,7 @@ export default function MarginsView({
 
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = normalizeCustomerType(record.customerType);
@@ -394,7 +408,7 @@ export default function MarginsView({
 
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
       // Apply season filter if not "all"
       if (styleLevelSeasonFilter !== 'all' && record.season !== styleLevelSeasonFilter) return;
@@ -524,7 +538,7 @@ export default function MarginsView({
     const byCustomer = new Map<string, { customer: string; customerType: string; revenue: number; units: number; totalCost: number }>();
 
     filteredSales.forEach(record => {
-      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       // Apply customer type filter if set
@@ -613,7 +627,7 @@ export default function MarginsView({
   // Apply filters (division, category, tier, channel)
   const filteredStyleMargins = useMemo(() => {
     return styleMargins.filter(s => {
-      if (selectedDivision && s.divisionDesc !== selectedDivision) return false;
+      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
       if (selectedCategoryFilter && s.categoryDesc !== selectedCategoryFilter) return false;
       if (selectedTier) {
@@ -742,7 +756,7 @@ export default function MarginsView({
     // Need to go back to raw sales data for channel info
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && record.divisionDesc !== selectedDivision) return;
+      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = record.customerType || 'Other';
@@ -857,7 +871,7 @@ export default function MarginsView({
     if (viewMode === 'channel') {
       // Export style-level channel analysis
       exportToExcel(
-        styleChannelMargins.slice(0, 50).map(style => ({
+        styleChannelMargins.map(style => ({
           Season: styleLevelSeasonFilter === 'all' ? 'ALL' : styleLevelSeasonFilter,
           Style: style.styleNumber,
           Description: style.styleDesc,
@@ -879,7 +893,7 @@ export default function MarginsView({
     } else {
       // Export traditional margin analysis
       exportToExcel(
-        styleMargins.slice(0, 50).map(style => ({
+        styleMargins.map(style => ({
           Season: selectedSeason || 'ALL',
           Style: style.styleNumber,
           Description: style.styleDesc,
@@ -901,6 +915,7 @@ export default function MarginsView({
 
   return (
     <div className="p-6 space-y-6">
+      <SalesLoadingBanner />
       {/* Header with View Toggle */}
       <div className="flex items-start justify-between">
         <div>
@@ -988,7 +1003,7 @@ export default function MarginsView({
                       {channel.channel}
                     </div>
                   </div>
-                  <p className={`text-2xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  <p className={`text-2xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     {formatPercent(channel.trueMargin)}
                   </p>
                   <p className="text-xs text-text-muted mt-1">
@@ -1000,12 +1015,12 @@ export default function MarginsView({
             })()}
 
             {/* Blended Card */}
-            <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl border-2 border-gray-700 p-4 shadow-sm">
+            <div className="bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-gray-300 dark:border-gray-700 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-lg bg-surface/10 flex items-center justify-center">
                   <Percent className="w-4 h-4 text-white" />
                 </div>
-                <div className="text-xs font-bold text-gray-300 uppercase tracking-wide">
+                <div className="text-xs font-bold text-text-faint uppercase tracking-wide">
                   BLENDED
                 </div>
               </div>
@@ -1024,7 +1039,7 @@ export default function MarginsView({
               <Filter className="w-4 h-4 text-text-muted" />
               <span className="text-sm text-text-muted">Active filters:</span>
               {selectedCustomerType && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-cyan-100 text-cyan-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300 rounded-full text-sm font-medium">
                   {CHANNEL_LABELS[selectedCustomerType] || selectedCustomerType}
                   <button onClick={() => setSelectedCustomerType(null)} className="hover:text-cyan-900">
                     <X className="w-3 h-3" />
@@ -1032,7 +1047,7 @@ export default function MarginsView({
                 </span>
               )}
               {selectedCustomer && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-400 rounded-full text-sm font-medium">
                   {selectedCustomer}
                   <button onClick={() => setSelectedCustomer(null)} className="hover:text-purple-900">
                     <X className="w-3 h-3" />
@@ -1040,7 +1055,7 @@ export default function MarginsView({
                 </span>
               )}
               {selectedTier && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-full text-sm font-medium">
                   {selectedTier}
                   <button onClick={() => setSelectedTier(null)} className="hover:text-amber-900">
                     <X className="w-3 h-3" />
@@ -1048,7 +1063,7 @@ export default function MarginsView({
                 </span>
               )}
               {selectedCategoryFilter && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-sm font-medium">
                   {selectedCategoryFilter}
                   <button onClick={() => setSelectedCategoryFilter(null)} className="hover:text-green-900">
                     <X className="w-3 h-3" />
@@ -1057,7 +1072,7 @@ export default function MarginsView({
               )}
               <button
                 onClick={clearFilters}
-                className="text-sm text-red-600 hover:text-red-700 font-medium ml-2"
+                className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-medium ml-2"
               >
                 Clear all
               </button>
@@ -1252,7 +1267,7 @@ export default function MarginsView({
                           key={`${customer.customer}-${index}`}
                           onClick={() => setSelectedCustomer(selectedCustomer === customer.customer ? null : customer.customer)}
                           className={`border-b border-border-secondary cursor-pointer transition-colors ${
-                            selectedCustomer === customer.customer ? 'bg-purple-50' : 'hover:bg-hover'
+                            selectedCustomer === customer.customer ? 'bg-purple-50 dark:bg-purple-950' : 'hover:bg-hover'
                           }`}
                         >
                           <td className="px-4 py-3 font-medium text-text-primary">{customer.customer}</td>
@@ -1290,10 +1305,10 @@ export default function MarginsView({
                 </div>
                 <div className="flex items-center gap-4 text-sm">
                   <span className="flex items-center gap-1">
-                    <span className="text-emerald-600">🟢</span> Above baseline
+                    <span className="text-emerald-600 dark:text-emerald-400">🟢</span> Above baseline
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="text-red-600">🔴</span> Below baseline
+                    <span className="text-red-600 dark:text-red-400">🔴</span> Below baseline
                   </span>
                   <span className="text-text-muted">
                     {formatNumber(sortedStyleChannelMargins.length)} styles
@@ -1309,7 +1324,7 @@ export default function MarginsView({
                     className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
                       styleLevelSeasonFilter === 'all'
                         ? 'bg-cyan-600 text-white'
-                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                        : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-gray-700'
                     }`}
                   >
                     All Seasons
@@ -1321,7 +1336,7 @@ export default function MarginsView({
                       className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
                         styleLevelSeasonFilter === season
                           ? 'bg-cyan-600 text-white'
-                          : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300'
+                          : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-gray-700'
                       }`}
                     >
                       {season}
@@ -1441,7 +1456,7 @@ export default function MarginsView({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedStyleChannelMargins.slice(0, 50).map((style, index) => {
+                  {sortedStyleChannelMargins.slice(0, tableDisplayLimit).map((style, index) => {
                     const isExpanded = expandedStyle === style.styleNumber;
                     const deltaIndicator = style.marginDelta >= 2 ? '🟢' : style.marginDelta <= -2 ? '🔴' : '';
 
@@ -1452,7 +1467,7 @@ export default function MarginsView({
                           onClick={() => toggleStyleExpand(style.styleNumber)}
                           className={`border-b border-border-primary cursor-pointer transition-colors ${
                             index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
-                          } ${isExpanded ? 'bg-cyan-50' : 'hover:bg-hover-accent'}`}
+                          } ${isExpanded ? 'bg-cyan-50 dark:bg-cyan-950' : 'hover:bg-hover-accent'}`}
                         >
                           <td className="px-4 py-3">
                             <span className="font-mono text-base font-bold text-text-primary">
@@ -1551,7 +1566,7 @@ export default function MarginsView({
                           <td className="px-4 py-3 text-right border-l-2 border-border-strong">
                             <span
                               className={`font-mono font-bold flex items-center justify-end gap-1 ${
-                                style.marginDelta >= 0 ? 'text-emerald-700' : 'text-red-700'
+                                style.marginDelta >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'
                               }`}
                             >
                               {deltaIndicator && <span>{deltaIndicator}</span>}
@@ -1597,7 +1612,7 @@ export default function MarginsView({
                                         </div>
                                         <div className="flex justify-between">
                                           <span className="text-text-secondary">Channel Margin:</span>
-                                          <span className={`font-mono font-bold ${mix.margin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                          <span className={`font-mono font-bold ${mix.margin >= TARGET_MARGIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                                             {formatPercent(mix.margin)}
                                           </span>
                                         </div>
@@ -1625,7 +1640,7 @@ export default function MarginsView({
                                 </div>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onStyleClick(style.styleNumber); }}
-                                  className="ml-auto text-cyan-600 hover:text-cyan-700 font-semibold"
+                                  className="ml-auto text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-semibold"
                                 >
                                   View Full Details →
                                 </button>
@@ -1639,11 +1654,25 @@ export default function MarginsView({
                 </tbody>
               </table>
             </div>
-            {sortedStyleChannelMargins.length > 50 && (
-              <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center text-base text-text-secondary font-medium">
-                Showing 50 of {formatNumber(sortedStyleChannelMargins.length)} styles
+            {sortedStyleChannelMargins.length > tableDisplayLimit ? (
+              <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center">
+                <button
+                  onClick={() => setTableDisplayLimit(prev => Math.min(prev + 50, sortedStyleChannelMargins.length))}
+                  className="text-base text-accent hover:text-accent-hover font-medium transition-colors"
+                >
+                  Showing {tableDisplayLimit} of {formatNumber(sortedStyleChannelMargins.length)} styles — Show More
+                </button>
               </div>
-            )}
+            ) : sortedStyleChannelMargins.length > 50 ? (
+              <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center">
+                <button
+                  onClick={() => setTableDisplayLimit(50)}
+                  className="text-base text-text-secondary hover:text-text-primary font-medium transition-colors"
+                >
+                  Showing all {formatNumber(sortedStyleChannelMargins.length)} styles — Show Less
+                </button>
+              </div>
+            ) : null}
           </div>
         </>
       )}
@@ -1705,7 +1734,7 @@ export default function MarginsView({
                 <Percent className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className={`text-2xl font-bold font-mono ${stats.overallMargin >= TARGET_MARGIN ? 'text-emerald-600' : 'text-red-600'}`}>
+                <p className={`text-2xl font-bold font-mono ${stats.overallMargin >= TARGET_MARGIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                   {formatPercent(stats.overallMargin)}
                 </p>
                 <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
@@ -1741,7 +1770,7 @@ export default function MarginsView({
           {(selectedTier || selectedCategoryFilter) && (
             <button
               onClick={clearFilters}
-              className="text-sm text-cyan-600 hover:text-cyan-700 font-medium"
+              className="text-sm text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-medium"
             >
               Clear filters
             </button>
@@ -1849,7 +1878,7 @@ export default function MarginsView({
                   <tr
                     key={c.category}
                     onClick={() => handleCategoryClick(c.category)}
-                    className={`cursor-pointer transition-colors ${selectedCategoryFilter === c.category ? 'bg-cyan-50' : 'hover:bg-hover'}`}
+                    className={`cursor-pointer transition-colors ${selectedCategoryFilter === c.category ? 'bg-cyan-50 dark:bg-cyan-950' : 'hover:bg-hover'}`}
                   >
                     <td className="px-3 py-2 text-base text-text-secondary font-medium truncate max-w-[140px]">
                       {c.category}
@@ -2102,7 +2131,7 @@ export default function MarginsView({
               </tr>
             </thead>
             <tbody>
-              {sortedStyles.slice(0, 50).map((style, index) => (
+              {sortedStyles.slice(0, tableDisplayLimit).map((style, index) => (
                 <tr
                   key={style.styleNumber}
                   onClick={() => onStyleClick(style.styleNumber)}
@@ -2136,8 +2165,8 @@ export default function MarginsView({
                     <span
                       className={`text-base font-mono font-bold flex items-center justify-end gap-1 ${
                         style.vsTarget >= 0
-                          ? 'text-emerald-700'
-                          : 'text-red-700'
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-red-700 dark:text-red-300'
                       }`}
                     >
                       {style.vsTarget >= 0 ? '+' : ''}{style.vsTarget.toFixed(1)}%
@@ -2156,11 +2185,25 @@ export default function MarginsView({
             </tbody>
           </table>
         </div>
-        {sortedStyles.length > 50 && (
-          <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center text-base text-text-secondary font-medium">
-            Showing 50 of {formatNumber(sortedStyles.length)} styles
+        {sortedStyles.length > tableDisplayLimit ? (
+          <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center">
+            <button
+              onClick={() => setTableDisplayLimit(prev => Math.min(prev + 50, sortedStyles.length))}
+              className="text-base text-accent hover:text-accent-hover font-medium transition-colors"
+            >
+              Showing {tableDisplayLimit} of {formatNumber(sortedStyles.length)} styles — Show More
+            </button>
           </div>
-        )}
+        ) : sortedStyles.length > 50 ? (
+          <div className="px-6 py-4 border-t-2 border-border-strong bg-surface-tertiary text-center">
+            <button
+              onClick={() => setTableDisplayLimit(50)}
+              className="text-base text-text-secondary hover:text-text-primary font-medium transition-colors"
+            >
+              Showing all {formatNumber(sortedStyles.length)} styles — Show Less
+            </button>
+          </div>
+        ) : null}
       </div>
       )}
     </div>

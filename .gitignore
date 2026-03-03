@@ -15,6 +15,10 @@ public/data-*.json.gz
 # Prisma
 /src/generated/prisma
 
+# SQLite database files
+*.db
+*.db-journal
+
 # IDE
 .idea
 .vscode
@@ -29,7 +33,7 @@ Thumbs.db
 tsconfig.tsbuildinfo
 .vercel
 
-# Supabase CLI temp files
+# Supabase CLI temp files (legacy, can remove after migration)
 supabase/.temp/
 
 # Wireframe HTML files (design reference only)

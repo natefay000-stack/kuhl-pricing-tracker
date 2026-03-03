@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Save, RefreshCw } from 'lucide-react';
+import { Search, Save, RefreshCw, X } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
 interface AppHeaderProps {
@@ -17,17 +17,34 @@ export default function AppHeader({
   onRefresh
 }: AppHeaderProps) {
   return (
-    <header className="h-14 bg-surface border-b border-border-primary flex items-center justify-between px-6 sticky top-0 z-30">
+    <header
+      className="h-14 flex items-center justify-between px-6 sticky top-0 z-30"
+      style={{
+        background: 'var(--color-surface)',
+        backdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+        WebkitBackdropFilter: 'blur(var(--glass-blur)) saturate(var(--glass-saturate))',
+        borderBottom: '1px solid var(--glass-border)',
+        boxShadow: '0 1px 0 var(--glass-border), 0 4px 16px rgba(0, 0, 0, 0.06)',
+      }}
+    >
       {/* Search */}
       <div className="relative w-80">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint" />
+        <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${searchQuery ? 'text-blue-500' : 'text-text-faint'}`} />
         <input
           type="text"
-          placeholder="Search style #, description..."
+          placeholder="Search all views by style # or name..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 text-sm bg-surface-secondary border border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+          className={`w-full pl-10 ${searchQuery ? 'pr-8' : 'pr-4'} py-2 text-sm bg-surface-secondary border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 ${searchQuery ? 'border-blue-500/50' : 'border-border-primary'}`}
         />
+        {searchQuery && (
+          <button
+            onClick={() => onSearchChange('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-faint hover:text-text-primary transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Actions */}

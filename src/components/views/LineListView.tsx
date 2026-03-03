@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isFutureSeason } from '@/utils/season';
@@ -23,6 +23,10 @@ interface LineListViewProps {
   sales: SalesRecord[];
   pricing: PricingRecord[];
   costs: CostRecord[];
+  selectedSeason?: string;
+  selectedDivision?: string;
+  selectedCategory?: string;
+  searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
 
@@ -117,6 +121,10 @@ export default function LineListView({
   sales,
   pricing,
   costs,
+  selectedSeason: globalSeason = '',
+  selectedDivision: globalDivision = '',
+  selectedCategory: globalCategory = '',
+  searchQuery: globalSearchQuery,
   onStyleClick,
 }: LineListViewProps) {
   // Get unique seasons
@@ -134,6 +142,14 @@ export default function LineListView({
   const [productLineFilter, setProductLineFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+
+  // Sync global search → local search
+  useEffect(() => {
+    if (globalSearchQuery !== undefined && globalSearchQuery !== searchQuery) {
+      setSearchQuery(globalSearchQuery);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalSearchQuery]);
   const [visibleGroups, setVisibleGroups] = useState<Record<string, boolean>>({
     core: true,
     pricing: true,
@@ -144,6 +160,22 @@ export default function LineListView({
   });
   const [sortColumn, setSortColumn] = useState<string>('styleNumber');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  // Sync global FilterBar → local state
+  useEffect(() => {
+    if (!globalSeason || globalSeason === '__ALL_SP__' || globalSeason === '__ALL_FA__') return;
+    if (seasons.includes(globalSeason) && globalSeason !== selectedSeason) {
+      setSelectedSeason(globalSeason);
+    }
+  }, [globalSeason, seasons]);
+
+  useEffect(() => {
+    if (globalDivision !== divisionFilter) setDivisionFilter(globalDivision);
+  }, [globalDivision]);
+
+  useEffect(() => {
+    if (globalCategory !== categoryFilter) setCategoryFilter(globalCategory);
+  }, [globalCategory]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
   const [rollUpStyles, setRollUpStyles] = useState<boolean>(false);
@@ -589,7 +621,7 @@ export default function LineListView({
     if (rollUpStyles && key === 'color') {
       const count = row.colorCount || 1;
       return (
-        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 text-xs font-bold rounded">
+        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400 text-xs font-bold rounded">
           {count} color{count !== 1 ? 's' : ''}
         </span>
       );
@@ -800,11 +832,11 @@ export default function LineListView({
           <p className="text-sm text-text-muted font-bold uppercase mt-1">SKUs</p>
         </div>
         <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-emerald-600">{stats.new.toLocaleString()}</p>
+          <p className="text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{stats.new.toLocaleString()}</p>
           <p className="text-sm text-text-muted font-bold uppercase mt-1">New</p>
         </div>
         <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-red-600">{stats.dropped.toLocaleString()}</p>
+          <p className="text-3xl font-bold font-mono text-red-600 dark:text-red-400">{stats.dropped.toLocaleString()}</p>
           <p className="text-sm text-text-muted font-bold uppercase mt-1">Dropped</p>
         </div>
         <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
@@ -813,9 +845,9 @@ export default function LineListView({
         </div>
         {/* No Sales - only show for historical seasons */}
         {!isSelectedSeasonFuture && (
-          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-200' : 'bg-surface border-border-primary'}`}>
+          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-700' : 'bg-surface border-border-primary'}`}>
             <div className="flex items-center justify-center gap-2">
-              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600' : 'text-text-faint'}`}>
+              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-faint'}`}>
                 {stats.noSales.toLocaleString()}
               </p>
               {stats.noSales > 0 && hideNoSales && <EyeOff className="w-5 h-5 text-amber-500" />}
@@ -831,7 +863,7 @@ export default function LineListView({
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wide">Categories</span>
             {divisionFilter && (
-              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
                 {getGenderFromDivision(divisionFilter)}&apos;s
               </span>
             )}
@@ -853,15 +885,15 @@ export default function LineListView({
             onClick={() => setCategoryFilter('')}
             className={`relative p-4 rounded-xl border-2 transition-all text-center ${
               !categoryFilter
-                ? 'border-blue-500 bg-blue-50 shadow-md'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
                 : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
             }`}
           >
-            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600' : 'text-text-primary'}`}>
+            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
               {allCategoryTotals.styles}
             </div>
             <div className="text-xs text-text-muted uppercase tracking-wide mt-1">All</div>
-            <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600' : 'text-emerald-500'}`}>
+            <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-500'}`}>
               +{allCategoryTotals.new} new
             </div>
             {!categoryFilter && (
@@ -881,11 +913,11 @@ export default function LineListView({
                 onClick={() => setCategoryFilter(cat.name)}
                 className={`relative p-4 rounded-xl border-2 transition-all text-center ${
                   isSelected
-                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
                     : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
                 }`}
               >
-                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600' : 'text-text-primary'}`}>
+                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
                   {styleCount}
                 </div>
                 <div className="text-xs text-text-muted uppercase tracking-wide mt-1 truncate" title={cat.name}>
@@ -937,7 +969,7 @@ export default function LineListView({
               disabled={group.id === 'core'}
               className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
                 visibleGroups[group.id]
-                  ? 'bg-cyan-100 text-cyan-700 border-2 border-cyan-300'
+                  ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300 border-2 border-cyan-300 dark:border-cyan-700'
                   : 'bg-surface-tertiary text-text-muted border-2 border-transparent hover:bg-surface-tertiary'
               } ${group.id === 'core' ? 'cursor-default' : ''}`}
             >

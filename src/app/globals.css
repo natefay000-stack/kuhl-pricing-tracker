@@ -10,48 +10,66 @@
   --font-body: 'Supreme', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Semantic color tokens — light mode */
-  --color-page-bg: #f0f4f8;
-  --color-surface: #ffffff;
-  --color-surface-secondary: #f9fafb;
-  --color-surface-tertiary: #f3f4f6;
+  /* ── Semantic color tokens — light mode ─────────────────────── */
+  --color-page-bg: #e8edf2;
+  --color-surface: rgba(255, 255, 255, 0.72);
+  --color-surface-secondary: rgba(245, 247, 250, 0.65);
+  --color-surface-tertiary: rgba(235, 238, 243, 0.6);
   --color-text-primary: #111827;
   --color-text-secondary: #374151;
   --color-text-muted: #6b7280;
   --color-text-faint: #9ca3af;
-  --color-border-primary: #e5e7eb;
-  --color-border-secondary: #f3f4f6;
-  --color-border-strong: #d1d5db;
-  --color-hover: #f9fafb;
-  --color-hover-accent: #ecfeff;
-  --color-scrollbar-track: #e2e8f0;
+  --color-border-primary: rgba(200, 210, 225, 0.5);
+  --color-border-secondary: rgba(220, 228, 240, 0.4);
+  --color-border-strong: rgba(180, 190, 210, 0.6);
+  --color-hover: rgba(240, 245, 250, 0.7);
+  --color-hover-accent: rgba(200, 240, 255, 0.4);
+  --color-scrollbar-track: rgba(226, 232, 240, 0.5);
   --color-scrollbar-thumb: #c4b7a6;
   --color-scrollbar-thumb-hover: #9c7a5a;
+
+  /* Glass tokens */
+  --glass-blur: 24px;
+  --glass-saturate: 1.8;
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.03);
+  --glass-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
 }
 
 .dark {
-  --color-page-bg: #0f172a;
-  --color-surface: #1e293b;
-  --color-surface-secondary: #1e293b;
-  --color-surface-tertiary: #334155;
+  --color-page-bg: #0a0e1a;
+  --color-surface: rgba(20, 28, 48, 0.72);
+  --color-surface-secondary: rgba(18, 25, 42, 0.68);
+  --color-surface-tertiary: rgba(30, 40, 65, 0.6);
   --color-text-primary: #f1f5f9;
   --color-text-secondary: #cbd5e1;
   --color-text-muted: #94a3b8;
   --color-text-faint: #64748b;
-  --color-border-primary: #334155;
-  --color-border-secondary: #1e293b;
-  --color-border-strong: #475569;
-  --color-hover: #334155;
-  --color-hover-accent: #164e63;
-  --color-scrollbar-track: #1e293b;
-  --color-scrollbar-thumb: #475569;
-  --color-scrollbar-thumb-hover: #64748b;
+  --color-border-primary: rgba(60, 80, 120, 0.35);
+  --color-border-secondary: rgba(40, 55, 90, 0.3);
+  --color-border-strong: rgba(80, 100, 140, 0.4);
+  --color-hover: rgba(35, 50, 80, 0.6);
+  --color-hover-accent: rgba(20, 80, 100, 0.4);
+  --color-scrollbar-track: rgba(20, 30, 50, 0.5);
+  --color-scrollbar-thumb: rgba(70, 90, 130, 0.6);
+  --color-scrollbar-thumb-hover: rgba(90, 110, 150, 0.7);
+
+  /* Glass tokens — dark */
+  --glass-blur: 28px;
+  --glass-saturate: 1.6;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.2);
+  --glass-inner-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* ── Page background with subtle gradient mesh ─────────────────── */
 body {
   font-family: var(--font-body);
   background-color: var(--color-page-bg);
@@ -60,12 +78,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark mode: animated gradient mesh behind everything */
+.dark body {
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 20%, rgba(30, 60, 120, 0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 75%, rgba(60, 20, 100, 0.15) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(20, 80, 80, 0.1) 0%, transparent 50%),
+    var(--color-page-bg);
+  background-attachment: fixed;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-weight: 600;
 }
 
-/* Custom scrollbar */
+/* ── Custom scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -84,6 +112,50 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-scrollbar-thumb-hover);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   LIQUID GLASS UTILITY CLASSES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Base glass panel — frosted translucent surface */
+.glass {
+  background: var(--color-surface);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inner-glow);
+}
+
+/* Elevated glass — stronger blur, more shadow */
+.glass-elevated {
+  background: var(--color-surface);
+  backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg), var(--glass-inner-glow);
+}
+
+/* Subtle glass — lighter effect for nested panels */
+.glass-subtle {
+  background: var(--color-surface-secondary);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-inner-glow);
+}
+
+/* Glass pill — for buttons and badges */
+.glass-pill {
+  background: var(--color-surface-tertiary);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-inner-glow);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENT CLASSES (glass-enhanced)
+   ══════════════════════════════════════════════════════════════════ */
 
 /* Table styles */
 .pricing-table {
@@ -154,13 +226,15 @@ h1, h2, h3, h4, h5, h6 {
   @apply text-kuhl-rust bg-kuhl-rust/10;
 }
 
-/* Input styles */
+/* Input styles — glass treatment */
 input[type="text"],
 input[type="number"],
 input[type="search"],
 select {
   @apply font-body border rounded-lg py-2 focus:outline-none focus:ring-2 transition-all;
-  background-color: var(--color-surface);
+  background-color: var(--color-surface-tertiary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-color: var(--color-border-primary);
   color: var(--color-text-primary);
 }
@@ -170,29 +244,37 @@ input[type="number"]:focus,
 input[type="search"]:focus,
 select:focus {
   border-color: #0891b2;
-  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.2);
+  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.2), var(--glass-inner-glow);
 }
 
 /* Button styles */
 .btn-primary {
   @apply font-display font-medium bg-kuhl-stone text-kuhl-cream px-4 py-2 rounded-lg hover:bg-kuhl-earth transition-colors;
+  box-shadow: var(--glass-shadow);
 }
 
 .btn-secondary {
   @apply font-display font-medium px-4 py-2 rounded-lg transition-colors;
   background-color: var(--color-surface-tertiary);
   color: var(--color-text-secondary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-inner-glow);
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-border-primary);
+  background-color: var(--color-hover);
 }
 
-/* Card styles */
+/* Card styles — glass treatment */
 .card {
-  @apply rounded-xl shadow-sm overflow-hidden;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-primary);
+  @apply rounded-xl overflow-hidden;
+  background: var(--color-surface);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inner-glow);
 }
 
 .card-header {
@@ -267,11 +349,14 @@ select:focus {
   background-color: var(--color-surface-tertiary);
 }
 
-/* Stat card */
+/* Stat card — glass */
 .stat-card {
-  @apply rounded-xl p-5 shadow-sm;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-primary);
+  @apply rounded-xl p-5;
+  background: var(--color-surface);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inner-glow);
 }
 
 .stat-value {
