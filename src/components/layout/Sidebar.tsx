@@ -88,6 +88,11 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+// Flat map of ViewId → display label (used for PDF headers, filenames, etc.)
+export const VIEW_LABELS: Record<ViewId, string> = Object.fromEntries(
+  navGroups.flatMap(g => g.items.map(i => [i.id, i.label]))
+) as Record<ViewId, string>;
+
 const SIDEBAR_PINNED_KEY = 'kuhl-sidebar-pinned';
 
 export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick, collapsed, onCollapsedChange }: SidebarProps) {

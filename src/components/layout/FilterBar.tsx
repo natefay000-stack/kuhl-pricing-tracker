@@ -6,6 +6,12 @@ import { sortSeasons } from '@/lib/store';
 import { getSeasonStatus, type SeasonStatus } from '@/lib/season-utils';
 import { CUSTOMER_TYPE_LABELS } from '@/types/product';
 
+const MONTH_NAMES: Record<string, string> = {
+  '01': 'January', '02': 'February', '03': 'March', '04': 'April',
+  '05': 'May', '06': 'June', '07': 'July', '08': 'August',
+  '09': 'September', '10': 'October', '11': 'November', '12': 'December',
+};
+
 interface FilterBarProps {
   activeView: ViewId;
   seasons: string[];
@@ -14,18 +20,24 @@ interface FilterBarProps {
   designers: string[];
   customerTypes: string[];
   customers: string[];
+  years: string[];
+  months: string[];
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
   selectedDesigner: string;
   selectedCustomerType: string;
   selectedCustomer: string;
+  selectedMonth: string;
+  selectedYear: string;
   onSeasonChange: (season: string) => void;
   onDivisionChange: (division: string) => void;
   onCategoryChange: (category: string) => void;
   onDesignerChange: (designer: string) => void;
   onCustomerTypeChange: (ct: string) => void;
   onCustomerChange: (customer: string) => void;
+  onMonthChange: (month: string) => void;
+  onYearChange: (year: string) => void;
 }
 
 // ── Season pill color helpers ───────────────────────────────────────
@@ -73,18 +85,24 @@ export default function FilterBar({
   designers,
   customerTypes,
   customers,
+  years,
+  months,
   selectedSeason,
   selectedDivision,
   selectedCategory,
   selectedDesigner,
   selectedCustomerType,
   selectedCustomer,
+  selectedMonth,
+  selectedYear,
   onSeasonChange,
   onDivisionChange,
   onCategoryChange,
   onDesignerChange,
   onCustomerTypeChange,
   onCustomerChange,
+  onMonthChange,
+  onYearChange,
 }: FilterBarProps) {
   // Sort seasons chronologically and attach status
   const sortedSeasons = useMemo(() => {
@@ -294,6 +312,53 @@ export default function FilterBar({
             ))}
           </select>
         </div>
+
+        {/* Separator before date filters */}
+        {years.length > 0 && (
+          <div className="w-px h-10 bg-border-primary/50" />
+        )}
+
+        {/* Year */}
+        {years.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
+              Year
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => onYearChange(e.target.value)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[100px] ${
+                selectedYear ? 'border-cyan-500/50' : 'border-border-primary'
+              }`}
+            >
+              <option value="">All Years</option>
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Month */}
+        {years.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
+              Month
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => onMonthChange(e.target.value)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[130px] ${
+                selectedMonth ? 'border-cyan-500/50' : 'border-border-primary'
+              }`}
+            >
+              <option value="">All Months</option>
+              {months.map((m) => (
+                <option key={m} value={m}>{MONTH_NAMES[m] || m}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     </div>
   );

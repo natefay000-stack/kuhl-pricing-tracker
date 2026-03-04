@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import Sidebar, { ViewId } from '@/components/layout/Sidebar';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Sidebar, { ViewId, VIEW_LABELS } from '@/components/layout/Sidebar';
 import AppHeader from '@/components/layout/AppHeader';
 import FilterBar from '@/components/layout/FilterBar';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -34,6 +34,9 @@ const InvOpnSeasonView = retryDynamic(() => import('@/components/views/InvOpnSea
 const GeoHeatmapView = retryDynamic(() => import('@/components/views/GeoHeatmapView'));
 import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations } from '@/types/product';
 import { clearAllData } from '@/lib/db';
+import { exportViewToPdf } from '@/utils/exportPdf';
+import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
+import { exportMultiSheetExcel } from '@/utils/exportData';
 
 // Cache version - increment to invalidate cache
 // v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
@@ -207,6 +210,8 @@ export default function Home() {
   const [selectedDesigner, setSelectedDesigner] = useState<string>('');
   const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
 
   // Reset filters when navigating between views
   const handleViewChange = useCallback((view: ViewId) => {
@@ -216,6 +221,8 @@ export default function Home() {
     setSelectedDesigner('');
     setSelectedCustomerType('');
     setSelectedCustomer('');
+    setSelectedMonth('');
+    setSelectedYear('');
     setSearchQuery('');
   }, []);
 
@@ -224,6 +231,9 @@ export default function Home() {
 
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
+
+  // Ref for PDF export capture
+  const viewContentRef = useRef<HTMLDivElement>(null);
 
   // Derive filter options from data
   const seasons = useMemo(() => {
@@ -284,6 +294,68 @@ export default function Home() {
     sales.forEach(s => s.customer && s.customer !== 'Unknown' && all.add(s.customer));
     return Array.from(all).sort();
   }, [sales]);
+
+  // Derive available years and months from sales accounting periods / invoice dates
+  const availableYears = useMemo(() => {
+    const yrs = new Set<string>();
+    sales.forEach(s => {
+      // accountingPeriod format: "202601" (YYYYMM)
+      if (s.accountingPeriod && s.accountingPeriod.length >= 4) {
+        yrs.add(s.accountingPeriod.substring(0, 4));
+      } else if (s.invoiceDate) {
+        const d = new Date(s.invoiceDate);
+        if (!isNaN(d.getTime())) yrs.add(String(d.getFullYear()));
+      }
+    });
+    return Array.from(yrs).sort();
+  }, [sales]);
+
+  const availableMonths = useMemo(() => {
+    const mos = new Set<string>();
+    sales.forEach(s => {
+      // Filter by selected year first (if one is set)
+      let yr: string | null = null;
+      let mo: string | null = null;
+      if (s.accountingPeriod && s.accountingPeriod.length >= 6) {
+        yr = s.accountingPeriod.substring(0, 4);
+        mo = s.accountingPeriod.substring(4, 6);
+      } else if (s.invoiceDate) {
+        const d = new Date(s.invoiceDate);
+        if (!isNaN(d.getTime())) {
+          yr = String(d.getFullYear());
+          mo = String(d.getMonth() + 1).padStart(2, '0');
+        }
+      }
+      if (mo && (!selectedYear || yr === selectedYear)) {
+        mos.add(mo);
+      }
+    });
+    return Array.from(mos).sort();
+  }, [sales, selectedYear]);
+
+  // Pre-filter sales by selected year/month so all views benefit automatically
+  const dateFilteredSales = useMemo(() => {
+    if (!selectedYear && !selectedMonth) return sales;
+    return sales.filter(s => {
+      let yr: string | null = null;
+      let mo: string | null = null;
+      if (s.accountingPeriod && s.accountingPeriod.length >= 6) {
+        yr = s.accountingPeriod.substring(0, 4);
+        mo = s.accountingPeriod.substring(4, 6);
+      } else if (s.invoiceDate) {
+        const d = new Date(s.invoiceDate);
+        if (!isNaN(d.getTime())) {
+          yr = String(d.getFullYear());
+          mo = String(d.getMonth() + 1).padStart(2, '0');
+        }
+      }
+      // If there's no date info on this record, keep it (don't hide non-invoice data)
+      if (!yr && !mo) return true;
+      if (selectedYear && yr !== selectedYear) return false;
+      if (selectedMonth && mo !== selectedMonth) return false;
+      return true;
+    });
+  }, [sales, selectedYear, selectedMonth]);
 
   // ── Helper: yield to event loop so React can paint status updates ──
   const tick = () => new Promise<void>(r => setTimeout(r, 0));
@@ -585,6 +657,33 @@ export default function Home() {
       window.location.reload();
     }
   };
+
+  // ── Export handlers ────────────────────────────────────────────────
+  const handleExportPdf = useCallback(async () => {
+    const el = viewContentRef.current;
+    if (!el) return;
+    await exportViewToPdf(el, VIEW_LABELS[activeView] || activeView);
+  }, [activeView]);
+
+  const handleExportExcel = useCallback(() => {
+    const bundle: ViewDataBundle = {
+      products,
+      sales: dateFilteredSales,
+      pricing,
+      costs,
+      inventory,
+      selectedSeason,
+      selectedDivision,
+      selectedCategory,
+      searchQuery,
+    };
+    const result = getViewExportData(activeView, bundle);
+    if (!result) {
+      alert('Excel export is not available for this view. Use PDF export instead.');
+      return;
+    }
+    exportMultiSheetExcel(result.sheets, result.filename);
+  }, [activeView, products, dateFilteredSales, pricing, costs, inventory, selectedSeason, selectedDivision, selectedCategory, searchQuery]);
 
   // Handle style click
   const handleStyleClick = (styleNumber: string) => {
@@ -1241,6 +1340,8 @@ export default function Home() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onRefresh={handleRefresh}
+          onExportPdf={handleExportPdf}
+          onExportExcel={handleExportExcel}
         />
 
         {/* Filter Bar */}
@@ -1252,18 +1353,24 @@ export default function Home() {
           designers={designers}
           customerTypes={customerTypes}
           customers={customerNames}
+          years={availableYears}
+          months={availableMonths}
           selectedSeason={selectedSeason}
           selectedDivision={selectedDivision}
           selectedCategory={selectedCategory}
           selectedDesigner={selectedDesigner}
           selectedCustomerType={selectedCustomerType}
           selectedCustomer={selectedCustomer}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
           onSeasonChange={setSelectedSeason}
           onDivisionChange={setSelectedDivision}
           onCategoryChange={setSelectedCategory}
           onDesignerChange={setSelectedDesigner}
           onCustomerTypeChange={setSelectedCustomerType}
           onCustomerChange={setSelectedCustomer}
+          onMonthChange={setSelectedMonth}
+          onYearChange={setSelectedYear}
         />
 
         {/* Import error banner */}
@@ -1281,7 +1388,7 @@ export default function Home() {
 
         {/* View Content */}
         <SalesLoadingContext.Provider value={{ salesLoading, salesLoadingProgress }}>
-        <div className="min-h-[calc(100vh-112px)]">
+        <div ref={viewContentRef} className="min-h-[calc(100vh-112px)]">
           {activeView === 'executive' && (
             <ErrorBoundary viewName="Executive Dashboard">
               <ExecutiveDashboardView />
@@ -1292,7 +1399,7 @@ export default function Home() {
             <ErrorBoundary viewName="Dashboard">
               <DashboardView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 costs={costs}
                 salesAggregations={salesAggregations}
                 selectedSeason={selectedSeason}
@@ -1308,7 +1415,7 @@ export default function Home() {
             <ErrorBoundary viewName="Season View">
               <SeasonView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
                 selectedSeason={selectedSeason}
@@ -1324,7 +1431,7 @@ export default function Home() {
             <ErrorBoundary viewName="Season Comparison">
               <SeasonCompView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1338,7 +1445,7 @@ export default function Home() {
             <ErrorBoundary viewName="Sales">
               <SalesView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
                 salesAggregations={salesAggregations}
@@ -1355,7 +1462,7 @@ export default function Home() {
             <ErrorBoundary viewName="Top Styles">
               <TopStylesChannelView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1371,7 +1478,7 @@ export default function Home() {
             <ErrorBoundary viewName="Inventory">
               <InventoryView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 inventory={inventory}
                 inventoryAggregations={invAggregations || undefined}
                 inventoryOH={inventoryOH}
@@ -1389,7 +1496,7 @@ export default function Home() {
             <ErrorBoundary viewName="Sell-Through">
               <SellThroughView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 inventoryOH={inventoryOH}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
@@ -1406,7 +1513,7 @@ export default function Home() {
                 products={products}
                 pricing={pricing}
                 costs={costs}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1420,7 +1527,7 @@ export default function Home() {
             <ErrorBoundary viewName="Tariffs">
               <TariffView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 costs={costs}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
@@ -1437,7 +1544,7 @@ export default function Home() {
                 products={products}
                 pricing={pricing}
                 costs={costs}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1451,7 +1558,7 @@ export default function Home() {
             <ErrorBoundary viewName="Style Master">
               <StyleMasterView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
                 selectedSeason={selectedSeason}
@@ -1466,7 +1573,7 @@ export default function Home() {
             <ErrorBoundary viewName="Margins">
               <MarginsView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 costs={costs}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
@@ -1481,7 +1588,7 @@ export default function Home() {
             <ErrorBoundary viewName="Customers">
               <CustomerView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1496,7 +1603,7 @@ export default function Home() {
             <ErrorBoundary viewName="Line List">
               <LineListView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
                 selectedSeason={selectedSeason}
@@ -1512,7 +1619,7 @@ export default function Home() {
             <ErrorBoundary viewName="Validation">
               <ValidationView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
@@ -1529,7 +1636,7 @@ export default function Home() {
             <ErrorBoundary viewName="Style/Color Performance">
               <StyleColorPerfView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 costs={costs}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
@@ -1545,7 +1652,7 @@ export default function Home() {
           {activeView === 'geoheatmap' && (
             <ErrorBoundary viewName="Geo Heat Map">
               <GeoHeatmapView
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1558,7 +1665,7 @@ export default function Home() {
             <ErrorBoundary viewName="Inv-Opn Season">
               <InvOpnSeasonView
                 products={products}
-                sales={sales}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}

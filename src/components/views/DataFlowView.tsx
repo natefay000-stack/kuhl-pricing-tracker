@@ -25,6 +25,12 @@ import {
   ChevronRight,
   ChevronLeft,
   LucideIcon,
+  Receipt,
+  Globe,
+  CheckCircle,
+  BarChart3,
+  ArrowDownUp,
+  Shield,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -53,7 +59,7 @@ interface Connection {
 // ── Constants ──────────────────────────────────────────────────────
 
 const CANVAS_W = 3000;
-const CANVAS_H = 2000;
+const CANVAS_H = 2600;
 const NODE_W = 260;
 const NODE_H = 72;
 const DEFAULT_ZOOM = 0.55;
@@ -86,25 +92,28 @@ function buildNodes(): FlowNode[] {
   const COL = { sources: 150, entities: 850, pages: 1600, outputs: 2500 };
 
   // Y positions per column (centered on canvas)
-  const srcY = (i: number) => 300 + i * 220;
-  const entY = (i: number) => 300 + i * 220;
-  const pgY  = (i: number) => 100 + i * 150;
+  const srcY = (i: number) => 200 + i * 190;
+  const entY = (i: number) => 200 + i * 200;
+  const pgY  = (i: number) => 60  + i * 130;
   const outY = (i: number) => 550 + i * 300;
 
   const nodes: Omit<FlowNode, 'flowsFrom'>[] = [
     // ── Data Sources ──
-    { id: 'sales-data',     title: 'Sales Data',      type: 'source', icon: ShoppingBag,    colorClass: 'green',  x: COL.sources, y: srcY(0), fields: ['Revenue', 'Units Booked', 'Units Open', 'Customer', 'Season', 'Style Number', 'Color Code', 'Customer Type'], flowsTo: ['order', 'style', 'customer', 'season'] },
-    { id: 'inventory-data', title: 'Inventory Data',   type: 'source', icon: Warehouse,      colorClass: 'blue',   x: COL.sources, y: srcY(1), fields: ['On-Hand Qty', 'Movement Type', 'Warehouse', 'Period', 'Extension Value', 'Size'], flowsTo: ['inventory'] },
-    { id: 'product-master', title: 'Product Master',   type: 'source', icon: Package,        colorClass: 'purple', x: COL.sources, y: srcY(2), fields: ['Style Number', 'Description', 'Category', 'Division', 'Gender', 'Designer', 'Season'], flowsTo: ['style', 'season'] },
-    { id: 'customer-data',  title: 'Customer Data',    type: 'source', icon: Users,          colorClass: 'orange', x: COL.sources, y: srcY(3), fields: ['Customer Name', 'Customer Type', 'Discount Tier', 'Region', 'Sales Rep', 'Payment Terms'], flowsTo: ['customer'] },
-    { id: 'planning-data',  title: 'Planning Data',    type: 'source', icon: Calendar,       colorClass: 'purple', x: COL.sources, y: srcY(4), fields: ['Season Plan', 'MSRP', 'Wholesale Price', 'Landed Cost', 'Factory', 'Country of Origin'], flowsTo: ['style', 'season'] },
+    { id: 'sales-data',     title: 'Sales Data',       type: 'source', icon: ShoppingBag,    colorClass: 'green',  x: COL.sources, y: srcY(0), fields: ['Revenue', 'Units Booked', 'Units Open', 'Customer', 'Season', 'Style Number', 'Color Code', 'Customer Type'], flowsTo: ['order', 'style', 'customer', 'season'] },
+    { id: 'invoice-data',   title: 'Invoice Data',     type: 'source', icon: Receipt,        colorClass: 'green',  x: COL.sources, y: srcY(1), fields: ['Invoice Date', 'Accounting Period', 'Invoice Number', 'Shipped at Net', 'Ship To State', 'Customer', 'Season'], flowsTo: ['order', 'customer', 'season'] },
+    { id: 'inventory-data', title: 'Inventory Data',   type: 'source', icon: Warehouse,      colorClass: 'blue',   x: COL.sources, y: srcY(2), fields: ['On-Hand Qty', 'Movement Type', 'Warehouse', 'Period', 'Extension Value', 'Size'], flowsTo: ['inventory'] },
+    { id: 'product-master', title: 'Product Master',   type: 'source', icon: Package,        colorClass: 'purple', x: COL.sources, y: srcY(3), fields: ['Style Number', 'Description', 'Category', 'Division', 'Gender', 'Designer', 'Season'], flowsTo: ['style', 'season'] },
+    { id: 'cost-data',      title: 'Cost / Landed',    type: 'source', icon: DollarSign,     colorClass: 'orange', x: COL.sources, y: srcY(4), fields: ['FOB', 'Landed Cost', 'Duty', 'Tariff', 'Freight', 'Overhead', 'Factory', 'Country of Origin'], flowsTo: ['cost', 'style'] },
+    { id: 'customer-data',  title: 'Customer Data',    type: 'source', icon: Users,          colorClass: 'orange', x: COL.sources, y: srcY(5), fields: ['Customer Name', 'Customer Type', 'Discount Tier', 'Region', 'Sales Rep', 'Payment Terms'], flowsTo: ['customer'] },
+    { id: 'planning-data',  title: 'Planning Data',    type: 'source', icon: Calendar,       colorClass: 'purple', x: COL.sources, y: srcY(6), fields: ['Season Plan', 'MSRP', 'Wholesale Price', 'Landed Cost', 'Factory', 'Country of Origin'], flowsTo: ['style', 'season'] },
 
     // ── Core Entities ──
-    { id: 'style',     title: 'Style',      type: 'entity', icon: Package,   colorClass: 'purple', x: COL.entities, y: entY(0), fields: ['Style Number', 'Description', 'Category', 'Division', 'Designer', 'Gender', 'MSRP', 'Wholesale'], flowsTo: ['page-dashboard', 'page-season', 'page-sales', 'page-products', 'page-pricing', 'page-linelist', 'page-topstyles', 'page-stylecolor'] },
-    { id: 'customer',  title: 'Customer',   type: 'entity', icon: Users,     colorClass: 'orange', x: COL.entities, y: entY(1), fields: ['Customer Name', 'Type', 'Tier', 'Region', 'Territory', 'Active Since'], flowsTo: ['page-customers', 'page-sales', 'page-topstyles'] },
-    { id: 'order',     title: 'Order',      type: 'entity', icon: ShoppingBag, colorClass: 'green', x: COL.entities, y: entY(2), fields: ['Revenue', 'Units Booked', 'Net Price', 'Season', 'Channel', 'Status'], flowsTo: ['page-dashboard', 'page-season', 'page-seasoncomp', 'page-sales', 'page-margins'] },
-    { id: 'inventory', title: 'Inventory',  type: 'entity', icon: Warehouse, colorClass: 'blue',   x: COL.entities, y: entY(3), fields: ['On-Hand Qty', 'Movements', 'Warehouse', 'Extension Value', 'Size Breakdown'], flowsTo: ['page-inventory'] },
-    { id: 'season',    title: 'Season',     type: 'entity', icon: Calendar,  colorClass: 'cyan',   x: COL.entities, y: entY(4), fields: ['Season Code', 'Status', 'Date Range', 'Style Count', 'Revenue Total'], flowsTo: ['page-season', 'page-seasoncomp', 'page-dashboard'] },
+    { id: 'style',     title: 'Style',      type: 'entity', icon: Package,     colorClass: 'purple', x: COL.entities, y: entY(0), fields: ['Style Number', 'Description', 'Category', 'Division', 'Designer', 'Gender', 'MSRP', 'Wholesale'], flowsTo: ['page-dashboard', 'page-season', 'page-sales', 'page-products', 'page-pricing', 'page-linelist', 'page-topstyles', 'page-stylecolor', 'page-sellthrough', 'page-invopn'] },
+    { id: 'customer',  title: 'Customer',   type: 'entity', icon: Users,       colorClass: 'orange', x: COL.entities, y: entY(1), fields: ['Customer Name', 'Type', 'Tier', 'Region', 'Territory', 'Active Since'], flowsTo: ['page-customers', 'page-sales', 'page-topstyles', 'page-geoheatmap'] },
+    { id: 'order',     title: 'Order',      type: 'entity', icon: ShoppingBag, colorClass: 'green',  x: COL.entities, y: entY(2), fields: ['Revenue', 'Units Booked', 'Net Price', 'Season', 'Channel', 'Invoice Date', 'Accounting Period'], flowsTo: ['page-dashboard', 'page-season', 'page-seasoncomp', 'page-sales', 'page-margins', 'page-geoheatmap', 'page-invopn'] },
+    { id: 'inventory', title: 'Inventory',  type: 'entity', icon: Warehouse,   colorClass: 'blue',   x: COL.entities, y: entY(3), fields: ['On-Hand Qty', 'Movements', 'Warehouse', 'Extension Value', 'Size Breakdown'], flowsTo: ['page-inventory', 'page-sellthrough'] },
+    { id: 'cost',      title: 'Cost',       type: 'entity', icon: DollarSign,  colorClass: 'orange', x: COL.entities, y: entY(4), fields: ['FOB', 'Landed Cost', 'Duty Rate', 'Tariff Cost', 'Freight', 'Margin %'], flowsTo: ['page-costs', 'page-tariffs', 'page-margins', 'page-pricing'] },
+    { id: 'season',    title: 'Season',     type: 'entity', icon: Calendar,    colorClass: 'cyan',   x: COL.entities, y: entY(5), fields: ['Season Code', 'Status', 'Date Range', 'Style Count', 'Revenue Total'], flowsTo: ['page-season', 'page-seasoncomp', 'page-dashboard'] },
 
     // ── Pages ──
     { id: 'page-dashboard',  title: 'Dashboard',        type: 'page', icon: LayoutDashboard, colorClass: 'gray', x: COL.pages, y: pgY(0),  fields: ['Total Revenue', 'Total Units', 'Inventory Value', 'Active Customers', 'Margin %'], flowsTo: ['output-reports', 'output-decisions'] },
@@ -112,13 +121,19 @@ function buildNodes(): FlowNode[] {
     { id: 'page-seasoncomp', title: 'Season Comp',      type: 'page', icon: GitCompare,      colorClass: 'gray', x: COL.pages, y: pgY(2),  fields: ['YoY Revenue', 'YoY Units', 'Margin Change', 'Customer Changes', 'Style Changes'], flowsTo: ['output-reports', 'output-decisions'] },
     { id: 'page-sales',      title: 'Sales Analysis',   type: 'page', icon: ShoppingBag,     colorClass: 'gray', x: COL.pages, y: pgY(3),  fields: ['Revenue by Style', 'Revenue by Category', 'Revenue by Channel', 'Margin by Style'], flowsTo: ['output-reports', 'output-decisions'] },
     { id: 'page-inventory',  title: 'Inventory',        type: 'page', icon: Warehouse,       colorClass: 'gray', x: COL.pages, y: pgY(4),  fields: ['Stock by Style', 'Size Matrix', 'Weeks of Supply', 'Sell-Through %'], flowsTo: ['output-reports', 'output-alerts'] },
-    { id: 'page-stylecolor', title: 'Style/Color Perf', type: 'page', icon: Palette,         colorClass: 'gray', x: COL.pages, y: pgY(5),  fields: ['Color Revenue', 'New/Drop Colors', 'YoY by Color', 'Style Trends'], flowsTo: ['output-reports', 'output-decisions'] },
-    { id: 'page-customers',  title: 'Customers',        type: 'page', icon: Users,           colorClass: 'gray', x: COL.pages, y: pgY(6),  fields: ['Customer List', 'Revenue per Customer', 'Margin per Customer', 'Top Styles'], flowsTo: ['output-reports', 'output-decisions'] },
-    { id: 'page-topstyles',  title: 'Top Styles',       type: 'page', icon: Trophy,          colorClass: 'gray', x: COL.pages, y: pgY(7),  fields: ['Top 10 by Channel', 'F27 Status', 'Channel Gaps', 'Consistency Score'], flowsTo: ['output-reports', 'output-decisions'] },
-    { id: 'page-products',   title: 'Style Master',     type: 'page', icon: Package,         colorClass: 'gray', x: COL.pages, y: pgY(8),  fields: ['All Styles', 'Pricing', 'Categories', 'Season Status', 'Designer'], flowsTo: ['output-reports'] },
-    { id: 'page-pricing',    title: 'Pricing',          type: 'page', icon: DollarSign,      colorClass: 'gray', x: COL.pages, y: pgY(9),  fields: ['MSRP', 'Wholesale', 'Landed Cost', 'Margin Analysis', 'Price Changes'], flowsTo: ['output-reports', 'output-decisions', 'output-alerts'] },
-    { id: 'page-margins',    title: 'Margins',          type: 'page', icon: Percent,         colorClass: 'gray', x: COL.pages, y: pgY(10), fields: ['Margin by Style', 'Margin by Channel', 'Margin Tiers', 'Cost vs Revenue'], flowsTo: ['output-reports', 'output-alerts'] },
-    { id: 'page-linelist',   title: 'Line List',        type: 'page', icon: List,            colorClass: 'gray', x: COL.pages, y: pgY(11), fields: ['Full Line Plan', 'Season Styles', 'Pricing Grid', 'Status Tracking'], flowsTo: ['output-reports'] },
+    { id: 'page-sellthrough', title: 'Sell-Through',    type: 'page', icon: ArrowDownUp,     colorClass: 'gray', x: COL.pages, y: pgY(5),  fields: ['Sell-Through %', 'Units Sold vs On-Hand', 'By Style', 'By Category'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-stylecolor', title: 'Style/Color Perf', type: 'page', icon: Palette,         colorClass: 'gray', x: COL.pages, y: pgY(6),  fields: ['Color Revenue', 'New/Drop Colors', 'YoY by Color', 'Style Trends'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-customers',  title: 'Customers',        type: 'page', icon: Users,           colorClass: 'gray', x: COL.pages, y: pgY(7),  fields: ['Customer List', 'Revenue per Customer', 'Margin per Customer', 'Top Styles'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-topstyles',  title: 'Top Styles',       type: 'page', icon: Trophy,          colorClass: 'gray', x: COL.pages, y: pgY(8),  fields: ['Top 10 by Channel', 'F27 Status', 'Channel Gaps', 'Consistency Score'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-products',   title: 'Style Master',     type: 'page', icon: Package,         colorClass: 'gray', x: COL.pages, y: pgY(9),  fields: ['All Styles', 'Pricing', 'Categories', 'Season Status', 'Designer'], flowsTo: ['output-reports'] },
+    { id: 'page-pricing',    title: 'Pricing',          type: 'page', icon: DollarSign,      colorClass: 'gray', x: COL.pages, y: pgY(10), fields: ['MSRP', 'Wholesale', 'Landed Cost', 'Margin Analysis', 'Price Changes'], flowsTo: ['output-reports', 'output-decisions', 'output-alerts'] },
+    { id: 'page-costs',      title: 'Costs',            type: 'page', icon: DollarSign,      colorClass: 'gray', x: COL.pages, y: pgY(11), fields: ['FOB', 'Landed Cost', 'Duty', 'Freight', 'Overhead', 'By Factory'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-margins',    title: 'Margins',          type: 'page', icon: Percent,         colorClass: 'gray', x: COL.pages, y: pgY(12), fields: ['Margin by Style', 'Margin by Channel', 'Margin Tiers', 'Cost vs Revenue'], flowsTo: ['output-reports', 'output-alerts'] },
+    { id: 'page-tariffs',    title: 'Tariffs',          type: 'page', icon: Shield,          colorClass: 'gray', x: COL.pages, y: pgY(13), fields: ['Tariff Impact', 'Duty Rates', 'Country of Origin', 'Cost Scenarios'], flowsTo: ['output-reports', 'output-decisions', 'output-alerts'] },
+    { id: 'page-linelist',   title: 'Line List',        type: 'page', icon: List,            colorClass: 'gray', x: COL.pages, y: pgY(14), fields: ['Full Line Plan', 'Season Styles', 'Pricing Grid', 'Status Tracking'], flowsTo: ['output-reports'] },
+    { id: 'page-geoheatmap', title: 'Geo Heat Map',     type: 'page', icon: Globe,           colorClass: 'gray', x: COL.pages, y: pgY(15), fields: ['Revenue by State', 'Units by Region', 'Customer Concentration', 'Ship-To Analysis'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-invopn',     title: 'Inv-Opn Season',   type: 'page', icon: BarChart3,       colorClass: 'gray', x: COL.pages, y: pgY(16), fields: ['Open Orders by Season', 'Inventory vs Open', 'Style Coverage', 'Fill Rate'], flowsTo: ['output-reports', 'output-decisions'] },
+    { id: 'page-validation', title: 'Validation',       type: 'page', icon: CheckCircle,     colorClass: 'gray', x: COL.pages, y: pgY(17), fields: ['Data Quality Checks', 'Missing Fields', 'Price Mismatches', 'Duplicate Detection'], flowsTo: ['output-alerts'] },
 
     // ── Outputs ──
     { id: 'output-reports',   title: 'Reports',   type: 'output', icon: FileText,      colorClass: 'red', x: COL.outputs, y: outY(0), fields: ['Season Summary PDF', 'Price Lists Excel', 'Margin Analysis', 'Style Performance'], flowsTo: [] },

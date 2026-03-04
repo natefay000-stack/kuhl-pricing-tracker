@@ -88,6 +88,29 @@ export function exportToCSV(data: any[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** Export multiple sheets into a single Excel workbook */
+export function exportMultiSheetExcel(
+  sheets: { name: string; data: Record<string, unknown>[] }[],
+  filename: string,
+) {
+  const wb = XLSX.utils.book_new();
+  let hasData = false;
+  for (const sheet of sheets) {
+    if (sheet.data.length > 0) {
+      const ws = XLSX.utils.json_to_sheet(sheet.data);
+      // Sheet names max 31 chars in Excel
+      XLSX.utils.book_append_sheet(wb, ws, sheet.name.substring(0, 31));
+      hasData = true;
+    }
+  }
+  if (!hasData) {
+    alert('No data to export');
+    return;
+  }
+  const dateStr = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `${filename}_${dateStr}.xlsx`);
+}
+
 export function exportTableToCSV(tableId: string, filename: string) {
   const table = document.getElementById(tableId);
   if (!table) {
