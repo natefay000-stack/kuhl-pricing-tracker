@@ -15,7 +15,17 @@ import {
   AlertTriangle,
   Clock,
 } from 'lucide-react';
-import { FileType } from '@/lib/file-detection';
+import { FileType, detectFileType } from '@/lib/file-detection';
+import * as XLSX from 'xlsx';
+import {
+  parseSalesXLSX,
+  parseLineListXLSX,
+  parseLandedSheetXLSX,
+  parsePricingXLSX,
+  mergeSeasonData,
+  convertToAppFormats,
+} from '@/lib/xlsx-import';
+import { normalizeCategory } from '@/types/product';
 
 type ModalState = 'drop' | 'detecting' | 'confirm' | 'importing' | 'complete';
 type MultiFileState = 'queue' | 'importing' | 'complete';
@@ -205,24 +215,31 @@ export default function SmartImportModal({
       ));
 
       try {
-        const formData = new FormData();
-        formData.append('file', items[i].file);
-
-        const response = await fetch('/api/detect-file', {
-          method: 'POST',
-          body: formData,
+        // Client-side detection to avoid Vercel 4.5MB body limit
+        const buffer = await items[i].file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheetName = workbook.SheetNames.includes('Sheet1') ? 'Sheet1' : workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+        const totalRows = range.e.r - range.s.r;
+        const rows = XLSX.utils.sheet_to_json(sheet, {
+          defval: '',
+          range: { s: { r: 0, c: 0 }, e: { r: 20, c: range.e.c } },
+        }) as Record<string, unknown>[];
+        const cleanedRows = rows.filter(row => {
+          const keys = Object.keys(row).filter(k => !k.startsWith('__EMPTY'));
+          return keys.some(k => row[k] !== '' && row[k] !== null && row[k] !== undefined);
         });
-
-        if (!response.ok) {
-          const errText = await response.text().catch(() => '(no body)');
-          throw new Error(`Detection failed (${response.status}): ${errText}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || 'Detection failed');
-        }
+        if (cleanedRows.length === 0) throw new Error('File appears empty');
+        const headers = Object.keys(cleanedRows[0]).filter(h => !h.startsWith('__EMPTY'));
+        const det = detectFileType(headers);
+        const detectedSeason = extractSeasonFromFilename(items[i].file.name);
+        const result = {
+          success: true,
+          detectedType: det.type,
+          recordCount: totalRows,
+          detectedSeason,
+        };
 
         // Check if it's a sales or invoice file
         if (result.detectedType !== 'sales' && result.detectedType !== 'invoice') {
@@ -428,29 +445,65 @@ export default function SmartImportModal({
     setState('detecting');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Parse the file client-side to avoid Vercel's 4.5MB body size limit
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
 
-      const response = await fetch('/api/detect-file', {
-        method: 'POST',
-        body: formData,
+      // Pick the best sheet
+      let sheetName = workbook.SheetNames[0];
+      if (workbook.SheetNames.includes('Line List')) {
+        sheetName = 'Line List';
+      } else if (workbook.SheetNames.includes('Sheet1')) {
+        sheetName = 'Sheet1';
+      } else if (workbook.SheetNames.includes('LDP Requests')) {
+        sheetName = 'LDP Requests';
+      }
+
+      const sheet = workbook.Sheets[sheetName];
+      const isLDPSheet = sheetName === 'LDP Requests';
+
+      // Only parse first 20 rows for detection
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+      const totalRows = range.e.r - range.s.r;
+      const startRow = isLDPSheet ? 10 : 0;
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        defval: '',
+        range: { s: { r: startRow, c: 0 }, e: { r: startRow + 20, c: range.e.c } },
+      }) as Record<string, unknown>[];
+
+      const cleanedRows = rows.filter(row => {
+        const keys = Object.keys(row).filter(k => !k.startsWith('__EMPTY'));
+        return keys.some(k => row[k] !== '' && row[k] !== null && row[k] !== undefined);
       });
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '(no body)');
-        throw new Error(`File analysis failed (${response.status}): ${errText}`);
+      if (cleanedRows.length === 0) {
+        throw new Error('File appears to be empty or has no data rows');
       }
 
-      const result = await response.json();
+      const allHeaders = Object.keys(cleanedRows[0]);
+      const headers = allHeaders.filter(h => !h.startsWith('__EMPTY'));
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to analyze file');
-      }
+      const detection = detectFileType(headers);
+      const detectedSeason = extractSeasonFromFilename(file.name);
+      const previewRows = cleanedRows.slice(0, 5);
+      const recordCount = Math.max(totalRows - startRow, cleanedRows.length);
+
+      const result = {
+        filename: file.name,
+        fileSize: formatFileSize(file.size),
+        detectedType: detection.type,
+        confidence: detection.confidence,
+        matchedColumns: detection.matchedColumns,
+        allColumns: detection.allColumns,
+        recordCount,
+        detectedSeason,
+        previewRows,
+        success: true,
+      };
 
       setDetection(result);
       setSelectedType(result.detectedType);
 
-      // Use detected season if available, otherwise default
       if (result.detectedSeason) {
         setSelectedSeason(result.detectedSeason);
       }
@@ -470,71 +523,173 @@ export default function SmartImportModal({
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('fileType', selectedType);
-      // Season is now read from the file for Line List imports
-      // Only send season if user explicitly wants to override
-
+      // Parse the file entirely client-side to avoid Vercel's 4.5MB body limit
+      const buffer = await selectedFile.arrayBuffer();
       setImportProgress(30);
 
-      const response = await fetch('/api/import-file', {
-        method: 'POST',
-        body: formData,
-      });
+      let data: Record<string, unknown> = {};
+
+      if (selectedType === 'sales' || selectedType === 'invoice') {
+        const salesData = parseSalesXLSX(buffer);
+        console.log(`Parsed ${selectedType} client-side:`, salesData.length, 'records');
+
+        const seasonCounts: Record<string, number> = {};
+        for (const s of salesData) {
+          const season = s.season || 'Unknown';
+          seasonCounts[season] = (seasonCounts[season] || 0) + 1;
+        }
+        const seasons = Object.keys(seasonCounts).filter(s => s !== 'Unknown');
+        const seasonSummary = Object.entries(seasonCounts)
+          .sort(([a], [b]) => b.localeCompare(a))
+          .map(([s, count]) => `${s}: ${count.toLocaleString()}`)
+          .join(', ');
+
+        const salesAppData = salesData.map((s, index) => ({
+          id: `sale-${index}`,
+          styleNumber: s.styleNumber,
+          styleDesc: s.styleDesc,
+          colorCode: s.colorCode,
+          colorDesc: s.colorDesc,
+          season: s.season,
+          seasonType: 'Main',
+          customer: s.customer,
+          customerType: s.customerType,
+          unitsBooked: s.unitsBooked,
+          unitsOpen: s.unitsOpen || 0,
+          revenue: s.revenue,
+          shipped: s.shipped || 0,
+          cost: s.cost || 0,
+          wholesalePrice: s.wholesalePrice || 0,
+          msrp: s.msrp || 0,
+          netUnitPrice: s.netUnitPrice || (s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0),
+          divisionDesc: s.divisionDesc,
+          categoryDesc: normalizeCategory(s.categoryDesc),
+          gender: s.gender || '',
+          salesRep: s.salesRep || '',
+          orderType: s.orderType || '',
+          invoiceDate: s.invoiceDate || null,
+          accountingPeriod: s.accountingPeriod || null,
+          invoiceNumber: s.invoiceNumber || null,
+          shipToState: s.shipToState || null,
+          returnedAtNet: s.returnedAtNet || 0,
+          shippedAtNet: s.shippedAtNet || 0,
+          totalPrice: s.totalPrice || 0,
+          commissionRate: s.commissionRate || 0,
+          ytdNetInvoicing: s.ytdNetInvoicing || 0,
+          ytdCreditMemos: s.ytdCreditMemos || 0,
+          ytdSales: s.ytdSales || 0,
+          warehouse: s.warehouse || null,
+          warehouseDesc: s.warehouseDesc || null,
+          openAtNet: s.openAtNet || 0,
+          openOrder: s.openOrder || 0,
+          returned: s.returned || 0,
+          shippedAtMsrp: s.shippedAtMsrp || 0,
+          totalAtNet: s.totalAtNet || 0,
+          totalAtWholesale: s.totalAtWholesale || 0,
+          returnedAtWholesale: s.returnedAtWholesale || 0,
+          shipToCity: s.shipToCity || null,
+          shipToZip: s.shipToZip || null,
+          billToState: s.billToState || null,
+          billToCity: s.billToCity || null,
+          billToZip: s.billToZip || null,
+          unitsShipped: s.unitsShipped || 0,
+          unitsReturned: s.unitsReturned || 0,
+        }));
+
+        data = {
+          success: true,
+          fileType: 'sales',
+          summary: `${salesAppData.length.toLocaleString()} sales records across ${seasons.length} seasons (${seasonSummary})`,
+          seasonBreakdown: seasonCounts,
+          sales: salesAppData,
+        };
+      } else if (selectedType === 'costs') {
+        const landedData = parseLandedSheetXLSX(buffer);
+        const costsAppData = landedData.map((c, index) => ({
+          id: `cost-${index}`,
+          styleNumber: c.styleNumber,
+          styleName: c.styleName,
+          season: c.season,
+          seasonType: 'Main',
+          factory: c.factory,
+          countryOfOrigin: c.countryOfOrigin,
+          fob: c.fob,
+          landed: c.landed,
+          dutyCost: c.dutyCost,
+          tariffCost: c.tariffCost,
+          freightCost: c.freightCost,
+          overheadCost: c.overheadCost,
+          suggestedMsrp: c.suggestedMsrp,
+          suggestedWholesale: c.suggestedWholesale,
+          margin: c.margin,
+          designTeam: c.designTeam,
+          developer: c.developer,
+          costSource: c.costSource,
+        }));
+        data = { success: true, fileType: 'landed', costs: costsAppData, summary: `${costsAppData.length} cost records` };
+      } else if (selectedType === 'pricing') {
+        const pricingData = parsePricingXLSX(buffer);
+        const pricingAppData = pricingData.map((p, index) => ({
+          id: `price-${index}`,
+          styleNumber: p.styleNumber,
+          styleDesc: p.styleDesc,
+          colorCode: p.colorCode,
+          colorDesc: p.colorDesc,
+          season: p.season,
+          seasonType: 'Main',
+          seasonDesc: p.seasonDesc || '',
+          price: p.price,
+          msrp: p.msrp,
+          cost: p.cost,
+        }));
+        data = { success: true, fileType: 'pricing', pricing: pricingAppData, summary: `${pricingAppData.length} pricing records` };
+      } else if (selectedType === 'lineList') {
+        const lineListData = parseLineListXLSX(buffer);
+        const mergedResult = mergeSeasonData(lineListData, [], '');
+        const appData = convertToAppFormats(mergedResult);
+        data = { success: true, fileType: 'lineList', products: appData.products, costs: appData.costs, summary: `${appData.products.length} products` };
+      } else if (selectedType === 'inventory') {
+        const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) as Record<string, unknown>[];
+        data = { success: true, fileType: 'inventory', inventory: rawRows, summary: `${rawRows.length} inventory records` };
+      } else {
+        throw new Error(`Unknown file type: ${selectedType}`);
+      }
 
       setImportProgress(70);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Import failed');
-      }
-
-      const data = await response.json();
-      setImportProgress(90);
-
       // Route to appropriate handler based on type
       if (selectedType === 'sales' || selectedType === 'invoice') {
-        if (data.directToDb) {
-          // Large file was imported directly to DB — trigger a data refresh
-          console.log(`${selectedType} imported directly to DB:`, data.recordCount, 'records, seasons:', data.seasons);
-          if (onImportDirectToDb) {
-            onImportDirectToDb();
-          }
-        } else {
-          // Normal flow: pass records through for client-side processing
-          const allSeasonValues = (data.sales || [])
-            .map((s: Record<string, unknown>) => s.season as string)
-            .filter((s: string) => s && s.length > 0);
-          const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
-          console.log(`${selectedType} import - detected seasons:`, salesSeasons);
+        const allSeasonValues = ((data.sales || []) as Record<string, unknown>[])
+          .map((s) => s.season as string)
+          .filter((s: string) => s && s.length > 0);
+        const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
+        console.log(`${selectedType} import - detected seasons:`, salesSeasons);
 
-          // Use season-aware replace (keeps other seasons intact)
-          onImportSalesReplace({
-            sales: data.sales,
-            seasons: salesSeasons,
-          });
-        }
+        onImportSalesReplace({
+          sales: data.sales as Record<string, unknown>[],
+          seasons: salesSeasons,
+        });
       } else if (selectedType === 'lineList') {
-        // Line List now imports with seasons from the file
-        // Each product has its own season field
         onImportMultiSeason({
-          products: data.products || [],
-          costs: data.costs || [],
+          products: (data.products || []) as Record<string, unknown>[],
+          costs: (data.costs || []) as Record<string, unknown>[],
         });
       } else if (selectedType === 'costs') {
-        onImportMultiSeason({ costs: data.costs });
+        onImportMultiSeason({ costs: data.costs as Record<string, unknown>[] });
       } else if (selectedType === 'pricing') {
-        onImportMultiSeason({ pricing: data.pricing });
+        onImportMultiSeason({ pricing: data.pricing as Record<string, unknown>[] });
       } else if (selectedType === 'inventory') {
-        onImportMultiSeason({ inventory: data.inventory });
+        onImportMultiSeason({ inventory: data.inventory as Record<string, unknown>[] });
       }
 
       setImportProgress(100);
+      const addedCount = ((data.products || data.sales || data.costs || data.pricing || data.inventory || []) as unknown[]).length;
       setImportResult({
-        added: data.products?.length || data.sales?.length || data.costs?.length || data.pricing?.length || data.inventory?.length || 0,
+        added: addedCount,
         updated: 0,
-        summary: data.summary || 'Import complete',
+        summary: (data.summary as string) || 'Import complete',
       });
       setState('complete');
     } catch (err) {
