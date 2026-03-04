@@ -230,7 +230,13 @@ export default function Home() {
     const all = new Set<string>();
     products.forEach(p => p.season && all.add(p.season));
     sales.forEach(s => s.season && all.add(s.season));
-    return Array.from(all).sort();
+    // Filter out seasons before 2023 (year prefix < 23)
+    return Array.from(all)
+      .filter(s => {
+        const yearMatch = s.match(/^(\d{2})/);
+        return yearMatch ? parseInt(yearMatch[1], 10) >= 23 : false;
+      })
+      .sort();
   }, [products, sales]);
 
   const divisions = useMemo(() => {
