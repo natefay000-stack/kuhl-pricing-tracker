@@ -217,9 +217,9 @@ function getOrCreateEntry(map: Map<string, MetroData>, cbsaCode: string, metro: 
  * Helper: accumulate a sale into a MetroData entry
  */
 function accumulateSale(entry: MetroData, sale: SalesRecord, zip?: string, state?: string) {
-  const rev = sale.shippedAtNet || sale.revenue || 0;
+  const rev = sale.shippedAtNet || 0;
   entry.revenue += rev;
-  entry.units += sale.unitsShipped || sale.unitsBooked || 0;
+  entry.units += sale.unitsShipped || 0;
   entry.orders += 1;
   if (sale.customer) entry.customers.add(sale.customer);
   if (zip) entry.contributingZips.add(zip);

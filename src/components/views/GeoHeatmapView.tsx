@@ -277,10 +277,10 @@ export default function GeoHeatmapView({
         map.set(code, entry);
       }
 
-      const rev = sale.shippedAtNet || sale.revenue || 0;
+      const rev = sale.shippedAtNet || 0;
       entry.revenue += rev;
-      entry.shippedAtNet += sale.shippedAtNet || 0;
-      entry.units += sale.unitsShipped || sale.unitsBooked || 0;
+      entry.shippedAtNet += rev;
+      entry.units += sale.unitsShipped || 0;
       entry.unitsShipped += sale.unitsShipped || 0;
       entry.orders += 1;
       if (sale.customer) entry.customers.add(sale.customer);
@@ -381,9 +381,9 @@ export default function GeoHeatmapView({
         map.set(key, entry);
       }
 
-      const rev = sale.shippedAtNet || sale.revenue || 0;
+      const rev = sale.shippedAtNet || 0;
       entry.revenue += rev;
-      entry.units += sale.unitsShipped || sale.unitsBooked || 0;
+      entry.units += sale.unitsShipped || 0;
       entry.orders += 1;
       if (sale.customer) entry.customers.add(sale.customer);
       const cat = sale.categoryDesc || 'Other';

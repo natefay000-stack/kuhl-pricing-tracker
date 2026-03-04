@@ -58,7 +58,7 @@ export function aggregateSalesByCounty(
     const normalized = saleState.length === 2 ? saleState : '';
     if (normalized !== stateCode) continue;
 
-    const rev = sale.shippedAtNet || sale.revenue || 0;
+    const rev = sale.shippedAtNet || 0;
     totalStateRevenue += rev;
 
     // Resolve zip to county
@@ -93,8 +93,8 @@ export function aggregateSalesByCounty(
     }
 
     entry.revenue += rev;
-    entry.shippedAtNet += sale.shippedAtNet || 0;
-    entry.units += sale.unitsShipped || sale.unitsBooked || 0;
+    entry.shippedAtNet += rev;
+    entry.units += sale.unitsShipped || 0;
     entry.unitsShipped += sale.unitsShipped || 0;
     entry.orders += 1;
     if (sale.customer) entry.customers.add(sale.customer);

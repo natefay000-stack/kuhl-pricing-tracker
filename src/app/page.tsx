@@ -357,6 +357,11 @@ export default function Home() {
     });
   }, [sales, selectedYear, selectedMonth]);
 
+  // Invoice-only sales for Geo Heat Map — only records with actual invoice data
+  const invoiceOnlySales = useMemo(() => {
+    return dateFilteredSales.filter(s => s.invoiceNumber || s.invoiceDate);
+  }, [dateFilteredSales]);
+
   // ── Helper: yield to event loop so React can paint status updates ──
   const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
@@ -1652,7 +1657,7 @@ export default function Home() {
           {activeView === 'geoheatmap' && (
             <ErrorBoundary viewName="Geo Heat Map">
               <GeoHeatmapView
-                sales={dateFilteredSales}
+                sales={invoiceOnlySales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
