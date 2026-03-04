@@ -177,6 +177,8 @@ export interface SalesRecord {
   // Unit counts (unitsShipped already above)
   unitsReturned?: number;
   createdAt?: string;
+  // Data source tag — 'invoice' for invoice records enriched via enrich-sales-geo
+  dataSource?: string;
 }
 
 // Customer type labels

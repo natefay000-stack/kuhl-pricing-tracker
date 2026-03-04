@@ -357,9 +357,9 @@ export default function Home() {
     });
   }, [sales, selectedYear, selectedMonth]);
 
-  // Invoice-only sales for Geo Heat Map — only records with actual invoice data
+  // Invoice-only sales for Geo Heat Map — only records tagged by enrich-sales-geo
   const invoiceOnlySales = useMemo(() => {
-    return dateFilteredSales.filter(s => s.invoiceNumber || s.invoiceDate);
+    return dateFilteredSales.filter(s => s.dataSource === 'invoice');
   }, [dateFilteredSales]);
 
   // ── Helper: yield to event loop so React can paint status updates ──
