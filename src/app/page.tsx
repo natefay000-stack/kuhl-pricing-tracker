@@ -700,8 +700,12 @@ export default function Home() {
       }
       console.log('Sales REPLACE import complete');
     } catch (dbErr) {
-      const msg = `Sales replace import failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}. Data is loaded locally but may be lost on refresh.`;
-      console.error(msg);
+      const detail = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      const isQuota = detail.includes('quota') || detail.includes('exceeded');
+      const msg = isQuota
+        ? 'Database quota exceeded — data is loaded for this session but won\'t persist across refreshes. Consider upgrading your database plan.'
+        : `Database save failed: ${detail}. Data is loaded for this session but may be lost on refresh.`;
+      console.error('Sales DB persist error:', detail);
       setImportError(msg);
     }
 
