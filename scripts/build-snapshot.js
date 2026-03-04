@@ -219,6 +219,16 @@ async function main() {
       if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
       if (s.msrp) rec.msrp = s.msrp;
       if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
+      // Geographic fields (for heat map)
+      if (s.shipToState) rec.shipToState = s.shipToState;
+      if (s.shipToCity) rec.shipToCity = s.shipToCity;
+      if (s.shipToZip) rec.shipToZip = s.shipToZip;
+      if (s.billToState) rec.billToState = s.billToState;
+      if (s.billToCity) rec.billToCity = s.billToCity;
+      if (s.billToZip) rec.billToZip = s.billToZip;
+      // Shipping/invoice fields
+      if (s.shippedAtNet) rec.shippedAtNet = s.shippedAtNet;
+      if (s.unitsShipped) rec.unitsShipped = s.unitsShipped;
       return rec;
     });
 
