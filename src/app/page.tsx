@@ -629,9 +629,6 @@ export default function Home() {
       console.error(msg);
       setImportError(msg);
     }
-
-    // Close the modal
-    setShowImportModal(false);
   };
 
   // Handle sales REPLACE import - delete existing sales for specified seasons, then insert new
@@ -708,9 +705,6 @@ export default function Home() {
       console.error('Sales DB persist error:', detail);
       setImportError(msg);
     }
-
-    // Close the modal
-    setShowImportModal(false);
   };
 
   // Handle direct-to-DB import — large sales files already written to DB by API
@@ -720,7 +714,6 @@ export default function Home() {
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
     console.log('Direct-to-DB import complete — reloading sales from database...');
-    setShowImportModal(false);
 
     try {
       // Reload sales progressively from the database
@@ -1023,9 +1016,6 @@ export default function Home() {
     // Single cache write with all final values (avoids stale closures from sequential writes)
     setCachedCore({ products: finalProducts, pricing: finalPricing, costs: finalCosts, inventory: finalInventory });
 
-    // Close the modal
-    setShowImportModal(false);
-
     // Surface any DB persistence errors
     if (dbErrors.length > 0) {
       const msg = `Data loaded in-memory but failed to persist to database:\n${dbErrors.join('\n')}`;
@@ -1163,9 +1153,6 @@ export default function Home() {
     } else {
       console.log('Data persisted to database');
     }
-
-    // Close the modal
-    setShowImportModal(false);
 
     // Set filter to show the imported season
     setSelectedSeason(data.season);
