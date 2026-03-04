@@ -785,7 +785,7 @@ export default function Home() {
       }
 
       // Then insert all new sales in batches
-      const BATCH_SIZE = 5000;
+      const BATCH_SIZE = 1000;  // Keep under Vercel's 4.5MB body limit
       const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
       console.log(`Inserting ${data.sales.length} sales records in ${totalBatches} batches`);
 

@@ -306,9 +306,8 @@ export default function SmartImportModal({
     const readyFiles = multiFiles.filter(f => f.status === 'ready');
     const allSales: Record<string, unknown>[] = [];
     const allSeasons: string[] = [];
-    let needsDbReload = false;
 
-    // Process files sequentially
+    // Process files sequentially — parse each client-side to avoid Vercel body limits
     for (let i = 0; i < readyFiles.length; i++) {
       const fileItem = readyFiles[i];
       const fileIndex = multiFiles.findIndex(f => f.filename === fileItem.filename);
@@ -319,90 +318,95 @@ export default function SmartImportModal({
       ));
 
       try {
-        const formData = new FormData();
-        formData.append('file', fileItem.file);
-        formData.append('fileType', 'sales');
-        formData.append('season', fileItem.season || '');
+        // Parse client-side (same as single-file flow)
+        const buffer = await fileItem.file.arrayBuffer();
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === fileIndex ? { ...item, progress: 30 } : item
+        ));
 
-        // Simulate progress updates
-        const progressInterval = setInterval(() => {
-          setMultiFiles(prev => prev.map((item, idx) => {
-            if (idx === fileIndex && item.status === 'importing') {
-              const newProgress = Math.min(item.progress + 10, 90);
-              return { ...item, progress: newProgress };
-            }
-            return item;
-          }));
-        }, 500);
+        const salesData = parseSalesXLSX(buffer);
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === fileIndex ? { ...item, progress: 70 } : item
+        ));
 
-        const response = await fetch('/api/import-file', {
-          method: 'POST',
-          body: formData,
-        });
+        const salesAppData = salesData.map((s, sIdx) => ({
+          id: `sale-mf-${i}-${sIdx}`,
+          styleNumber: s.styleNumber,
+          styleDesc: s.styleDesc,
+          colorCode: s.colorCode,
+          colorDesc: s.colorDesc,
+          season: s.season,
+          seasonType: 'Main',
+          customer: s.customer,
+          customerType: s.customerType,
+          unitsBooked: s.unitsBooked,
+          unitsOpen: s.unitsOpen || 0,
+          revenue: s.revenue,
+          shipped: s.shipped || 0,
+          cost: s.cost || 0,
+          wholesalePrice: s.wholesalePrice || 0,
+          msrp: s.msrp || 0,
+          netUnitPrice: s.netUnitPrice || (s.unitsBooked > 0 ? s.revenue / s.unitsBooked : 0),
+          divisionDesc: s.divisionDesc,
+          categoryDesc: normalizeCategory(s.categoryDesc),
+          gender: s.gender || '',
+          salesRep: s.salesRep || '',
+          orderType: s.orderType || '',
+          invoiceDate: s.invoiceDate || null,
+          accountingPeriod: s.accountingPeriod || null,
+          invoiceNumber: s.invoiceNumber || null,
+          shipToState: s.shipToState || null,
+          returnedAtNet: s.returnedAtNet || 0,
+          shippedAtNet: s.shippedAtNet || 0,
+          totalPrice: s.totalPrice || 0,
+          commissionRate: s.commissionRate || 0,
+          ytdNetInvoicing: s.ytdNetInvoicing || 0,
+          ytdCreditMemos: s.ytdCreditMemos || 0,
+          ytdSales: s.ytdSales || 0,
+          warehouse: s.warehouse || null,
+          warehouseDesc: s.warehouseDesc || null,
+          openAtNet: s.openAtNet || 0,
+          openOrder: s.openOrder || 0,
+          returned: s.returned || 0,
+          shippedAtMsrp: s.shippedAtMsrp || 0,
+          totalAtNet: s.totalAtNet || 0,
+          totalAtWholesale: s.totalAtWholesale || 0,
+          returnedAtWholesale: s.returnedAtWholesale || 0,
+          shipToCity: s.shipToCity || null,
+          shipToZip: s.shipToZip || null,
+          billToState: s.billToState || null,
+          billToCity: s.billToCity || null,
+          billToZip: s.billToZip || null,
+          unitsShipped: s.unitsShipped || 0,
+          unitsReturned: s.unitsReturned || 0,
+        }));
 
-        clearInterval(progressInterval);
+        if (salesAppData.length > 0) {
+          allSales.push(...salesAppData);
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Import failed');
-        }
-
-        const data = await response.json();
-
-        if (data.directToDb) {
-          // Large file was imported directly to DB — track its seasons
-          console.log('Multi-file: direct-to-DB import for', fileItem.filename, data.recordCount, 'records');
-          if (data.seasons) {
-            allSeasons.push(...data.seasons);
-          }
-          needsDbReload = true;
-
-          // Update status to complete
-          setMultiFiles(prev => prev.map((item, idx) =>
-            idx === fileIndex ? {
-              ...item,
-              status: 'complete',
-              progress: 100,
-              importedCount: data.recordCount || 0,
-            } : item
-          ));
-        } else if (data.sales && data.sales.length > 0) {
-          // Normal flow: accumulate sales records
-          allSales.push(...data.sales);
-
-          // Extract seasons from the actual sales records
-          const recordSeasons = data.sales
-            .map((s: Record<string, unknown>) => s.season as string)
+          // Extract seasons from records
+          const recordSeasons = salesAppData
+            .map((s) => s.season as string)
             .filter((s: string) => s && s.length > 0);
 
           if (recordSeasons.length > 0) {
-            // Use seasons from records
             allSeasons.push(...recordSeasons);
           } else if (fileItem.season) {
-            // Fallback to filename-detected season
             allSeasons.push(fileItem.season);
           }
-
-          // Update status to complete
-          setMultiFiles(prev => prev.map((item, idx) =>
-            idx === fileIndex ? {
-              ...item,
-              status: 'complete',
-              progress: 100,
-              importedCount: data.sales?.length || 0,
-            } : item
-          ));
-        } else {
-          // Update status to complete even if no data returned
-          setMultiFiles(prev => prev.map((item, idx) =>
-            idx === fileIndex ? {
-              ...item,
-              status: 'complete',
-              progress: 100,
-              importedCount: 0,
-            } : item
-          ));
         }
+
+        console.log(`Multi-file: parsed ${fileItem.filename} client-side:`, salesAppData.length, 'records');
+
+        // Update status to complete
+        setMultiFiles(prev => prev.map((item, idx) =>
+          idx === fileIndex ? {
+            ...item,
+            status: 'complete',
+            progress: 100,
+            importedCount: salesAppData.length,
+          } : item
+        ));
 
       } catch (err) {
         setMultiFiles(prev => prev.map((item, idx) =>
@@ -423,13 +427,7 @@ export default function SmartImportModal({
       });
     }
 
-    // If any files went direct-to-DB, trigger a data reload so frontend picks up the DB records
-    if (needsDbReload && onImportDirectToDb) {
-      onImportDirectToDb();
-    }
-
-    const totalRecords = allSales.length + (needsDbReload ? multiFiles.filter(f => f.status === 'complete').reduce((sum, f) => sum + (f.importedCount || 0), 0) - allSales.length : 0);
-    setMultiFileTotalRecords(totalRecords > 0 ? totalRecords : allSales.length);
+    setMultiFileTotalRecords(allSales.length);
     setMultiFileState('complete');
   };
 
