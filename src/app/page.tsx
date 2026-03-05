@@ -357,33 +357,77 @@ export default function Home() {
     });
   }, [sales, selectedYear, selectedMonth]);
 
-  // Build a customer-name → customerType lookup from booking data (which has customerType)
-  // so we can enrich invoice records (which lack customerType).
-  const customerTypeByName = useMemo(() => {
-    const map = new Map<string, string>();
+  // Build lookups from booking/product data to enrich invoice records.
+  // Invoice Excel files are missing customerType, divisionDesc, etc.
+  // We can inherit these from booking data using customer name + style number.
+  const invoiceEnrichment = useMemo(() => {
+    const customerTypeMap = new Map<string, string>();
+    const styleInfoMap = new Map<string, { divisionDesc: string; categoryDesc: string }>();
+
+    // From booking sales: customer → customerType, style → division/category
     sales.forEach(s => {
-      if (s.customer && s.customerType) {
-        // First occurrence wins — booking data is authoritative
-        if (!map.has(s.customer)) {
-          map.set(s.customer, s.customerType);
-        }
+      if (s.customer && s.customerType && !customerTypeMap.has(s.customer)) {
+        customerTypeMap.set(s.customer, s.customerType);
+      }
+      if (s.styleNumber && s.divisionDesc && !styleInfoMap.has(s.styleNumber)) {
+        styleInfoMap.set(s.styleNumber, {
+          divisionDesc: s.divisionDesc,
+          categoryDesc: s.categoryDesc || '',
+        });
       }
     });
-    return map;
-  }, [sales]);
+
+    // From products: style → division/category (fills gaps booking data might miss)
+    products.forEach(p => {
+      if (p.styleNumber && p.divisionDesc && !styleInfoMap.has(p.styleNumber)) {
+        styleInfoMap.set(p.styleNumber, {
+          divisionDesc: p.divisionDesc,
+          categoryDesc: p.categoryDesc || '',
+        });
+      }
+    });
+
+    return { customerTypeMap, styleInfoMap };
+  }, [sales, products]);
 
   // Invoice-only sales for Geo Heat Map — records with an invoiceNumber are invoice data.
-  // Enrich with customerType inherited from booking data when the invoice record lacks it.
+  // Enrich with missing fields inherited from booking/product data.
   const invoiceOnlySales = useMemo(() => {
+    const { customerTypeMap, styleInfoMap } = invoiceEnrichment;
+
     return dateFilteredSales
       .filter(s => s.invoiceNumber != null && s.invoiceNumber !== '')
       .map(s => {
-        if (!s.customerType && s.customer && customerTypeByName.has(s.customer)) {
-          return { ...s, customerType: customerTypeByName.get(s.customer)! };
+        const patches: Partial<SalesRecord> = {};
+        let needsPatch = false;
+
+        // Inherit customerType from booking data by customer name
+        if (!s.customerType && s.customer && customerTypeMap.has(s.customer)) {
+          patches.customerType = customerTypeMap.get(s.customer)!;
+          needsPatch = true;
         }
-        return s;
+
+        // Inherit divisionDesc from booking/product data by style number
+        if (!s.divisionDesc && s.styleNumber) {
+          const info = styleInfoMap.get(s.styleNumber);
+          if (info?.divisionDesc) {
+            patches.divisionDesc = info.divisionDesc;
+            needsPatch = true;
+          }
+        }
+
+        // Inherit categoryDesc if missing
+        if (!s.categoryDesc && s.styleNumber) {
+          const info = styleInfoMap.get(s.styleNumber);
+          if (info?.categoryDesc) {
+            patches.categoryDesc = info.categoryDesc;
+            needsPatch = true;
+          }
+        }
+
+        return needsPatch ? { ...s, ...patches } : s;
       });
-  }, [dateFilteredSales, customerTypeByName]);
+  }, [dateFilteredSales, invoiceEnrichment]);
 
   // Invoice-specific filter options — the Geo Heat Map only shows invoice data,
   // so its filter dropdowns should reflect what's in that dataset (not all sales).
