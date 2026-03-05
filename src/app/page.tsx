@@ -357,10 +357,33 @@ export default function Home() {
     });
   }, [sales, selectedYear, selectedMonth]);
 
-  // Invoice-only sales for Geo Heat Map — records with an invoiceNumber are invoice data
+  // Build a customer-name → customerType lookup from booking data (which has customerType)
+  // so we can enrich invoice records (which lack customerType).
+  const customerTypeByName = useMemo(() => {
+    const map = new Map<string, string>();
+    sales.forEach(s => {
+      if (s.customer && s.customerType) {
+        // First occurrence wins — booking data is authoritative
+        if (!map.has(s.customer)) {
+          map.set(s.customer, s.customerType);
+        }
+      }
+    });
+    return map;
+  }, [sales]);
+
+  // Invoice-only sales for Geo Heat Map — records with an invoiceNumber are invoice data.
+  // Enrich with customerType inherited from booking data when the invoice record lacks it.
   const invoiceOnlySales = useMemo(() => {
-    return dateFilteredSales.filter(s => s.invoiceNumber != null && s.invoiceNumber !== '');
-  }, [dateFilteredSales]);
+    return dateFilteredSales
+      .filter(s => s.invoiceNumber != null && s.invoiceNumber !== '')
+      .map(s => {
+        if (!s.customerType && s.customer && customerTypeByName.has(s.customer)) {
+          return { ...s, customerType: customerTypeByName.get(s.customer)! };
+        }
+        return s;
+      });
+  }, [dateFilteredSales, customerTypeByName]);
 
   // Invoice-specific filter options — the Geo Heat Map only shows invoice data,
   // so its filter dropdowns should reflect what's in that dataset (not all sales).
