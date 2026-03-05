@@ -362,6 +362,39 @@ export default function Home() {
     return dateFilteredSales.filter(s => s.invoiceNumber != null && s.invoiceNumber !== '');
   }, [dateFilteredSales]);
 
+  // Invoice-specific filter options — the Geo Heat Map only shows invoice data,
+  // so its filter dropdowns should reflect what's in that dataset (not all sales).
+  const invoiceCustomerTypes = useMemo(() => {
+    const all = new Set<string>();
+    invoiceOnlySales.forEach(s => {
+      if (s.customerType) {
+        s.customerType.split(',').forEach(ct => {
+          const trimmed = ct.trim();
+          if (trimmed) all.add(trimmed);
+        });
+      }
+    });
+    return Array.from(all).sort();
+  }, [invoiceOnlySales]);
+
+  const invoiceCustomerNames = useMemo(() => {
+    const all = new Set<string>();
+    invoiceOnlySales.forEach(s => s.customer && s.customer !== 'Unknown' && all.add(s.customer));
+    return Array.from(all).sort();
+  }, [invoiceOnlySales]);
+
+  const invoiceDivisions = useMemo(() => {
+    const all = new Set<string>();
+    invoiceOnlySales.forEach(s => s.divisionDesc && all.add(s.divisionDesc));
+    return Array.from(all).sort();
+  }, [invoiceOnlySales]);
+
+  const invoiceCategories = useMemo(() => {
+    const all = new Set<string>();
+    invoiceOnlySales.forEach(s => s.categoryDesc && all.add(s.categoryDesc));
+    return Array.from(all).sort();
+  }, [invoiceOnlySales]);
+
   // ── Helper: yield to event loop so React can paint status updates ──
   const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
@@ -1349,15 +1382,15 @@ export default function Home() {
           onExportExcel={handleExportExcel}
         />
 
-        {/* Filter Bar */}
+        {/* Filter Bar — on Geo Heat Map, use invoice-specific options since the view only shows invoice data */}
         <FilterBar
           activeView={activeView}
           seasons={seasons}
-          divisions={divisions}
-          categories={categories}
+          divisions={activeView === 'geoheatmap' ? invoiceDivisions : divisions}
+          categories={activeView === 'geoheatmap' ? invoiceCategories : categories}
           designers={designers}
-          customerTypes={customerTypes}
-          customers={customerNames}
+          customerTypes={activeView === 'geoheatmap' ? invoiceCustomerTypes : customerTypes}
+          customers={activeView === 'geoheatmap' ? invoiceCustomerNames : customerNames}
           years={availableYears}
           months={availableMonths}
           selectedSeason={selectedSeason}
