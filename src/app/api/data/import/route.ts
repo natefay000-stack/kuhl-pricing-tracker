@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizeCategory } from '@/types/product';
-import { rebuildSnapshots } from '@/lib/rebuild-snapshots';
 
 // Increase limits for large data imports
 export const maxDuration = 300; // 5 minutes
@@ -262,16 +261,13 @@ export async function POST(request: NextRequest) {
         },
       });
     }, {
-      maxWait: 30000,
-      timeout: 240000, // 4 minute timeout for large imports
+      maxWait: 10000,
+      timeout: 50000, // 50s — fits within Vercel Hobby 60s function limit
     });
 
-    // Auto-rebuild snapshots after import
-    try {
-      await rebuildSnapshots();
-    } catch (snapErr) {
-      console.error('[Snapshot] Rebuild failed (non-fatal):', snapErr);
-    }
+    // Skip snapshot rebuild on batch imports — it loads ALL records from DB
+    // (316K+) on every batch, causing timeouts. Snapshots are rebuilt via
+    // /api/snapshot on demand instead.
 
     return NextResponse.json({
       success: true,
