@@ -250,11 +250,18 @@ export default function Home() {
   }, [products, sales]);
 
   const divisions = useMemo(() => {
+    const DIVISION_CODE_TO_NAME: Record<string, string> = { '01': 'Men', '02': 'Women', '08': 'Unisex' };
     const all = new Set<string>();
-    products.forEach(p => p.divisionDesc && all.add(p.divisionDesc));
+    products.forEach(p => {
+      if (!p.divisionDesc) return;
+      all.add(DIVISION_CODE_TO_NAME[p.divisionDesc] || p.divisionDesc);
+    });
     // Also extract divisions from sales when products aren't loaded yet
     if (all.size === 0) {
-      sales.forEach(s => s.divisionDesc && all.add(s.divisionDesc));
+      sales.forEach(s => {
+        if (!s.divisionDesc) return;
+        all.add(DIVISION_CODE_TO_NAME[s.divisionDesc] || s.divisionDesc);
+      });
     }
     return Array.from(all).sort();
   }, [products, sales]);

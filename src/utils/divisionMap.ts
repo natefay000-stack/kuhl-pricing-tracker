@@ -5,8 +5,8 @@
  */
 
 const DIVISION_MAP: Record<string, string[]> = {
-  "Men's":   ['01', "Men's", 'Mens', "Men\u2019s"],
-  "Women's": ['02', "Women's", 'Womens', "Women\u2019s"],
+  "Men's":   ['01', "Men's", 'Mens', 'Men', "Men\u2019s"],
+  "Women's": ['02', "Women's", 'Womens', 'Women', "Women\u2019s"],
   'Unisex':  ['08', 'Unisex'],
 };
 

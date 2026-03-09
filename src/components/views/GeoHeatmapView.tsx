@@ -214,9 +214,42 @@ export default function GeoHeatmapView({
   const [tableMode, setTableMode] = useState<'states' | 'metros' | 'cities'>('states');
   const [quickGender, setQuickGender] = useState<string | null>(null);
 
-  // Date range filter state (local to this view)
-  const [dateStart, setDateStart] = useState<string>('');
-  const [dateEnd, setDateEnd] = useState<string>('');
+  // Month/Year filter state (local to this view)
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+
+  // Derive dateStart/dateEnd from month + year selections
+  const dateStart = useMemo(() => {
+    if (!selectedYear) return '';
+    const month = selectedMonth || '01';
+    return `${selectedYear}-${month}-01`;
+  }, [selectedMonth, selectedYear]);
+
+  const dateEnd = useMemo(() => {
+    if (!selectedYear) return '';
+    const month = selectedMonth || '12';
+    const y = parseInt(selectedYear);
+    const m = parseInt(month);
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${selectedYear}-${month}-${String(lastDay).padStart(2, '0')}`;
+  }, [selectedMonth, selectedYear]);
+
+  // Available years and months from the invoice data
+  const { availableYears, availableMonths } = useMemo(() => {
+    const years = new Set<string>();
+    const months = new Set<string>();
+    for (const s of sales) {
+      if (!s.invoiceDate) continue;
+      const d = new Date(s.invoiceDate);
+      if (isNaN(d.getTime())) continue;
+      years.add(String(d.getFullYear()));
+      months.add(String(d.getMonth() + 1).padStart(2, '0'));
+    }
+    return {
+      availableYears: Array.from(years).sort(),
+      availableMonths: Array.from(months).sort(),
+    };
+  }, [sales]);
 
   // Load CBSA metro data + zip map on mount
   useEffect(() => {
@@ -277,11 +310,11 @@ export default function GeoHeatmapView({
         map.set(code, entry);
       }
 
-      const rev = sale.shippedAtNet || 0;
+      const rev = (sale.shippedAtNet || 0) + (sale.returnedAtNet || 0);
       entry.revenue += rev;
       entry.shippedAtNet += rev;
-      entry.units += sale.unitsShipped || 0;
-      entry.unitsShipped += sale.unitsShipped || 0;
+      entry.units += (sale.unitsShipped || 0) + (sale.unitsReturned || 0);
+      entry.unitsShipped += (sale.unitsShipped || 0) + (sale.unitsReturned || 0);
       entry.orders += 1;
       if (sale.customer) entry.customers.add(sale.customer);
       const cat = sale.categoryDesc || 'Other';
@@ -556,9 +589,9 @@ export default function GeoHeatmapView({
               </h2>
               <p className="text-sm text-[#8e8e93]">
                 {statesWithData} states with sales data &middot; {fmt(totalRevenue)} total revenue &middot; {fmtUnits(totalUnits)} units
-                {(dateStart || dateEnd) && (
+                {(selectedMonth || selectedYear) && (
                   <span className="text-[#64d2ff]">
-                    {' '}&middot; {dateStart && dateEnd ? `${formatDateLabel(dateStart)} – ${formatDateLabel(dateEnd)}` : dateStart ? `From ${formatDateLabel(dateStart)}` : `Through ${formatDateLabel(dateEnd)}`}
+                    {' '}&middot; {selectedMonth ? new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('en-US', { month: 'long' }) : ''}{selectedMonth && selectedYear ? ' ' : ''}{selectedYear || ''}
                   </span>
                 )}
               </p>
@@ -585,26 +618,34 @@ export default function GeoHeatmapView({
               ))}
             </div>
           )}
-          {/* Date Range Filter */}
+          {/* Month / Year Filter */}
           {!isDrilled && (
             <div className="flex items-center gap-1.5 pl-2 border-l border-[#2a2a32]">
-              <span className="text-[10px] text-[#636366] uppercase tracking-wider">From</span>
-              <input
-                type="date"
-                value={dateStart}
-                onChange={e => setDateStart(e.target.value)}
-                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none w-[120px] [color-scheme:dark]"
-              />
-              <span className="text-[10px] text-[#636366] uppercase tracking-wider">To</span>
-              <input
-                type="date"
-                value={dateEnd}
-                onChange={e => setDateEnd(e.target.value)}
-                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none w-[120px] [color-scheme:dark]"
-              />
-              {(dateStart || dateEnd) && (
+              <select
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
+              >
+                <option value="">All Months</option>
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>
+                    {new Date(2000, parseInt(m) - 1).toLocaleString('en-US', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value)}
+                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
+              >
+                <option value="">All Years</option>
+                {availableYears.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              {(selectedMonth || selectedYear) && (
                 <button
-                  onClick={() => { setDateStart(''); setDateEnd(''); }}
+                  onClick={() => { setSelectedMonth(''); setSelectedYear(''); }}
                   className="text-[#636366] hover:text-[#ff453a] transition-colors text-sm leading-none"
                   title="Clear date filter"
                 >
@@ -652,7 +693,7 @@ export default function GeoHeatmapView({
       </div>
 
       {/* Active filter indicator */}
-      {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || quickGender || dateStart || dateEnd) && (
+      {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || quickGender || selectedMonth || selectedYear) && (
         <div className="flex items-center gap-2 px-3 py-2 bg-[#0a84ff]/5 border border-[#0a84ff]/20 rounded-lg text-xs">
           <span className="text-[#8e8e93]">Filtering:</span>
           {selectedDivision && <span className="px-2 py-0.5 bg-[#2563eb]/20 text-[#2563eb] rounded font-medium">{selectedDivision}</span>}
@@ -660,8 +701,8 @@ export default function GeoHeatmapView({
           {selectedCustomerType && <span className="px-2 py-0.5 bg-[#ff9f0a]/20 text-[#ff9f0a] rounded font-medium">{CUSTOMER_TYPE_LABELS[selectedCustomerType] || selectedCustomerType}</span>}
           {selectedCustomer && <span className="px-2 py-0.5 bg-[#bf5af2]/20 text-[#bf5af2] rounded font-medium truncate max-w-[200px]">{selectedCustomer}</span>}
           {quickGender && <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: `${GENDER_COLORS[quickGender]}33`, color: GENDER_COLORS[quickGender] }}>{quickGender}</span>}
-          {dateStart && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">From: {formatDateLabel(dateStart)}</span>}
-          {dateEnd && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">To: {formatDateLabel(dateEnd)}</span>}
+          {selectedMonth && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">{new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('en-US', { month: 'long' })}</span>}
+          {selectedYear && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">{selectedYear}</span>}
         </div>
       )}
 

@@ -3,9 +3,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, TrendingUp, TrendingDown, Minus, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
-import { isRelevantSeason } from '@/utils/season';
+import { isRelevantSeason, parseSeasonCode } from '@/utils/season';
 import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
 import { cleanStyleNumber, getBaseStyleNumber, isVariantDescription, getCombineKey } from '@/utils/combineStyles';
@@ -43,6 +43,25 @@ function formatValue(value: number | null, metric: MetricType): string {
     default:
       return String(value);
   }
+}
+
+function pctChange(current: number, prior: number): number | null {
+  if (prior === 0 && current === 0) return null;
+  if (prior === 0) return null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
+function deltaColor(pct: number | null): string {
+  if (pct === null) return 'text-text-muted';
+  if (pct > 5) return 'text-emerald-400';
+  if (pct < -5) return 'text-red-400';
+  return 'text-text-muted';
+}
+
+function fmtDelta(pct: number | null): string {
+  if (pct === null) return '';
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(0)}%`;
 }
 
 export default function SeasonView({
@@ -498,29 +517,40 @@ export default function SeasonView({
         seasonSources[season] = source;
       });
 
-      // Calculate delta (last season vs previous)
-      const lastSeason = seasons[seasons.length - 1];
-      const prevSeason = seasons[seasons.length - 2];
-      let delta: number | null = null;
-      let isNew = false;
+      // Calculate per-season deltas (each season vs prior same-type season)
+      const seasonDeltas: Record<string, number | null> = {};
+      const seasonIsNew: Record<string, boolean> = {};
 
-      if (lastSeason && prevSeason) {
-        const lastVal = seasonData[lastSeason];
-        const prevVal = seasonData[prevSeason];
+      seasons.forEach((season) => {
+        const parsed = parseSeasonCode(season);
+        if (!parsed) return;
+        // Find the prior same-type season from all seasons (not just displayed)
+        const sameType = seasons.filter((s) => {
+          const p = parseSeasonCode(s);
+          return p && p.type === parsed.type;
+        });
+        const idx = sameType.indexOf(season);
+        const priorSeason = idx > 0 ? sameType[idx - 1] : null;
 
-        if (lastVal !== null && prevVal !== null && prevVal !== 0) {
-          delta = ((lastVal - prevVal) / Math.abs(prevVal)) * 100;
-        } else if (lastVal !== null && prevVal === null) {
-          isNew = true;
+        const curVal = seasonData[season];
+        const priorVal = priorSeason ? seasonData[priorSeason] : null;
+
+        if (curVal !== null && priorVal !== null) {
+          seasonDeltas[season] = pctChange(curVal, priorVal);
+        } else if (curVal !== null && priorSeason && priorVal === null) {
+          seasonIsNew[season] = true;
+          seasonDeltas[season] = null;
+        } else {
+          seasonDeltas[season] = null;
         }
-      }
+      });
 
       return {
         ...style,
         seasonData,
         seasonSources,
-        delta,
-        isNew,
+        seasonDeltas,
+        seasonIsNew,
       };
     });
   }, [filteredStyles, seasons, metric, dataLookups, combineStyles]);
@@ -639,9 +669,6 @@ export default function SeasonView({
       if (sortColumn === 'style') {
         aVal = a.styleNumber;
         bVal = b.styleNumber;
-      } else if (sortColumn === 'delta') {
-        aVal = a.delta || 0;
-        bVal = b.delta || 0;
       } else {
         aVal = a.seasonData[sortColumn] || 0;
         bVal = b.seasonData[sortColumn] || 0;
@@ -666,16 +693,26 @@ export default function SeasonView({
       seasonTotals[season] = total;
     });
 
-    // Calculate delta for totals
-    const lastSeason = seasons[seasons.length - 1];
-    const prevSeason = seasons[seasons.length - 2];
-    let delta: number | null = null;
+    // Calculate per-season deltas for totals (same-type comparison)
+    const totalDeltas: Record<string, number | null> = {};
+    seasons.forEach((season) => {
+      const parsed = parseSeasonCode(season);
+      if (!parsed) return;
+      const sameType = seasons.filter((s) => {
+        const p = parseSeasonCode(s);
+        return p && p.type === parsed.type;
+      });
+      const idx = sameType.indexOf(season);
+      const priorSeason = idx > 0 ? sameType[idx - 1] : null;
 
-    if (lastSeason && prevSeason && seasonTotals[prevSeason] !== 0) {
-      delta = ((seasonTotals[lastSeason] - seasonTotals[prevSeason]) / Math.abs(seasonTotals[prevSeason])) * 100;
-    }
+      if (priorSeason && seasonTotals[priorSeason] !== 0) {
+        totalDeltas[season] = pctChange(seasonTotals[season], seasonTotals[priorSeason]);
+      } else {
+        totalDeltas[season] = null;
+      }
+    });
 
-    return { seasonTotals, delta };
+    return { seasonTotals, totalDeltas };
   }, [relevantPivotData, seasons]);
 
   // Seasons to display (filtered if seasons are selected)
@@ -685,6 +722,28 @@ export default function SeasonView({
     }
     return seasons;
   }, [seasons, selectedSeasons]);
+
+  // Map each displayed season to its prior same-type (SP→SP, FA→FA) season
+  const priorSeasonMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    const spSeasons = displaySeasons.filter((s) => {
+      const p = parseSeasonCode(s);
+      return p && p.type === 'SP';
+    });
+    const faSeasons = displaySeasons.filter((s) => {
+      const p = parseSeasonCode(s);
+      return p && p.type === 'FA';
+    });
+    // For each SP season, prior is the previous SP in display order
+    spSeasons.forEach((s, i) => {
+      map[s] = i > 0 ? spSeasons[i - 1] : null;
+    });
+    // For each FA season, prior is the previous FA in display order
+    faSeasons.forEach((s, i) => {
+      map[s] = i > 0 ? faSeasons[i - 1] : null;
+    });
+    return map;
+  }, [displaySeasons]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -1038,17 +1097,6 @@ export default function SeasonView({
                     </th>
                   );
                 })}
-                {displaySeasons.length > 1 && (
-                  <th
-                    className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary w-28 border-l-2 border-border-strong bg-surface-tertiary"
-                    onClick={() => handleSort('delta')}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Δ
-                      <ArrowUpDown className="w-4 h-4" />
-                    </div>
-                  </th>
-                )}
               </tr>
             </thead>
             <tbody>
@@ -1087,6 +1135,9 @@ export default function SeasonView({
                   {displaySeasons.map((season) => {
                     const value = row.seasonData[season];
                     const source = row.seasonSources[season];
+                    const delta = row.seasonDeltas?.[season] ?? null;
+                    const isNew = row.seasonIsNew?.[season] ?? false;
+                    const prior = priorSeasonMap[season];
                     // Source indicator: ● pricebyseason, ○ linelist, ◇ sales, ■ landed_sheet
                     const getSourceIndicator = (src: string) => {
                       if (src === 'pricebyseason') return { symbol: '●', color: 'text-emerald-500', title: 'Source: pricebyseason' };
@@ -1100,54 +1151,36 @@ export default function SeasonView({
                     return (
                       <td
                         key={season}
-                        className="px-4 py-4 text-right text-lg font-mono border-l border-border-primary"
+                        className="px-3 py-2 text-right font-mono border-l border-border-primary"
                       >
                         {value !== null ? (
-                          <span className="text-text-primary font-medium inline-flex items-center gap-1">
-                            {formatValue(value, metric)}
-                            {indicator && (
-                              <span className={`text-xs ${indicator.color}`} title={indicator.title}>
-                                {indicator.symbol}
+                          <div className="flex flex-col items-end">
+                            <span className="text-text-primary font-medium text-lg inline-flex items-center gap-1">
+                              {formatValue(value, metric)}
+                              {indicator && (
+                                <span className={`text-xs ${indicator.color}`} title={indicator.title}>
+                                  {indicator.symbol}
+                                </span>
+                              )}
+                            </span>
+                            {prior && isNew && (
+                              <span className="text-[11px] font-bold text-cyan-500">NEW</span>
+                            )}
+                            {prior && delta !== null && (
+                              <span
+                                className={`text-[11px] font-semibold ${deltaColor(delta)}`}
+                                title={`vs ${prior}`}
+                              >
+                                {fmtDelta(delta)}
                               </span>
                             )}
-                          </span>
+                          </div>
                         ) : (
                           <span className="text-text-faint">—</span>
                         )}
                       </td>
                     );
                   })}
-                  {displaySeasons.length > 1 && (
-                    <td className="px-4 py-4 text-right border-l-2 border-border-strong">
-                      {row.isNew ? (
-                        <span className="text-lg font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950 px-3 py-1 rounded">
-                          NEW
-                        </span>
-                      ) : row.delta !== null ? (
-                        <span
-                          className={`text-lg font-mono font-bold flex items-center justify-end gap-1 ${
-                            row.delta > 0
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : row.delta < 0
-                              ? 'text-red-600 dark:text-red-400'
-                              : 'text-text-faint'
-                          }`}
-                        >
-                          {row.delta > 0 ? (
-                            <TrendingUp className="w-5 h-5" />
-                          ) : row.delta < 0 ? (
-                            <TrendingDown className="w-5 h-5" />
-                          ) : (
-                            <Minus className="w-5 h-5" />
-                          )}
-                          {row.delta > 0 ? '+' : ''}
-                          {row.delta.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-text-faint">—</span>
-                      )}
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
@@ -1158,29 +1191,27 @@ export default function SeasonView({
                   TOTALS
                 </td>
                 <td className="px-4 py-4 sticky left-[100px] bg-surface-tertiary border-r border-border-strong"></td>
-                {displaySeasons.map((season) => (
-                  <td key={season} className="px-4 py-4 text-right font-mono text-lg font-bold text-text-primary border-l border-border-strong">
-                    {formatValue(totals.seasonTotals[season], metric)}
-                  </td>
-                ))}
-                {displaySeasons.length > 1 && (
-                  <td className="px-4 py-4 text-right border-l-2 border-border-strong">
-                    {totals.delta !== null && (
-                      <span
-                        className={`font-mono text-lg font-bold ${
-                          totals.delta > 0
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : totals.delta < 0
-                            ? 'text-red-600 dark:text-red-400'
-                            : 'text-text-faint'
-                        }`}
-                      >
-                        {totals.delta > 0 ? '+' : ''}
-                        {totals.delta.toFixed(0)}%
-                      </span>
-                    )}
-                  </td>
-                )}
+                {displaySeasons.map((season) => {
+                  const td = totals.totalDeltas[season];
+                  const prior = priorSeasonMap[season];
+                  return (
+                    <td key={season} className="px-3 py-2 text-right font-mono border-l border-border-strong">
+                      <div className="flex flex-col items-end">
+                        <span className="text-lg font-bold text-text-primary">
+                          {formatValue(totals.seasonTotals[season], metric)}
+                        </span>
+                        {prior && td !== null && (
+                          <span
+                            className={`text-[11px] font-semibold ${deltaColor(td)}`}
+                            title={`vs ${prior}`}
+                          >
+                            {fmtDelta(td)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
               </tr>
             </tfoot>
           </table>
