@@ -9,6 +9,8 @@
  * The frontend loads these directly — no API calls needed on page load.
  * Run this whenever data changes: node scripts/build-snapshot.js
  *
+ * Memory-optimized: fetches and writes sales per-season to stay under 8GB.
+ *
  * Build cache: Snapshots are cached in .next/cache/data-snapshots/ (persisted by
  * Vercel between builds). If the database is unavailable, the cached files are
  * restored to public/ automatically.
@@ -62,7 +64,7 @@ function saveToCache() {
   console.log(`  Cached ${files.length} snapshot files for future builds`);
 }
 
-// Compute aggregations in-process
+// Compute inventory aggregations in-process
 function computeInventoryAggregations(inventory) {
   const typeMap = new Map();
   const whMap = new Map();
@@ -93,48 +95,82 @@ function computeInventoryAggregations(inventory) {
   };
 }
 
-function computeSalesAggregations(sales) {
-  const channelMap = new Map();
-  const categoryMap = new Map();
-  const genderMap = new Map();
-  const customerMap = new Map();
-
+// Compute sales aggregations from per-season data (memory efficient)
+function updateSalesAggregations(agg, sales) {
   for (const s of sales) {
     if (s.customerType) {
       const ck = `${s.season}-${s.customerType}`;
-      const ce = channelMap.get(ck);
+      const ce = agg.channelMap.get(ck);
       if (ce) { ce.revenue += s.revenue || 0; ce.units += s.unitsBooked || 0; }
-      else channelMap.set(ck, { channel: s.customerType, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+      else agg.channelMap.set(ck, { channel: s.customerType, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
     }
 
     const catKey = `${s.season}-${s.categoryDesc || 'Other'}`;
-    const catE = categoryMap.get(catKey);
+    const catE = agg.categoryMap.get(catKey);
     if (catE) { catE.revenue += s.revenue || 0; catE.units += s.unitsBooked || 0; }
-    else categoryMap.set(catKey, { category: s.categoryDesc || 'Other', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+    else agg.categoryMap.set(catKey, { category: s.categoryDesc || 'Other', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
 
     const div = (s.divisionDesc || '').toLowerCase();
     let gender = 'Unisex';
     if (div.includes('women') || div.includes('woman')) gender = "Women's";
     else if (div.includes('men')) gender = "Men's";
     const gk = `${s.season}-${gender}`;
-    const ge = genderMap.get(gk);
+    const ge = agg.genderMap.get(gk);
     if (ge) { ge.revenue += s.revenue || 0; ge.units += s.unitsBooked || 0; }
-    else genderMap.set(gk, { gender, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+    else agg.genderMap.set(gk, { gender, season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
 
     if (s.customer) {
       const custKey = `${s.season}-${s.customer}`;
-      const custE = customerMap.get(custKey);
+      const custE = agg.customerMap.get(custKey);
       if (custE) { custE.revenue += s.revenue || 0; custE.units += s.unitsBooked || 0; }
-      else customerMap.set(custKey, { customer: s.customer, customerType: s.customerType || '', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
+      else agg.customerMap.set(custKey, { customer: s.customer, customerType: s.customerType || '', season: s.season || '', revenue: s.revenue || 0, units: s.unitsBooked || 0 });
     }
   }
+}
 
+function finalizeSalesAggregations(agg) {
   return {
-    byChannel: Array.from(channelMap.values()),
-    byCategory: Array.from(categoryMap.values()),
-    byGender: Array.from(genderMap.values()),
-    byCustomer: Array.from(customerMap.values()),
+    byChannel: Array.from(agg.channelMap.values()),
+    byCategory: Array.from(agg.categoryMap.values()),
+    byGender: Array.from(agg.genderMap.values()),
+    byCustomer: Array.from(agg.customerMap.values()),
   };
+}
+
+// Slim down a sales record for the snapshot
+function slimSale(s) {
+  const rec = {
+    styleNumber: s.styleNumber,
+    season: s.season,
+    revenue: s.revenue,
+    unitsBooked: s.unitsBooked,
+  };
+  if (s.styleDesc) rec.styleDesc = s.styleDesc;
+  if (s.colorCode) rec.colorCode = s.colorCode;
+  if (s.colorDesc) rec.colorDesc = s.colorDesc;
+  if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
+  if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
+  if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
+  if (s.customer) rec.customer = s.customer;
+  if (s.customerType) rec.customerType = s.customerType;
+  if (s.salesRep) rec.salesRep = s.salesRep;
+  if (s.gender) rec.gender = s.gender;
+  if (s.orderType) rec.orderType = s.orderType;
+  if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
+  if (s.shipped) rec.shipped = s.shipped;
+  if (s.cost) rec.cost = s.cost;
+  if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
+  if (s.msrp) rec.msrp = s.msrp;
+  if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
+  if (s.shipToState) rec.shipToState = s.shipToState;
+  if (s.shipToCity) rec.shipToCity = s.shipToCity;
+  if (s.shipToZip) rec.shipToZip = s.shipToZip;
+  if (s.billToState) rec.billToState = s.billToState;
+  if (s.billToCity) rec.billToCity = s.billToCity;
+  if (s.billToZip) rec.billToZip = s.billToZip;
+  if (s.shippedAtNet) rec.shippedAtNet = s.shippedAtNet;
+  if (s.unitsShipped) rec.unitsShipped = s.unitsShipped;
+  return rec;
 }
 
 async function main() {
@@ -155,36 +191,84 @@ async function main() {
     prisma = new PrismaClient({ adapter });
 
     console.log('Building data snapshots from database...\n');
+    ensureDir(publicDir);
 
-    // Fetch all tables in parallel
-    console.log('Fetching tables...');
-    const [products, pricing, costs, inventory, sales] = await Promise.all([
+    // ── Step 1: Fetch non-sales tables (small) ──
+    console.log('Fetching core tables...');
+    const [products, pricing, costs, inventory] = await Promise.all([
       prisma.product.findMany({ orderBy: { season: 'desc' } }),
       prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
       prisma.cost.findMany({ orderBy: { season: 'desc' } }),
       prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
-      prisma.sale.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
     ]);
 
-    console.log(`  Products: ${products.length} rows`);
-    console.log(`  Pricing: ${pricing.length} rows`);
-    console.log(`  Costs: ${costs.length} rows`);
-    console.log(`  Inventory: ${inventory.length} rows`);
-    console.log(`  Sales: ${sales.length} rows`);
+    console.log(`  Products: ${products.length} | Pricing: ${pricing.length} | Costs: ${costs.length} | Inventory: ${inventory.length}`);
 
-    // Compute aggregations locally
-    console.log('\nComputing aggregations...');
+    // Compute inventory aggregations
     const inventoryAggregations = computeInventoryAggregations(inventory);
-    const salesAggregations = computeSalesAggregations(sales);
-    console.log('  Done.');
 
-    // Build core snapshot
+    // ── Step 2: Get distinct seasons from sales ──
+    console.log('\nFetching sales seasons...');
+    const seasonRows = await prisma.sale.groupBy({
+      by: ['season'],
+      _count: { id: true },
+      orderBy: { season: 'asc' },
+    });
+    const seasons = seasonRows.map(r => r.season).filter(Boolean);
+    const totalSales = seasonRows.reduce((sum, r) => sum + r._count.id, 0);
+    console.log(`  ${seasons.length} seasons, ${totalSales} total sales records`);
+
+    // ── Step 3: Process sales per-season (memory efficient) ──
+    console.log('\nProcessing sales per-season...');
+    const salesAgg = {
+      channelMap: new Map(),
+      categoryMap: new Map(),
+      genderMap: new Map(),
+      customerMap: new Map(),
+    };
+    let totalSalesMB = 0;
+
+    for (const season of seasons) {
+      // Fetch one season at a time
+      const seasonSales = await prisma.sale.findMany({
+        where: { season },
+        orderBy: [{ styleNumber: 'asc' }, { customer: 'asc' }],
+      });
+
+      // Update aggregations
+      updateSalesAggregations(salesAgg, seasonSales);
+
+      // Slim and write to disk immediately
+      const slimData = seasonSales.map(slimSale);
+      const seasonPath = path.join(publicDir, `data-sales-${season}.json`);
+      fs.writeFileSync(seasonPath, JSON.stringify(slimData));
+      const sizeMB = (fs.statSync(seasonPath).size / 1024 / 1024).toFixed(1);
+      totalSalesMB += parseFloat(sizeMB);
+      console.log(`  ${season}: ${seasonSales.length} records (${sizeMB} MB)`);
+
+      // slimData and seasonSales go out of scope here — GC can reclaim
+    }
+
+    // Finalize aggregations
+    const salesAggregations = finalizeSalesAggregations(salesAgg);
+
+    // Write manifest
+    const manifest = {
+      success: true,
+      buildTime: new Date().toISOString(),
+      totalSales,
+      seasons,
+    };
+    fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
+
+    // ── Step 4: Write core snapshot (no sales data) ──
+    console.log('\nWriting core snapshot...');
     const coreSnapshot = {
       success: true,
       buildTime: new Date().toISOString(),
       counts: {
         products: products.length,
-        sales: sales.length,
+        sales: totalSales,
         pricing: pricing.length,
         costs: costs.length,
         inventory: inventory.length,
@@ -194,80 +278,9 @@ async function main() {
       inventoryAggregations,
     };
 
-    // Build slim sales records
-    const slimSales = sales.map(s => {
-      const rec = {
-        styleNumber: s.styleNumber,
-        season: s.season,
-        revenue: s.revenue,
-        unitsBooked: s.unitsBooked,
-      };
-      if (s.styleDesc) rec.styleDesc = s.styleDesc;
-      if (s.colorCode) rec.colorCode = s.colorCode;
-      if (s.colorDesc) rec.colorDesc = s.colorDesc;
-      if (s.seasonType && s.seasonType !== 'Main') rec.seasonType = s.seasonType;
-      if (s.divisionDesc) rec.divisionDesc = s.divisionDesc;
-      if (s.categoryDesc) rec.categoryDesc = s.categoryDesc;
-      if (s.customer) rec.customer = s.customer;
-      if (s.customerType) rec.customerType = s.customerType;
-      if (s.salesRep) rec.salesRep = s.salesRep;
-      if (s.gender) rec.gender = s.gender;
-      if (s.orderType) rec.orderType = s.orderType;
-      if (s.unitsOpen) rec.unitsOpen = s.unitsOpen;
-      if (s.shipped) rec.shipped = s.shipped;
-      if (s.cost) rec.cost = s.cost;
-      if (s.wholesalePrice) rec.wholesalePrice = s.wholesalePrice;
-      if (s.msrp) rec.msrp = s.msrp;
-      if (s.netUnitPrice) rec.netUnitPrice = s.netUnitPrice;
-      // Geographic fields (for heat map)
-      if (s.shipToState) rec.shipToState = s.shipToState;
-      if (s.shipToCity) rec.shipToCity = s.shipToCity;
-      if (s.shipToZip) rec.shipToZip = s.shipToZip;
-      if (s.billToState) rec.billToState = s.billToState;
-      if (s.billToCity) rec.billToCity = s.billToCity;
-      if (s.billToZip) rec.billToZip = s.billToZip;
-      // Shipping/invoice fields
-      if (s.shippedAtNet) rec.shippedAtNet = s.shippedAtNet;
-      if (s.unitsShipped) rec.unitsShipped = s.unitsShipped;
-      return rec;
-    });
-
-    console.log(`  Slim sales: ${sales.length} records (stripped ${Object.keys(sales[0] || {}).length - Object.keys(slimSales[0] || {}).length} unused fields per record)`);
-
-    // Write to public/
-    ensureDir(publicDir);
-
     const corePath = path.join(publicDir, 'data-core.json');
     fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
     const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
-
-    // Split sales by season
-    const salesBySeason = {};
-    for (const s of slimSales) {
-      const season = s.season || 'unknown';
-      if (!salesBySeason[season]) salesBySeason[season] = [];
-      salesBySeason[season].push(s);
-    }
-
-    const seasonKeys = Object.keys(salesBySeason).sort();
-    let totalSalesMB = 0;
-
-    const manifest = {
-      success: true,
-      buildTime: new Date().toISOString(),
-      totalSales: slimSales.length,
-      seasons: seasonKeys,
-    };
-    fs.writeFileSync(path.join(publicDir, 'data-sales-manifest.json'), JSON.stringify(manifest));
-
-    for (const season of seasonKeys) {
-      const seasonData = salesBySeason[season];
-      const seasonPath = path.join(publicDir, `data-sales-${season}.json`);
-      fs.writeFileSync(seasonPath, JSON.stringify(seasonData));
-      const sizeMB = (fs.statSync(seasonPath).size / 1024 / 1024).toFixed(1);
-      totalSalesMB += parseFloat(sizeMB);
-      console.log(`  Sales ${season}: ${seasonPath} (${sizeMB} MB, ${seasonData.length} records)`);
-    }
 
     // Cache for future builds
     saveToCache();
@@ -275,8 +288,8 @@ async function main() {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\nSnapshots built in ${elapsed}s`);
     console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
-    console.log(`  Sales: ${seasonKeys.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
-    console.log(`Counts: ${products.length} products, ${sales.length} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
+    console.log(`  Sales: ${seasons.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
+    console.log(`Counts: ${products.length} products, ${totalSales} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
 
     await prisma.$disconnect();
     await pool.end();
@@ -288,18 +301,16 @@ async function main() {
     if (restoreFromCache()) {
       console.log('Successfully restored cached snapshots. Build will continue.');
     } else {
-      // Check if pre-built snapshot files already exist in public/ (e.g., from deployment upload)
       const existingManifest = path.join(publicDir, 'data-sales-manifest.json');
       if (fs.existsSync(existingManifest)) {
         const m = JSON.parse(fs.readFileSync(existingManifest, 'utf-8'));
         if (m.totalSales > 0) {
           console.log(`Using existing snapshot files in public/ (${m.totalSales} sales, ${m.seasons.length} seasons)`);
-          saveToCache(); // Cache these for future builds
-          return; // Don't overwrite with empty data
+          saveToCache();
+          return;
         }
       }
       console.error('No cached or existing snapshots available. Build will proceed without data.');
-      // Write empty snapshots so the app can still load
       ensureDir(publicDir);
       fs.writeFileSync(path.join(publicDir, 'data-core.json'), JSON.stringify({
         success: true, buildTime: new Date().toISOString(),
@@ -313,7 +324,6 @@ async function main() {
       }));
     }
 
-    // Clean up connections
     try { if (prisma) await prisma.$disconnect(); } catch {}
     try { if (pool) await pool.end(); } catch {}
   }
@@ -321,6 +331,5 @@ async function main() {
 
 main().catch(err => {
   console.error('FATAL:', err);
-  // Don't exit(1) — allow the Next.js build to continue
   process.exit(0);
 });
