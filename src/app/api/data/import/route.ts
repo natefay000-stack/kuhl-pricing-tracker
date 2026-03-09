@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
               htsCode: String(item.htsCode || ''),
               styleColorNotes: String(item.styleColorNotes || ''),
             }));
-            await tx.product.createMany({ data: batch });
+            await tx.product.createMany({ data: batch, skipDuplicates: true });
             count += batch.length;
           }
           break;
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
               msrp: Number(item.msrp || 0),
               cost: Number(item.cost || 0),
             }));
-            await tx.pricing.createMany({ data: batch });
+            await tx.pricing.createMany({ data: batch, skipDuplicates: true });
             count += batch.length;
           }
           break;
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
               margin: item.margin ? Number(item.margin) : null,
               costSource: item.costSource ? String(item.costSource) : null,
             }));
-            await tx.cost.createMany({ data: batch });
+            await tx.cost.createMany({ data: batch, skipDuplicates: true });
             count += batch.length;
           }
           break;
