@@ -706,7 +706,7 @@ export default function GeoHeatmapView({
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
         {/* Map */}
         <div className="xl:col-span-2 bg-[#131316] rounded-xl border border-[#2a2a32] p-4 relative">
           {/* Loading overlay */}
@@ -932,7 +932,7 @@ export default function GeoHeatmapView({
         </div>
 
         {/* Detail Panel */}
-        <div className="bg-[#131316] rounded-xl border border-[#2a2a32] p-4 space-y-4">
+        <div className="bg-[#131316] rounded-xl border border-[#2a2a32] p-4 space-y-4 self-start sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
           {isDrilled && activeCountyData ? (
             /* County detail */
             <>
