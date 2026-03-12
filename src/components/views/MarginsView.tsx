@@ -64,6 +64,7 @@ interface StyleChannelMargin {
   msrpSource: string;
   wholesaleSource: string;
   costSource: string;
+  costWarning: 'none' | 'above-wholesale' | 'above-msrp' | 'missing';
   baselineMargin: number;
   totalRevenue: number;
   totalUnits: number;
@@ -96,8 +97,10 @@ interface ChannelPerformance {
   revenue: number;
   units: number;
   avgNetPrice: number;
+  avgWholesalePrice: number;
   avgLanded: number;
   trueMargin: number;
+  avgDiscount: number;
   revenuePct: number;
 }
 
@@ -326,9 +329,23 @@ export default function MarginsView({
     return Array.from(customers).sort();
   }, [filteredSales]);
 
+  // Build wholesale price lookup from products — keyed by styleNumber
+  const wholesalePriceLookup = useMemo(() => {
+    const lookup = new Map<string, { wholesale: number; msrp: number }>();
+    products.forEach(p => {
+      if (!lookup.has(p.styleNumber)) {
+        lookup.set(p.styleNumber, { wholesale: p.price || 0, msrp: p.msrp || 0 });
+      }
+    });
+    return lookup;
+  }, [products]);
+
+  // Retail-facing channels use MSRP as reference price; wholesale channels use wholesale price
+  const RETAIL_CHANNELS = new Set(['EC', 'KUHL_STORES']);
+
   // Channel Performance Analysis - True Margin by Channel
   const channelPerformance = useMemo(() => {
-    const byChannel = new Map<string, { revenue: number; units: number; totalCost: number; stylesWithCost: number }>();
+    const byChannel = new Map<string, { revenue: number; units: number; totalCost: number; totalWholesale: number; totalListPrice: number; stylesWithCost: number }>();
 
     filteredSales.forEach(record => {
       // Apply division/category filters
@@ -338,26 +355,38 @@ export default function MarginsView({
       const channel = normalizeCustomerType(record.customerType);
       const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
       const units = record.unitsBooked || 0;
+      const priceInfo = wholesalePriceLookup.get(record.styleNumber);
+      const wholesalePrice = priceInfo?.wholesale || 0;
+      const msrp = priceInfo?.msrp || 0;
+      // Reference list price: MSRP for retail channels, wholesale for wholesale channels
+      const listPrice = RETAIL_CHANNELS.has(channel) ? msrp : wholesalePrice;
 
       if (!byChannel.has(channel)) {
-        byChannel.set(channel, { revenue: 0, units: 0, totalCost: 0, stylesWithCost: 0 });
+        byChannel.set(channel, { revenue: 0, units: 0, totalCost: 0, totalWholesale: 0, totalListPrice: 0, stylesWithCost: 0 });
       }
 
       const entry = byChannel.get(channel)!;
       entry.revenue += record.revenue || 0;
       entry.units += units;
       entry.totalCost += units * landedCost;
+      entry.totalWholesale += units * wholesalePrice;
+      entry.totalListPrice += units * listPrice;
       if (landedCost > 0) entry.stylesWithCost++;
     });
 
     const totalRevenue = Array.from(byChannel.values()).reduce((sum, c) => sum + c.revenue, 0);
 
     const results: ChannelPerformance[] = PRIMARY_CHANNELS.map(channel => {
-      const data = byChannel.get(channel) || { revenue: 0, units: 0, totalCost: 0, stylesWithCost: 0 };
+      const data = byChannel.get(channel) || { revenue: 0, units: 0, totalCost: 0, totalWholesale: 0, totalListPrice: 0, stylesWithCost: 0 };
       const avgNetPrice = data.units > 0 ? data.revenue / data.units : 0;
       const avgLanded = data.units > 0 ? data.totalCost / data.units : 0;
+      const avgWholesalePrice = data.units > 0 ? data.totalWholesale / data.units : 0;
+      const avgListPrice = data.units > 0 ? data.totalListPrice / data.units : 0;
       // True Margin = (Net Unit Price - Landed Cost) / Net Unit Price × 100
       const trueMargin = avgNetPrice > 0 ? ((avgNetPrice - avgLanded) / avgNetPrice) * 100 : 0;
+      // Avg Discount = (List Price - Net Price) / List Price × 100
+      // Positive = selling below list, Negative = selling above list (premium)
+      const avgDiscount = avgListPrice > 0 ? ((avgListPrice - avgNetPrice) / avgListPrice) * 100 : 0;
 
       return {
         channel,
@@ -365,8 +394,10 @@ export default function MarginsView({
         revenue: data.revenue,
         units: data.units,
         avgNetPrice,
+        avgWholesalePrice,
         avgLanded,
         trueMargin,
+        avgDiscount,
         revenuePct: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
       };
     });
@@ -374,9 +405,17 @@ export default function MarginsView({
     // Add blended total
     const totalUnits = results.reduce((sum, c) => sum + c.units, 0);
     const totalCost = results.reduce((sum, c) => sum + (c.avgLanded * c.units), 0);
+    const totalWholesale = results.reduce((sum, c) => sum + (c.avgWholesalePrice * c.units), 0);
+    const totalListPrice = results.reduce((sum, c) => {
+      const data = byChannel.get(c.channel);
+      return sum + (data?.totalListPrice || 0);
+    }, 0);
     const blendedAvgNetPrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
     const blendedAvgLanded = totalUnits > 0 ? totalCost / totalUnits : 0;
+    const blendedAvgWholesale = totalUnits > 0 ? totalWholesale / totalUnits : 0;
+    const blendedAvgListPrice = totalUnits > 0 ? totalListPrice / totalUnits : 0;
     const blendedMargin = blendedAvgNetPrice > 0 ? ((blendedAvgNetPrice - blendedAvgLanded) / blendedAvgNetPrice) * 100 : 0;
+    const blendedDiscount = blendedAvgListPrice > 0 ? ((blendedAvgListPrice - blendedAvgNetPrice) / blendedAvgListPrice) * 100 : 0;
 
     return {
       channels: results,
@@ -384,11 +423,13 @@ export default function MarginsView({
         revenue: totalRevenue,
         units: totalUnits,
         avgNetPrice: blendedAvgNetPrice,
+        avgWholesalePrice: blendedAvgWholesale,
         avgLanded: blendedAvgLanded,
         trueMargin: blendedMargin,
+        avgDiscount: blendedDiscount,
       },
     };
-  }, [filteredSales, costLookup, selectedDivision, selectedCategory]);
+  }, [filteredSales, costLookup, wholesalePriceLookup, selectedDivision, selectedCategory]);
 
   // Style-Level Margin Analysis with Channel Mix
   const styleChannelMargins = useMemo(() => {
@@ -509,6 +550,16 @@ export default function MarginsView({
         };
       });
 
+      // Cost validation
+      let costWarning: 'none' | 'above-wholesale' | 'above-msrp' | 'missing' = 'none';
+      if (style.landedCost === 0) {
+        costWarning = 'missing';
+      } else if (style.msrp > 0 && style.landedCost > style.msrp) {
+        costWarning = 'above-msrp';
+      } else if (style.wholesalePrice > 0 && style.landedCost > style.wholesalePrice) {
+        costWarning = 'above-wholesale';
+      }
+
       return {
         styleNumber: style.styleNumber,
         styleDesc: style.styleDesc,
@@ -520,6 +571,7 @@ export default function MarginsView({
         msrpSource: style.msrpSource,
         wholesaleSource: style.wholesaleSource,
         costSource: style.costSource,
+        costWarning,
         baselineMargin,
         totalRevenue,
         totalUnits,
@@ -1091,7 +1143,9 @@ export default function MarginsView({
                     <th className="px-4 py-3 text-left text-sm font-bold text-text-secondary uppercase tracking-wide">Channel</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Revenue</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Units</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Wholesale</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Net Price</th>
+                    <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Discount</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Avg Landed</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">True Margin</th>
                     <th className="px-4 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide">Rev Mix</th>
@@ -1126,8 +1180,16 @@ export default function MarginsView({
                         <td className="px-4 py-3 text-right font-mono text-text-secondary">
                           {formatNumber(channel.units)}
                         </td>
+                        <td className="px-4 py-3 text-right font-mono text-text-secondary">
+                          ${channel.avgWholesalePrice.toFixed(2)}
+                        </td>
                         <td className="px-4 py-3 text-right font-mono text-text-primary">
                           ${channel.avgNetPrice.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-mono text-sm ${channel.avgDiscount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {channel.avgDiscount > 0 ? '-' : '+'}{Math.abs(channel.avgDiscount).toFixed(1)}%
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-text-secondary">
                           ${channel.avgLanded.toFixed(2)}
@@ -1164,8 +1226,16 @@ export default function MarginsView({
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       {formatNumber(channelPerformance.blended.units)}
                     </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-text-secondary">
+                      ${channelPerformance.blended.avgWholesalePrice.toFixed(2)}
+                    </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
                       ${channelPerformance.blended.avgNetPrice.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`font-mono font-bold text-sm ${channelPerformance.blended.avgDiscount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {channelPerformance.blended.avgDiscount > 0 ? '-' : '+'}{Math.abs(channelPerformance.blended.avgDiscount).toFixed(1)}%
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-secondary">
                       ${channelPerformance.blended.avgLanded.toFixed(2)}
@@ -1313,6 +1383,11 @@ export default function MarginsView({
                   <span className="text-text-muted">
                     {formatNumber(sortedStyleChannelMargins.length)} styles
                   </span>
+                  {sortedStyleChannelMargins.filter(s => s.costWarning === 'above-wholesale' || s.costWarning === 'above-msrp').length > 0 && (
+                    <span className="text-amber-400 text-xs font-medium" title="Styles with suspect cost data">
+                      ⚠️ {sortedStyleChannelMargins.filter(s => s.costWarning === 'above-wholesale' || s.costWarning === 'above-msrp').length} suspect costs
+                    </span>
+                  )}
                 </div>
               </div>
               {/* Season Filter Pills */}
@@ -1523,9 +1598,20 @@ export default function MarginsView({
                                   'bg-blue-500'
                                 }`} title={style.costSource === 'landed' ? 'Landed Sheet' : 'Line List'}></span>
                               )}
-                              <span className="font-mono text-sm text-text-secondary">
+                              <span className={`font-mono text-sm ${
+                                style.costWarning === 'above-msrp' ? 'text-red-400 font-bold' :
+                                style.costWarning === 'above-wholesale' ? 'text-amber-400 font-semibold' :
+                                style.costWarning === 'missing' ? 'text-text-muted' :
+                                'text-text-secondary'
+                              }`}>
                                 {style.landedCost > 0 ? `$${style.landedCost.toFixed(2)}` : '—'}
                               </span>
+                              {style.costWarning === 'above-wholesale' && (
+                                <span className="text-amber-400 text-xs" title="Cost exceeds wholesale price — suspect data">⚠️</span>
+                              )}
+                              {style.costWarning === 'above-msrp' && (
+                                <span className="text-red-400 text-xs" title="Cost exceeds MSRP — bad data">🚫</span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-text-primary">

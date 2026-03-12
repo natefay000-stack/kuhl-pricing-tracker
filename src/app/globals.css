@@ -381,3 +381,47 @@ select:focus {
 .animate-stagger > *:nth-child(4) { animation-delay: 150ms; }
 .animate-stagger > *:nth-child(5) { animation-delay: 200ms; }
 .animate-stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+/* ══════════════════════════════════════════════════════════════════
+   LEAFLET DARK THEME OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Dark-themed attribution */
+.leaflet-dark-theme .leaflet-control-attribution {
+  background: rgba(10, 10, 15, 0.7) !important;
+  color: #636366 !important;
+  font-size: 9px !important;
+}
+
+.leaflet-dark-theme .leaflet-control-attribution a {
+  color: #8e8e93 !important;
+}
+
+/* Dark-themed zoom controls */
+.leaflet-dark-theme .leaflet-control-zoom a {
+  background-color: #1c1c1e !important;
+  color: #f5f5f7 !important;
+  border-color: #2a2a32 !important;
+}
+
+.leaflet-dark-theme .leaflet-control-zoom a:hover {
+  background-color: #2a2a32 !important;
+}
+
+/* Metro label tooltips */
+.metro-label-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 10px !important;
+}
+
+.metro-label-tooltip::before {
+  display: none !important;
+}
+
+/* Ensure Leaflet container fills parent */
+.leaflet-dark-theme .leaflet-container {
+  background: #0a0a0f;
+}

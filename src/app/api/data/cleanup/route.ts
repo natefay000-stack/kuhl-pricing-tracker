@@ -7,6 +7,24 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // ── Targeted record deletion (by ID or style+season) ──
+    if (body.action === 'delete-cost-records' && Array.isArray(body.records)) {
+      const results = [];
+      for (const rec of body.records) {
+        if (rec.id) {
+          const d = await prisma.cost.delete({ where: { id: rec.id } }).catch(() => null);
+          results.push({ id: rec.id, deleted: !!d });
+        } else if (rec.styleNumber && rec.season) {
+          const d = await prisma.cost.deleteMany({
+            where: { styleNumber: rec.styleNumber, season: rec.season },
+          });
+          results.push({ style: rec.styleNumber, season: rec.season, deleted: d.count });
+        }
+      }
+      return NextResponse.json({ success: true, results });
+    }
+
     const { seasonsToDelete } = body;
 
     if (!seasonsToDelete || !Array.isArray(seasonsToDelete)) {

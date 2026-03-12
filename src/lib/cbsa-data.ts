@@ -14,6 +14,8 @@ export interface CbsaMetro {
   shortName: string;
   svgX: number;
   svgY: number;
+  lat: number;
+  lng: number;
   countyFips: string[];
 }
 

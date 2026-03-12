@@ -1,22 +1,19 @@
 'use client';
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
 import { SalesRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { matchesDivision } from '@/utils/divisionMap';
-import { STATE_PATHS } from '@/lib/us-state-paths';
 import {
-  loadCountyTopology,
   loadZipToCountyMap,
-  getCountiesForState,
-  createCountyPathGenerator,
   type ZipToCountyMap,
 } from '@/lib/geo-utils';
-import { aggregateSalesByCounty, type CountyData } from '@/lib/county-data';
-import { loadCbsaMetros, aggregateSalesByMetro, type CbsaMetro, type MetroData } from '@/lib/cbsa-data';
+import { loadCbsaMetros, aggregateSalesByMetro, type MetroData } from '@/lib/cbsa-data';
 import { matchesSeason } from '@/lib/store';
-import type { Topology } from 'topojson-specification';
-import type { Feature, GeoJsonProperties } from 'geojson';
+import { loadCityCoords, loadStateCentroids, buildHeatPoints, type CityCoords, type StateCentroids } from '@/lib/geo-coords';
+import retryDynamic from '@/lib/retryDynamic';
+import type { MetroMarker } from '@/components/geo/LeafletHeatMap';
+
+const LeafletHeatMap = retryDynamic(() => import('@/components/geo/LeafletHeatMap'));
 
 // State name lookup
 const STATE_NAMES: Record<string, string> = {
@@ -95,12 +92,6 @@ const CTYPE_COLORS: Record<string, string> = {
   'KI': '#64d2ff',
 };
 
-/** Format YYYY-MM-DD to readable short date (e.g., "Jan 15, 2025") */
-function formatDateLabel(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
 /** Reusable demographic breakdown bar + legend */
 function DemographicBreakdown({
   title,
@@ -169,16 +160,6 @@ function getMetricValue(d: { revenue: number; units: number; orders: number }, m
   }
 }
 
-// Color scale — blue intensity (shared between state and county)
-function computeColor(value: number, maxValue: number): string {
-  if (value === 0) return '#1a1a22';
-  const ratio = Math.pow(value / maxValue, 0.5);
-  const r = Math.round(10 + ratio * 10);
-  const g = Math.round(20 + ratio * 100);
-  const b = Math.round(40 + ratio * 215);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 interface GeoHeatmapViewProps {
   sales: SalesRecord[];
   selectedSeason: string;
@@ -193,26 +174,22 @@ export default function GeoHeatmapView({
   selectedCustomerType, selectedCustomer,
 }: GeoHeatmapViewProps) {
   // State-level state
-  const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [metric, setMetric] = useState<MetricKey>('revenue');
   const [showTable, setShowTable] = useState(true);
 
-  // County drill-down state
-  const [drilledState, setDrilledState] = useState<string | null>(null);
-  const [countyTopology, setCountyTopology] = useState<Topology | null>(null);
-  const [zipToCounty, setZipToCounty] = useState<ZipToCountyMap | null>(null);
-  const [isLoadingGeo, setIsLoadingGeo] = useState(false);
-  const [hoveredCounty, setHoveredCounty] = useState<string | null>(null);
-  const [selectedCounty, setSelectedCounty] = useState<string | null>(null);
-
   // Metro bubble overlay state
   const [showMetroBubbles, setShowMetroBubbles] = useState(true);
-  const [cbsaMetros, setCbsaMetros] = useState<Map<string, CbsaMetro> | null>(null);
+  const [cbsaMetros, setCbsaMetros] = useState<Map<string, import('@/lib/cbsa-data').CbsaMetro> | null>(null);
+  const [zipToCounty, setZipToCounty] = useState<ZipToCountyMap | null>(null);
   const [hoveredMetro, setHoveredMetro] = useState<string | null>(null);
   const [selectedMetro, setSelectedMetro] = useState<string | null>(null);
   const [tableMode, setTableMode] = useState<'states' | 'metros' | 'cities'>('states');
   const [quickGender, setQuickGender] = useState<string | null>(null);
+
+  // City coordinate lookups for heat map
+  const [cityCoords, setCityCoords] = useState<CityCoords | null>(null);
+  const [stateCentroidsData, setStateCentroidsData] = useState<StateCentroids | null>(null);
 
   // Month/Year filter state (local to this view)
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -251,17 +228,19 @@ export default function GeoHeatmapView({
     };
   }, [sales]);
 
-  // Load CBSA metro data + zip map on mount
+  // Load CBSA metro data + zip map + city coords + state centroids on mount
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadCbsaMetros(), loadZipToCountyMap()])
-      .then(([metros, zipMap]) => {
+    Promise.all([loadCbsaMetros(), loadZipToCountyMap(), loadCityCoords(), loadStateCentroids()])
+      .then(([metros, zipMap, coords, centroids]) => {
         if (!cancelled) {
           setCbsaMetros(metros);
           setZipToCounty(zipMap);
+          setCityCoords(coords);
+          setStateCentroidsData(centroids);
         }
       })
-      .catch(err => console.error('Failed to load metro data:', err));
+      .catch(err => console.error('Failed to load geo data:', err));
     return () => { cancelled = true; };
   }, []);
 
@@ -277,11 +256,11 @@ export default function GeoHeatmapView({
       // Date range filter
       if (dateStart || dateEnd) {
         const saleDate = s.invoiceDate ? new Date(s.invoiceDate) : null;
-        if (!saleDate) return false; // Exclude sales without dates when date filter active
+        if (!saleDate) return false;
         if (dateStart && saleDate < new Date(dateStart)) return false;
         if (dateEnd) {
           const end = new Date(dateEnd);
-          end.setDate(end.getDate() + 1); // Make end date inclusive
+          end.setDate(end.getDate() + 1);
           if (saleDate >= end) return false;
         }
       }
@@ -320,11 +299,9 @@ export default function GeoHeatmapView({
       const cat = sale.categoryDesc || 'Other';
       entry.categories[cat] = (entry.categories[cat] || 0) + rev;
 
-      // Gender breakdown
       const gender = getGenderFromDivision(sale.divisionDesc);
       entry.genderRevenue[gender] = (entry.genderRevenue[gender] || 0) + rev;
 
-      // Customer type breakdown
       const ctypes = (sale.customerType || '').split(',').map(t => t.trim()).filter(Boolean);
       for (const ct of ctypes) {
         entry.customerTypeRevenue[ct] = (entry.customerTypeRevenue[ct] || 0) + rev;
@@ -397,7 +374,6 @@ export default function GeoHeatmapView({
 
       let entry = map.get(key);
       if (!entry) {
-        // Title-case the city name
         const cityDisplay = rawCity.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w+/g, w => w.toLowerCase());
         entry = {
           cityKey: key,
@@ -430,7 +406,6 @@ export default function GeoHeatmapView({
       }
     }
 
-    // Compute top category for each city
     for (const entry of map.values()) {
       let topCat = '';
       let topRev = 0;
@@ -445,7 +420,7 @@ export default function GeoHeatmapView({
     return { cityData: sorted, cityTotalRevenue: totalRev };
   }, [filteredSales]);
 
-  // Only show top 50 metros on the map — data-driven, highlights where sales actually are
+  // Only show top 50 metros on the map
   const visibleMetros = useMemo(() => sortedMetros.slice(0, 50), [sortedMetros]);
 
   // Bubble radius: sqrt scale for area-proportional sizing
@@ -460,79 +435,7 @@ export default function GeoHeatmapView({
     return MIN_RADIUS + ratio * (MAX_RADIUS - MIN_RADIUS);
   }
 
-  // --- County drill-down data ---
-
-  const countyFeatures = useMemo(() => {
-    if (!drilledState || !countyTopology) return [];
-    return getCountiesForState(countyTopology, drilledState);
-  }, [drilledState, countyTopology]);
-
-  const countyPathGen = useMemo(() => {
-    if (!countyFeatures.length || !drilledState) return null;
-    return createCountyPathGenerator(countyFeatures, drilledState);
-  }, [countyFeatures, drilledState]);
-
-  const { countyDataMap, countyMaxValue, countyTotalRevenue, countyTotalUnits, countyCoverage, countiesWithData } = useMemo(() => {
-    if (!drilledState || !zipToCounty) {
-      return { countyDataMap: new Map<string, CountyData>(), countyMaxValue: 1, countyTotalRevenue: 0, countyTotalUnits: 0, countyCoverage: 0, countiesWithData: 0 };
-    }
-
-    const { countyData: cdMap, totalStateRevenue, mappedRevenue } = aggregateSalesByCounty(filteredSales, zipToCounty, drilledState);
-    const values = Array.from(cdMap.values());
-    const maxVal = Math.max(...values.map(d => getMetricValue(d, metric)), 1);
-    const totalRev = values.reduce((sum, d) => sum + d.revenue, 0);
-    const totalU = values.reduce((sum, d) => sum + d.units, 0);
-    const coverage = totalStateRevenue > 0 ? (mappedRevenue / totalStateRevenue) * 100 : 0;
-
-    return { countyDataMap: cdMap, countyMaxValue: maxVal, countyTotalRevenue: totalRev, countyTotalUnits: totalU, countyCoverage: coverage, countiesWithData: values.length };
-  }, [drilledState, zipToCounty, filteredSales, metric]);
-
-  // Sort counties for table
-  const sortedCounties = useMemo(() => {
-    return Array.from(countyDataMap.values()).sort((a, b) => getMetricValue(b, metric) - getMetricValue(a, metric));
-  }, [countyDataMap, metric]);
-
-  // Drill-down handler
-  const handleDrillDown = useCallback(async (stateCode: string) => {
-    if (!stateData.has(stateCode)) return;
-    setIsLoadingGeo(true);
-    try {
-      const [topo, zipMap] = await Promise.all([
-        loadCountyTopology(),
-        loadZipToCountyMap(),
-      ]);
-      setCountyTopology(topo);
-      setZipToCounty(zipMap);
-      setDrilledState(stateCode);
-      setSelectedCounty(null);
-      setHoveredCounty(null);
-    } catch (err) {
-      console.error('Failed to load county data:', err);
-    } finally {
-      setIsLoadingGeo(false);
-    }
-  }, [stateData]);
-
-  const handleBackToStates = useCallback(() => {
-    setDrilledState(null);
-    setSelectedCounty(null);
-    setHoveredCounty(null);
-  }, []);
-
-  // Color helpers
-  function getStateColor(stateCode: string): string {
-    const data = stateData.get(stateCode);
-    if (!data) return '#1a1a22';
-    return computeColor(getMetricValue(data, metric), maxValue);
-  }
-
-  function getCountyColor(fips: string): string {
-    const data = countyDataMap.get(fips);
-    if (!data) return '#1a1a22';
-    return computeColor(getMetricValue(data, metric), countyMaxValue);
-  }
-
-  // Formatting
+  // Formatting (must be defined before metroMarkers useMemo that references them)
   const fmt = (n: number) => {
     if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
@@ -545,129 +448,127 @@ export default function GeoHeatmapView({
     return n.toLocaleString();
   };
 
+  // --- Heat map points ---
+  const heatPoints = useMemo(() => {
+    return buildHeatPoints(filteredSales, metric, cityCoords, stateCentroidsData);
+  }, [filteredSales, metric, cityCoords, stateCentroidsData]);
+
+  const heatMaxIntensity = useMemo(() => {
+    if (heatPoints.length === 0) return 1;
+    return Math.max(...heatPoints.map(p => p[2]));
+  }, [heatPoints]);
+
+  // --- Metro markers for the Leaflet map ---
+  const metroMarkers: MetroMarker[] = useMemo(() => {
+    if (!cbsaMetros) return [];
+    return visibleMetros.map((metro, index) => {
+      const cbsa = cbsaMetros.get(metro.cbsaCode);
+      if (!cbsa || !cbsa.lat || !cbsa.lng) return null;
+      const value = getMetricValue(metro, metric);
+      const formattedValue = metric === 'revenue' || metric === 'avgOrder'
+        ? fmt(value)
+        : fmtUnits(value);
+      return {
+        cbsaCode: metro.cbsaCode,
+        name: metro.shortName,
+        lat: cbsa.lat,
+        lng: cbsa.lng,
+        radius: getMetroBubbleRadius(metro.cbsaCode),
+        value,
+        formattedValue,
+        rank: index + 1,
+        isSelected: selectedMetro === metro.cbsaCode,
+        isHovered: hoveredMetro === metro.cbsaCode,
+      } satisfies MetroMarker;
+    }).filter((m): m is MetroMarker => m !== null);
+  }, [visibleMetros, cbsaMetros, metric, metroMaxValue, selectedMetro, hoveredMetro]);
+
   // Active detail data
-  const activeState = selectedState || hoveredState;
-  const activeStateData = activeState ? stateData.get(activeState) : null;
-  const activeCountyFips = selectedCounty || hoveredCounty;
-  const activeCountyData = activeCountyFips ? countyDataMap.get(activeCountyFips) : null;
+  const activeStateData = selectedState ? stateData.get(selectedState) : null;
   const activeMetroCbsa = selectedMetro || hoveredMetro;
   const activeMetroData = activeMetroCbsa ? metroData.get(activeMetroCbsa) : null;
-
-  // Determine which detail to show
-  const isDrilled = drilledState !== null;
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          {isDrilled ? (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleBackToStates}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#0a84ff] bg-[#0a84ff]/10 rounded-lg hover:bg-[#0a84ff]/20 transition-colors"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                US Map
-              </button>
-              <div>
-                <h2 className="text-xl font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {STATE_NAMES[drilledState!]} Counties
-                </h2>
-                <p className="text-sm text-[#8e8e93]">
-                  {countiesWithData} counties &middot; {fmt(countyTotalRevenue)} revenue &middot; {fmtUnits(countyTotalUnits)} units
-                  {countyCoverage < 100 && (
-                    <span className="ml-2 text-[#ff9f0a]">({countyCoverage.toFixed(0)}% mapped by zip)</span>
-                  )}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <h2 className="text-xl font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                Geographic Sales Heat Map
-              </h2>
-              <p className="text-sm text-[#8e8e93]">
-                {statesWithData} states with sales data &middot; {fmt(totalRevenue)} total revenue &middot; {fmtUnits(totalUnits)} units
-                {(selectedMonth || selectedYear) && (
-                  <span className="text-[#64d2ff]">
-                    {' '}&middot; {selectedMonth ? new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('en-US', { month: 'long' }) : ''}{selectedMonth && selectedYear ? ' ' : ''}{selectedYear || ''}
-                  </span>
-                )}
-              </p>
-            </>
-          )}
+          <h2 className="text-xl font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+            Geographic Sales Heat Map
+          </h2>
+          <p className="text-sm text-[#8e8e93]">
+            {statesWithData} states with sales data &middot; {fmt(totalRevenue)} total revenue &middot; {fmtUnits(totalUnits)} units
+            {(selectedMonth || selectedYear) && (
+              <span className="text-[#64d2ff]">
+                {' '}&middot; {selectedMonth ? new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('en-US', { month: 'long' }) : ''}{selectedMonth && selectedYear ? ' ' : ''}{selectedYear || ''}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {/* Quick Gender Filter Chips */}
-          {!isDrilled && (
-            <div className="flex gap-1">
-              {(["Men's", "Women's", "Unisex"] as const).map(g => (
-                <button
-                  key={g}
-                  onClick={() => setQuickGender(quickGender === g ? null : g)}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border ${
-                    quickGender === g
-                      ? 'text-white border-transparent'
-                      : 'text-[#636366] hover:text-[#8e8e93] border-[#2a2a32]'
-                  }`}
-                  style={quickGender === g ? { backgroundColor: GENDER_COLORS[g] } : undefined}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex gap-1">
+            {(["Men's", "Women's", "Unisex"] as const).map(g => (
+              <button
+                key={g}
+                onClick={() => setQuickGender(quickGender === g ? null : g)}
+                className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border ${
+                  quickGender === g
+                    ? 'text-white border-transparent'
+                    : 'text-[#636366] hover:text-[#8e8e93] border-[#2a2a32]'
+                }`}
+                style={quickGender === g ? { backgroundColor: GENDER_COLORS[g] } : undefined}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
           {/* Month / Year Filter */}
-          {!isDrilled && (
-            <div className="flex items-center gap-1.5 pl-2 border-l border-[#2a2a32]">
-              <select
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(e.target.value)}
-                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
-              >
-                <option value="">All Months</option>
-                {availableMonths.map(m => (
-                  <option key={m} value={m}>
-                    {new Date(2000, parseInt(m) - 1).toLocaleString('en-US', { month: 'long' })}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={selectedYear}
-                onChange={e => setSelectedYear(e.target.value)}
-                className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
-              >
-                <option value="">All Years</option>
-                {availableYears.map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              {(selectedMonth || selectedYear) && (
-                <button
-                  onClick={() => { setSelectedMonth(''); setSelectedYear(''); }}
-                  className="text-[#636366] hover:text-[#ff453a] transition-colors text-sm leading-none"
-                  title="Clear date filter"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          )}
-          {/* Metro Bubbles Toggle */}
-          {!isDrilled && (
-            <button
-              onClick={() => setShowMetroBubbles(!showMetroBubbles)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                showMetroBubbles
-                  ? 'bg-[#ff9f0a]/20 text-[#ff9f0a] border border-[#ff9f0a]/30'
-                  : 'text-[#636366] hover:text-[#8e8e93] border border-[#2a2a32]'
-              }`}
-              title="Toggle metro area revenue bubbles"
+          <div className="flex items-center gap-1.5 pl-2 border-l border-[#2a2a32]">
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
             >
-              Metro Areas
-            </button>
-          )}
+              <option value="">All Months</option>
+              {availableMonths.map(m => (
+                <option key={m} value={m}>
+                  {new Date(2000, parseInt(m) - 1).toLocaleString('en-US', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={e => setSelectedYear(e.target.value)}
+              className="bg-[#1c1c1e] border border-[#2a2a32] rounded-md px-1.5 py-1 text-xs text-[#f5f5f7] focus:border-[#0a84ff] focus:outline-none [color-scheme:dark]"
+            >
+              <option value="">All Years</option>
+              {availableYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            {(selectedMonth || selectedYear) && (
+              <button
+                onClick={() => { setSelectedMonth(''); setSelectedYear(''); }}
+                className="text-[#636366] hover:text-[#ff453a] transition-colors text-sm leading-none"
+                title="Clear date filter"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          {/* Metro Bubbles Toggle */}
+          <button
+            onClick={() => setShowMetroBubbles(!showMetroBubbles)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              showMetroBubbles
+                ? 'bg-[#ff9f0a]/20 text-[#ff9f0a] border border-[#ff9f0a]/30'
+                : 'text-[#636366] hover:text-[#8e8e93] border border-[#2a2a32]'
+            }`}
+            title="Toggle metro area revenue bubbles"
+          >
+            Metro Areas
+          </button>
           {/* Metric Toggle */}
           <div className="flex gap-1 bg-[#1c1c1e] rounded-lg p-1">
             {([
@@ -708,332 +609,38 @@ export default function GeoHeatmapView({
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
         {/* Map */}
-        <div className="xl:col-span-2 bg-[#131316] rounded-xl border border-[#2a2a32] p-4 relative">
-          {/* Loading overlay */}
-          {isLoadingGeo && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#131316]/80 rounded-xl z-10">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-[#0a84ff] border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-[#8e8e93]">Loading county boundaries...</span>
-              </div>
-            </div>
-          )}
-
-          <svg
-            viewBox="0 0 960 620"
-            className="w-full h-auto transition-opacity duration-200"
-            style={{ maxHeight: '500px' }}
-          >
-            {!isDrilled ? (
-              <>
-                {/* STATE VIEW */}
-                {Object.entries(STATE_PATHS).map(([code, path]) => (
-                  <path
-                    key={code}
-                    d={path}
-                    fill={getStateColor(code)}
-                    stroke={code === selectedState ? '#ff9f0a' : code === hoveredState ? '#64a0ff' : '#3a3a44'}
-                    strokeWidth={code === selectedState ? 1 : code === hoveredState ? 1 : 0.5}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    shapeRendering="geometricPrecision"
-                    vectorEffect="non-scaling-stroke"
-                    paintOrder="stroke"
-                    className="cursor-pointer transition-all duration-150"
-                    onMouseEnter={() => setHoveredState(code)}
-                    onMouseLeave={() => setHoveredState(null)}
-                    onClick={() => setSelectedState(selectedState === code ? null : code)}
-                    onDoubleClick={() => handleDrillDown(code)}
-                  >
-                    <title>{STATE_NAMES[code]}</title>
-                  </path>
-                ))}
-                {/* State labels */}
-                {Object.entries(STATE_PATHS).map(([code]) => {
-                  const data = stateData.get(code);
-                  if (!data) return null;
-                  const path = STATE_PATHS[code];
-                  const nums = path.match(/[\d.]+/g)?.map(Number) || [];
-                  if (nums.length < 4) return null;
-                  const xs = nums.filter((_, i) => i % 2 === 0);
-                  const ys = nums.filter((_, i) => i % 2 === 1);
-                  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-                  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-                  const width = Math.max(...xs) - Math.min(...xs);
-                  if (width < 40) return null;
-                  return (
-                    <text key={`label-${code}`} x={cx} y={cy}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill="#f5f5f7" fontSize="9" fontFamily="DM Sans, sans-serif"
-                      fontWeight="600" pointerEvents="none" opacity={0.9}
-                    >{code}</text>
-                  );
-                })}
-
-                {/* METRO BUBBLE OVERLAY — top 50 by sales, visually tiered */}
-                {showMetroBubbles && visibleMetros.length > 0 && (
-                  <g className="metro-bubbles">
-                    {/* Render largest first so smaller bubbles are clickable on top */}
-                    {visibleMetros.map((metro, rank) => {
-                      const r = getMetroBubbleRadius(metro.cbsaCode);
-                      if (r === 0) return null;
-                      const isHovered = hoveredMetro === metro.cbsaCode;
-                      const isSelected = selectedMetro === metro.cbsaCode;
-                      const isTop5 = rank < 5;
-                      const isTop10 = rank < 10;
-                      // Top 5: gold glow, Top 10: bright, Rest: standard
-                      const fillOpacity = isTop5 ? 0.45 : isTop10 ? 0.35 : 0.25;
-                      const strokeColor = isSelected ? '#ff9f0a'
-                        : isHovered ? '#f5f5f7'
-                        : isTop5 ? '#ff9f0a'
-                        : isTop10 ? 'rgba(255, 159, 10, 0.8)'
-                        : 'rgba(255, 159, 10, 0.5)';
-                      const strokeW = isSelected || isHovered ? 2 : isTop5 ? 1.5 : 1;
-                      return (
-                        <g key={metro.cbsaCode}>
-                          {/* Glow ring for top 5 */}
-                          {isTop5 && (
-                            <circle
-                              cx={metro.svgX}
-                              cy={metro.svgY}
-                              r={r + 4}
-                              fill="none"
-                              stroke="rgba(255, 159, 10, 0.2)"
-                              strokeWidth={2}
-                              pointerEvents="none"
-                            />
-                          )}
-                          <circle
-                            cx={metro.svgX}
-                            cy={metro.svgY}
-                            r={isHovered || isSelected ? r + 2 : r}
-                            fill={`rgba(255, 159, 10, ${fillOpacity})`}
-                            stroke={strokeColor}
-                            strokeWidth={strokeW}
-                            className="cursor-pointer transition-all duration-150"
-                            onMouseEnter={() => { setHoveredMetro(metro.cbsaCode); setHoveredState(null); }}
-                            onMouseLeave={() => setHoveredMetro(null)}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedMetro(selectedMetro === metro.cbsaCode ? null : metro.cbsaCode);
-                              setSelectedState(null);
-                            }}
-                          />
-                          {/* Labels: always show for top 10, size-based for rest */}
-                          {(isTop10 || r >= 14) && (
-                            <text
-                              x={metro.svgX}
-                              y={metro.svgY}
-                              textAnchor="middle"
-                              dominantBaseline="central"
-                              fill={isTop5 ? '#fff' : '#f5f5f7'}
-                              fontSize={r >= 25 ? '8' : isTop10 ? '7' : '6.5'}
-                              fontFamily="DM Sans, sans-serif"
-                              fontWeight={isTop5 ? '700' : '600'}
-                              pointerEvents="none"
-                              opacity={isTop5 ? 1 : 0.9}
-                            >
-                              {metro.shortName}
-                            </text>
-                          )}
-                        </g>
-                      );
-                    })}
-                  </g>
-                )}
-              </>
-            ) : (
-              <>
-                {/* COUNTY VIEW */}
-                {countyFeatures.map((f: Feature<GeoJSON.Geometry, GeoJsonProperties>) => {
-                  const fips = String(f.id).padStart(5, '0');
-                  const d = countyPathGen?.(f) || '';
-                  if (!d) return null;
-                  const isSelected = selectedCounty === fips;
-                  const isHovered = hoveredCounty === fips;
-                  return (
-                    <path
-                      key={fips}
-                      d={d}
-                      fill={getCountyColor(fips)}
-                      stroke={isSelected ? '#ff9f0a' : isHovered ? '#0a84ff' : '#2a2a32'}
-                      strokeWidth={isSelected || isHovered ? 1.5 : 0.3}
-                      className="cursor-pointer transition-all duration-150"
-                      onMouseEnter={() => setHoveredCounty(fips)}
-                      onMouseLeave={() => setHoveredCounty(null)}
-                      onClick={() => setSelectedCounty(isSelected ? null : fips)}
-                    >
-                      <title>{countyDataMap.get(fips)?.countyName || f.properties?.name || `County ${fips}`}</title>
-                    </path>
-                  );
-                })}
-                {/* County labels for larger counties */}
-                {countyFeatures.map((f: Feature<GeoJSON.Geometry, GeoJsonProperties>) => {
-                  if (!countyPathGen) return null;
-                  const bounds = countyPathGen.bounds(f);
-                  const width = bounds[1][0] - bounds[0][0];
-                  if (width < 50) return null;
-                  const fips = String(f.id).padStart(5, '0');
-                  const centroid = countyPathGen.centroid(f);
-                  const data = countyDataMap.get(fips);
-                  const name = data?.countyName || f.properties?.name;
-                  if (!name) return null;
-                  return (
-                    <text key={`clabel-${fips}`} x={centroid[0]} y={centroid[1]}
-                      textAnchor="middle" dominantBaseline="central"
-                      fill={data ? '#f5f5f7' : '#636366'} fontSize="7" fontFamily="DM Sans, sans-serif"
-                      fontWeight="500" pointerEvents="none" opacity={data ? 0.8 : 0.5}
-                    >{name}</text>
-                  );
-                })}
-              </>
-            )}
-          </svg>
-
-          {/* Metro hover tooltip */}
-          {hoveredMetro && metroData.has(hoveredMetro) && !isDrilled && (() => {
-            const metro = metroData.get(hoveredMetro)!;
-            const value = getMetricValue(metro, metric);
-            return (
-              <div
-                className="absolute pointer-events-none bg-[#1c1c1e] border border-[#3a3a3c] rounded-lg px-3 py-2 shadow-xl z-20"
-                style={{
-                  left: `${(metro.svgX / 960) * 100}%`,
-                  top: `${(metro.svgY / 620) * 100}%`,
-                  transform: 'translate(-50%, -100%) translateY(-16px)',
-                }}
-              >
-                <div className="text-xs font-semibold text-[#f5f5f7]">{metro.shortName}</div>
-                <div className="text-xs text-[#ff9f0a]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                  {metric === 'revenue' || metric === 'avgOrder' ? fmt(value) : fmtUnits(value)}
-                </div>
-                <div className="text-[10px] text-[#636366]">
-                  {metro.orders.toLocaleString()} orders · {metro.customers.size} customers
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Legend */}
-          <div className="flex items-center gap-3 mt-3 px-2">
-            <span className="text-xs text-[#636366]">Low</span>
-            <div className="flex-1 h-2 rounded-full" style={{
-              background: 'linear-gradient(to right, #0a1428, #0a3466, #0a64cc, #0a84ff)',
-            }} />
-            <span className="text-xs text-[#636366]">High</span>
+        <div className="xl:col-span-2 bg-[#131316] rounded-xl border border-[#2a2a32] overflow-hidden relative">
+          {/* Leaflet Heat Map */}
+          <div style={{ height: '520px' }}>
+            <LeafletHeatMap
+              heatPoints={heatPoints}
+              metroMarkers={metroMarkers}
+              showMetroBubbles={showMetroBubbles}
+              onMetroClick={(cbsaCode: string) => {
+                setSelectedMetro(selectedMetro === cbsaCode ? null : cbsaCode);
+                setSelectedState(null);
+              }}
+              onMetroHover={(cbsaCode: string | null) => setHoveredMetro(cbsaCode)}
+              maxIntensity={heatMaxIntensity}
+            />
           </div>
 
-          {/* Double-click hint */}
-          {!isDrilled && (
-            <div className="text-center mt-2">
-              <span className="text-[10px] text-[#636366]">Double-click a state to drill into counties</span>
-            </div>
-          )}
+          {/* Legend */}
+          <div className="flex items-center gap-3 px-4 py-3 border-t border-[#2a2a32]">
+            <span className="text-xs text-[#636366]">Low</span>
+            <div className="flex-1 h-2 rounded-full" style={{
+              background: 'linear-gradient(to right, #0d2266, #1a3a9a, #6a1b9a, #b71c1c, #d84315, #ef6c00, #f9a825, #ffee58, #ffffff)',
+            }} />
+            <span className="text-xs text-[#636366]">High</span>
+            <span className="text-[10px] text-[#636366] ml-2">
+              {metric === 'revenue' ? 'Revenue' : metric === 'units' ? 'Units' : metric === 'orders' ? 'Orders' : 'Avg Order'} density
+            </span>
+          </div>
         </div>
 
         {/* Detail Panel */}
         <div className="bg-[#131316] rounded-xl border border-[#2a2a32] p-4 space-y-4 self-start sticky top-4 max-h-[calc(100vh-6rem)] overflow-y-auto">
-          {isDrilled && activeCountyData ? (
-            /* County detail */
-            <>
-              <div>
-                <h3 className="text-lg font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {activeCountyData.countyName}
-                </h3>
-                <span className="text-xs text-[#8e8e93]">FIPS {activeCountyData.fips} &middot; {activeCountyData.zipCodes.size} zip codes</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#1c1c1e] rounded-lg p-3">
-                  <div className="text-xs text-[#8e8e93] mb-1">Revenue</div>
-                  <div className="text-lg font-bold text-[#0a84ff]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {fmt(activeCountyData.revenue)}
-                  </div>
-                  <div className="text-xs text-[#636366]">
-                    {countyTotalRevenue > 0 ? ((activeCountyData.revenue / countyTotalRevenue) * 100).toFixed(1) : 0}% of state
-                  </div>
-                </div>
-                <div className="bg-[#1c1c1e] rounded-lg p-3">
-                  <div className="text-xs text-[#8e8e93] mb-1">Units</div>
-                  <div className="text-lg font-bold text-[#30d158]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {fmtUnits(activeCountyData.units)}
-                  </div>
-                  <div className="text-xs text-[#636366]">
-                    {countyTotalUnits > 0 ? ((activeCountyData.units / countyTotalUnits) * 100).toFixed(1) : 0}% of state
-                  </div>
-                </div>
-                <div className="bg-[#1c1c1e] rounded-lg p-3">
-                  <div className="text-xs text-[#8e8e93] mb-1">Orders</div>
-                  <div className="text-lg font-bold text-[#f5f5f7]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {activeCountyData.orders.toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-[#1c1c1e] rounded-lg p-3">
-                  <div className="text-xs text-[#8e8e93] mb-1">Customers</div>
-                  <div className="text-lg font-bold text-[#bf5af2]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {activeCountyData.customers.size}
-                  </div>
-                </div>
-                <div className="bg-[#1c1c1e] rounded-lg p-3 col-span-2">
-                  <div className="text-xs text-[#8e8e93] mb-1">Avg Order Value</div>
-                  <div className="text-lg font-bold text-[#ff9f0a]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                    {activeCountyData.orders > 0 ? fmt(activeCountyData.revenue / activeCountyData.orders) : '$0'}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-xs font-medium text-[#8e8e93] uppercase tracking-wider mb-2">Top Categories</h4>
-                <div className="space-y-2">
-                  {Object.entries(activeCountyData.categories)
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 5)
-                    .map(([cat, rev]) => {
-                      const pct = activeCountyData.revenue > 0 ? (rev / activeCountyData.revenue) * 100 : 0;
-                      return (
-                        <div key={cat}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-[#f5f5f7]">{cat}</span>
-                            <span className="text-[#8e8e93]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                              {fmt(rev)} ({pct.toFixed(0)}%)
-                            </span>
-                          </div>
-                          <div className="h-1.5 bg-[#2a2a32] rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-[#0a84ff]" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-              <DemographicBreakdown
-                title="Gender Breakdown"
-                data={activeCountyData.genderRevenue}
-                totalRevenue={activeCountyData.revenue}
-                colorMap={GENDER_COLORS}
-                fmtFn={fmt}
-              />
-              <DemographicBreakdown
-                title="Channel Breakdown"
-                data={activeCountyData.customerTypeRevenue}
-                totalRevenue={activeCountyData.revenue}
-                colorMap={CTYPE_COLORS}
-                labelMap={CUSTOMER_TYPE_LABELS}
-                fmtFn={fmt}
-              />
-            </>
-          ) : isDrilled ? (
-            /* Drilled but no county selected */
-            <div className="flex flex-col items-center justify-center h-full text-center py-12">
-              <div className="text-4xl mb-3">🏘️</div>
-              <div className="text-sm text-[#8e8e93]">
-                Hover or click a county to see details
-              </div>
-              <div className="text-xs text-[#636366] mt-1">
-                {countiesWithData} counties with sales data in {STATE_NAMES[drilledState!]}
-              </div>
-            </div>
-          ) : !isDrilled && activeMetroData ? (
+          {activeMetroData ? (
             /* Metro detail */
             <>
               <div>
@@ -1129,7 +736,7 @@ export default function GeoHeatmapView({
               />
             </>
           ) : activeStateData ? (
-            /* State detail (existing) */
+            /* State detail */
             <>
               <div>
                 <h3 className="text-lg font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
@@ -1222,13 +829,13 @@ export default function GeoHeatmapView({
             <div className="flex flex-col items-center justify-center h-full text-center py-12">
               <div className="text-4xl mb-3">🗺️</div>
               <div className="text-sm text-[#8e8e93]">
-                Hover or click a state to see details
+                Click a metro marker to see details
               </div>
               <div className="text-xs text-[#636366] mt-1">
                 {statesWithData} states with sales data
               </div>
               <div className="text-xs text-[#636366] mt-2">
-                Double-click to drill into counties
+                Zoom and pan to explore regional density
               </div>
             </div>
           )}
@@ -1239,119 +846,45 @@ export default function GeoHeatmapView({
       <div className="bg-[#131316] rounded-xl border border-[#2a2a32]">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            {!isDrilled ? (
-              <>
-                <button
-                  onClick={() => { setTableMode('states'); setShowTable(true); }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    tableMode === 'states'
-                      ? 'bg-[#0a84ff]/20 text-[#0a84ff]'
-                      : 'text-[#636366] hover:text-[#8e8e93]'
-                  }`}
-                >
-                  State Rankings
-                </button>
-                <button
-                  onClick={() => { setTableMode('metros'); setShowTable(true); }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    tableMode === 'metros'
-                      ? 'bg-[#ff9f0a]/20 text-[#ff9f0a]'
-                      : 'text-[#636366] hover:text-[#8e8e93]'
-                  }`}
-                >
-                  Metro Rankings
-                </button>
-                <button
-                  onClick={() => { setTableMode('cities'); setShowTable(true); }}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    tableMode === 'cities'
-                      ? 'bg-[#30d158]/20 text-[#30d158]'
-                      : 'text-[#636366] hover:text-[#8e8e93]'
-                  }`}
-                >
-                  City Rankings
-                </button>
-              </>
-            ) : (
-              <h3 className="text-sm font-semibold text-[#f5f5f7]" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                {STATE_NAMES[drilledState!]} County Rankings
-              </h3>
-            )}
+            <button
+              onClick={() => { setTableMode('states'); setShowTable(true); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                tableMode === 'states'
+                  ? 'bg-[#0a84ff]/20 text-[#0a84ff]'
+                  : 'text-[#636366] hover:text-[#8e8e93]'
+              }`}
+            >
+              State Rankings
+            </button>
+            <button
+              onClick={() => { setTableMode('metros'); setShowTable(true); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                tableMode === 'metros'
+                  ? 'bg-[#ff9f0a]/20 text-[#ff9f0a]'
+                  : 'text-[#636366] hover:text-[#8e8e93]'
+              }`}
+            >
+              Metro Rankings
+            </button>
+            <button
+              onClick={() => { setTableMode('cities'); setShowTable(true); }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                tableMode === 'cities'
+                  ? 'bg-[#30d158]/20 text-[#30d158]'
+                  : 'text-[#636366] hover:text-[#8e8e93]'
+              }`}
+            >
+              City Rankings
+            </button>
           </div>
           <button onClick={() => setShowTable(!showTable)} className="text-xs text-[#636366] hover:text-[#8e8e93]">
-            {showTable ? '▼' : '▶'} {isDrilled ? `${sortedCounties.length} counties` : tableMode === 'metros' ? `${sortedMetros.length} metros (top ${visibleMetros.length} on map)` : tableMode === 'cities' ? `Top 25 of ${sortedCities.length} cities` : `${sortedStates.length} states`}
+            {showTable ? '▼' : '▶'} {tableMode === 'metros' ? `${sortedMetros.length} metros (top ${visibleMetros.length} on map)` : tableMode === 'cities' ? `Top 25 of ${sortedCities.length} cities` : `${sortedStates.length} states`}
           </button>
         </div>
 
         {showTable && (
           <div className="overflow-x-auto">
-            {isDrilled ? (
-              /* County rankings table */
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-t border-[#2a2a32] text-[#8e8e93]">
-                    <th className="text-left px-4 py-2 font-medium">#</th>
-                    <th className="text-left px-4 py-2 font-medium">County</th>
-                    <th className="text-right px-4 py-2 font-medium">Revenue</th>
-                    <th className="text-right px-4 py-2 font-medium">% Share</th>
-                    <th className="text-right px-4 py-2 font-medium">Units</th>
-                    <th className="text-right px-4 py-2 font-medium">Orders</th>
-                    <th className="text-right px-4 py-2 font-medium">Customers</th>
-                    <th className="text-right px-4 py-2 font-medium">Avg Order</th>
-                    <th className="text-right px-4 py-2 font-medium">Zips</th>
-                    <th className="text-left px-4 py-2 font-medium">Top Category</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedCounties.map((d, i) => {
-                    const share = countyTotalRevenue > 0 ? (d.revenue / countyTotalRevenue) * 100 : 0;
-                    return (
-                      <tr
-                        key={d.fips}
-                        className={`border-t border-[#1c1c1e] hover:bg-[#1c1c1e] cursor-pointer transition-colors ${
-                          d.fips === selectedCounty ? 'bg-[#0a84ff]/10' : ''
-                        }`}
-                        onClick={() => setSelectedCounty(selectedCounty === d.fips ? null : d.fips)}
-                        onMouseEnter={() => setHoveredCounty(d.fips)}
-                        onMouseLeave={() => setHoveredCounty(null)}
-                      >
-                        <td className="px-4 py-2 text-[#636366]">{i + 1}</td>
-                        <td className="px-4 py-2 text-[#f5f5f7] font-medium">{d.countyName}</td>
-                        <td className="px-4 py-2 text-right text-[#f5f5f7]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {fmt(d.revenue)}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-1.5 bg-[#2a2a32] rounded-full overflow-hidden">
-                              <div className="h-full rounded-full bg-[#0a84ff]" style={{ width: `${Math.min(share, 100)}%` }} />
-                            </div>
-                            <span className="text-[#8e8e93] w-12 text-right" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                              {share.toFixed(1)}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#f5f5f7]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {fmtUnits(d.units)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#f5f5f7]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {d.orders.toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#bf5af2]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {d.customers.size}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#ff9f0a]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {d.orders > 0 ? fmt(d.revenue / d.orders) : '-'}
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#8e8e93]" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
-                          {d.zipCodes.size}
-                        </td>
-                        <td className="px-4 py-2 text-[#8e8e93]">{d.topCategory}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : tableMode === 'metros' ? (
+            {tableMode === 'metros' ? (
               /* Metro rankings table */
               <table className="w-full text-xs">
                 <thead>
@@ -1493,7 +1026,7 @@ export default function GeoHeatmapView({
                 </table>
               )
             ) : (
-              /* State rankings table (existing) */
+              /* State rankings table */
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-t border-[#2a2a32] text-[#8e8e93]">
@@ -1518,9 +1051,6 @@ export default function GeoHeatmapView({
                           d.state === selectedState ? 'bg-[#0a84ff]/10' : ''
                         }`}
                         onClick={() => setSelectedState(selectedState === d.state ? null : d.state)}
-                        onDoubleClick={() => handleDrillDown(d.state)}
-                        onMouseEnter={() => setHoveredState(d.state)}
-                        onMouseLeave={() => setHoveredState(null)}
                       >
                         <td className="px-4 py-2 text-[#636366]">{i + 1}</td>
                         <td className="px-4 py-2 text-[#f5f5f7] font-medium">

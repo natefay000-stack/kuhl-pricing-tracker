@@ -72,7 +72,7 @@ export default function ImportModal({ onImport, onClose }: ImportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1100] p-4" onClick={onClose}>
       <div 
         className="bg-white rounded-2xl max-w-xl w-full animate-slide-up"
         onClick={(e) => e.stopPropagation()}
