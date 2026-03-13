@@ -26,10 +26,11 @@ import {
   ClipboardList,
   BarChart3,
   MapPin,
+  FolderOpen,
   type LucideIcon,
 } from 'lucide-react';
 
-export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'linelist' | 'validation' | 'datasources' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
+export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -84,6 +85,7 @@ const navGroups: NavGroup[] = [
     items: [
       { id: 'validation', label: 'Validation', icon: AlertTriangle, emoji: '⚠️' },
       { id: 'datasources', label: 'Sources', icon: GitCompare, emoji: '🔗' },
+      { id: 'sourcefiles', label: 'Source Files', icon: FolderOpen, emoji: '📁' },
     ],
   },
 ];

@@ -32,6 +32,7 @@ const SellThroughView = retryDynamic(() => import('@/components/views/SellThroug
 const TariffView = retryDynamic(() => import('@/components/views/TariffView'));
 const InvOpnSeasonView = retryDynamic(() => import('@/components/views/InvOpnSeasonView'));
 const GeoHeatmapView = retryDynamic(() => import('@/components/views/GeoHeatmapView'));
+const SourceFilesView = retryDynamic(() => import('@/components/views/SourceFilesView'));
 import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 import { exportViewToPdf } from '@/utils/exportPdf';
@@ -1787,6 +1788,12 @@ export default function Home() {
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'sourcefiles' && (
+            <ErrorBoundary viewName="Source Files">
+              <SourceFilesView />
             </ErrorBoundary>
           )}
         </div>
