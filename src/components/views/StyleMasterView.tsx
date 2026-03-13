@@ -8,6 +8,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   X,
   Circle,
   Package,
@@ -97,6 +98,7 @@ export default function StyleMasterView({
   }, [globalSearchQuery]);
   const [selectedStyleNumber, setSelectedStyleNumber] = useState<string | null>(initialStyleNumber || null);
   const [activeTab, setActiveTab] = useState<TabId>('codes');
+  const [showColorDropdown, setShowColorDropdown] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Get unique styles (deduplicated by style number)
@@ -408,6 +410,22 @@ export default function StyleMasterView({
                 </span>
               </div>
               <h3 className="text-2xl font-semibold text-text-secondary mt-2">{style.styleDesc}</h3>
+              {/* Color dropdown toggle */}
+              <button
+                onClick={() => setShowColorDropdown(!showColorDropdown)}
+                className="mt-2 flex items-center gap-2 text-sm text-text-muted hover:text-text-primary transition-colors group"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${showColorDropdown ? 'rotate-180' : ''}`} />
+                <span className="font-medium">{colors.length} Color{colors.length !== 1 ? 's' : ''}</span>
+                <div className="flex gap-1 ml-1">
+                  {colors.slice(0, 8).map((c) => (
+                    <span key={c.color} className="px-1.5 py-0.5 bg-surface-tertiary rounded text-[10px] font-mono text-text-muted group-hover:text-text-secondary">
+                      {c.color}
+                    </span>
+                  ))}
+                  {colors.length > 8 && <span className="text-[10px] text-text-faint">+{colors.length - 8}</span>}
+                </div>
+              </button>
             </div>
             <div className="text-right">
               <p className="text-sm text-text-muted">
@@ -421,6 +439,56 @@ export default function StyleMasterView({
               </p>
             </div>
           </div>
+
+          {/* Color Dropdown */}
+          {showColorDropdown && colors.length > 0 && (
+            <div className="mt-4 border border-border-primary rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border-primary text-left bg-surface-tertiary">
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide">Code</th>
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide">Color Name</th>
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide">Status</th>
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide">Season</th>
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide text-center">Web</th>
+                    <th className="px-3 py-2 text-[11px] font-bold text-text-secondary uppercase tracking-wide">Style/Color</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-secondary">
+                  {colors.map((c, i) => (
+                    <tr key={c.color + i} className="hover:bg-hover transition-colors">
+                      <td className="px-3 py-2">
+                        <span className="font-mono font-semibold text-text-primary bg-surface-tertiary px-2 py-0.5 rounded text-sm">
+                          {c.color}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-text-secondary">{c.colorDesc}</td>
+                      <td className="px-3 py-2">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          c.status === 'Active'
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-red-500/15 text-red-400'
+                        }`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-sm text-text-secondary">{c.colorSeason}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          c.webAvailable
+                            ? 'bg-blue-500/15 text-blue-400'
+                            : 'bg-surface-tertiary text-text-muted'
+                        }`}>
+                          {c.webAvailable ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-sm text-text-muted">{c.styleColor}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation */}
