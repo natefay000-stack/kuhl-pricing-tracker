@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -79,6 +79,16 @@ export default function SeasonView({
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [combineStyles, setCombineStyles] = useState(false);
+  const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set());
+
+  const toggleExpand = useCallback((styleNumber: string) => {
+    setExpandedStyles((prev) => {
+      const next = new Set(prev);
+      if (next.has(styleNumber)) next.delete(styleNumber);
+      else next.add(styleNumber);
+      return next;
+    });
+  }, []);
 
   // Local filters
   const [selectedSeasons, setSelectedSeasons] = useState<string[]>([]);
@@ -109,8 +119,8 @@ export default function SeasonView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
-  // Reset to page 1 when filters or metric change
-  useEffect(() => { setCurrentPage(1); }, [metric, selectedSeasons, styleNumberFilter, styleNameFilter, selectedDesigner, selectedCustomerType, selectedCustomer, localGenderFilter, localCategoryFilter, sortBy, combineStyles]);
+  // Reset to page 1 and collapse expanded rows when filters or metric change
+  useEffect(() => { setCurrentPage(1); setExpandedStyles(new Set()); }, [metric, selectedSeasons, styleNumberFilter, styleNameFilter, selectedDesigner, selectedCustomerType, selectedCustomer, localGenderFilter, localCategoryFilter, sortBy, combineStyles]);
 
   // Toggle a season in the selection
   const toggleSeason = (season: string) => {
@@ -723,6 +733,62 @@ export default function SeasonView({
     return seasons;
   }, [seasons, selectedSeasons]);
 
+  // Color data for expanded styles — lazily computed only for expanded rows
+  const colorsByStyleSeason = useMemo(() => {
+    if (expandedStyles.size === 0) return new Map<string, Array<{
+      color: string; colorDesc: string; colorSeason: string;
+      status: 'Active' | 'Discontinued'; webAvailable: boolean;
+      seasonPresence: Set<string>;
+    }>>();
+
+    const map = new Map<string, Array<{
+      color: string; colorDesc: string; colorSeason: string;
+      status: 'Active' | 'Discontinued'; webAvailable: boolean;
+      seasonPresence: Set<string>;
+    }>>();
+
+    expandedStyles.forEach((styleNumber) => {
+      // Handle combine-styles mode: gather products for all variant style numbers
+      const styleNumbers: string[] = combineStyles
+        ? products
+            .filter(p => getCombineKey(p.styleNumber) === getCombineKey(styleNumber))
+            .map(p => cleanStyleNumber(p.styleNumber))
+            .filter((sn, i, arr) => arr.indexOf(sn) === i)
+        : [cleanStyleNumber(styleNumber)];
+
+      const relevantProducts = products.filter(p =>
+        styleNumbers.includes(cleanStyleNumber(p.styleNumber))
+      );
+
+      // Build color list with per-season presence
+      const colorMap = new Map<string, {
+        color: string; colorDesc: string; colorSeason: string;
+        status: 'Active' | 'Discontinued'; webAvailable: boolean;
+        seasonPresence: Set<string>;
+      }>();
+
+      relevantProducts.forEach(p => {
+        const existing = colorMap.get(p.color);
+        if (existing) {
+          if (p.season) existing.seasonPresence.add(p.season);
+        } else {
+          colorMap.set(p.color, {
+            color: p.color,
+            colorDesc: p.colorDesc,
+            colorSeason: p.colorSeason || p.season,
+            status: (p.colorDisc === 'Y' || p.inventoryClassification === 'D') ? 'Discontinued' : 'Active',
+            webAvailable: p.colorAvailWeb === 'Y',
+            seasonPresence: new Set(p.season ? [p.season] : []),
+          });
+        }
+      });
+
+      map.set(styleNumber, Array.from(colorMap.values()).sort((a, b) => a.color.localeCompare(b.color)));
+    });
+
+    return map;
+  }, [expandedStyles, products, combineStyles]);
+
   // Map each displayed season to its prior same-type (SP→SP, FA→FA) season
   const priorSeasonMap = useMemo(() => {
     const map: Record<string, string | null> = {};
@@ -1100,89 +1166,153 @@ export default function SeasonView({
               </tr>
             </thead>
             <tbody>
-              {sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row, index) => (
-                <tr
-                  key={row.styleNumber}
-                  onClick={() => onStyleClick(row.styleNumber)}
-                  className={`border-b border-border-primary cursor-pointer transition-colors ${
-                    index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
-                  } hover:bg-hover-accent`}
-                >
-                  <td className={`px-4 py-4 sticky left-0 z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xl font-bold text-text-primary">
-                        {combineStyles && row.allStyleNumbers && row.allStyleNumbers.length > 1
-                          ? row.allStyleNumbers.join(', ')
-                          : row.styleNumber}
-                      </span>
-                      {row.variantStyles && row.variantStyles.length > 0 && (
-                        <span
-                          className="text-xs font-semibold px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-full cursor-help whitespace-nowrap"
-                          title={`Combined ${row.allStyleNumbers?.length || row.variantStyles.length + 1} styles:\n${row.variantStyles.map((v: { styleNumber: string; styleDesc: string }) => `• ${v.styleNumber}${v.styleDesc ? ` – ${v.styleDesc}` : ''}`).join('\n')}`}
-                        >
-                          {row.allStyleNumbers?.length || row.variantStyles.length + 1} styles
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className={`px-4 py-4 text-lg text-text-secondary truncate max-w-[280px] sticky left-[100px] z-10 border-r border-border-primary ${index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'} hover:bg-hover-accent`}
-                    title={combineStyles && row.variantStyles && row.variantStyles.length > 0
-                      ? `${row.styleDesc}\n${row.variantStyles.map((v: { styleNumber?: string; styleDesc: string }) => `• ${v.styleNumber}: ${v.styleDesc}`).join('\n')}`
-                      : row.styleDesc}
-                  >
-                    {row.styleDesc}
-                  </td>
-                  {displaySeasons.map((season) => {
-                    const value = row.seasonData[season];
-                    const source = row.seasonSources[season];
-                    const delta = row.seasonDeltas?.[season] ?? null;
-                    const isNew = row.seasonIsNew?.[season] ?? false;
-                    const prior = priorSeasonMap[season];
-                    // Source indicator: ● pricebyseason, ○ linelist, ◇ sales, ■ landed_sheet
-                    const getSourceIndicator = (src: string) => {
-                      if (src === 'pricebyseason') return { symbol: '●', color: 'text-emerald-500', title: 'Source: pricebyseason' };
-                      if (src === 'linelist') return { symbol: '○', color: 'text-blue-500', title: 'Source: Line List' };
-                      if (src === 'sales') return { symbol: '◇', color: 'text-amber-500', title: 'Source: Calculated from Sales' };
-                      if (src === 'landed_sheet') return { symbol: '■', color: 'text-purple-500', title: 'Source: Landed Request Sheet' };
-                      if (src.includes('/')) return { symbol: '◆', color: 'text-text-faint', title: `Source: ${src}` };
-                      return null;
-                    };
-                    const indicator = source ? getSourceIndicator(source) : null;
-                    return (
-                      <td
-                        key={season}
-                        className="px-3 py-2 text-right font-mono border-l border-border-primary"
-                      >
-                        {value !== null ? (
-                          <div className="flex flex-col items-end">
-                            <span className="text-text-primary font-medium text-lg inline-flex items-center gap-1">
-                              {formatValue(value, metric)}
-                              {indicator && (
-                                <span className={`text-xs ${indicator.color}`} title={indicator.title}>
-                                  {indicator.symbol}
-                                </span>
-                              )}
+              {sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((row, index) => {
+                const isExpanded = expandedStyles.has(row.styleNumber);
+                const colors = isExpanded ? (colorsByStyleSeason.get(row.styleNumber) || []) : [];
+                const rowBg = index % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary';
+
+                return (
+                  <Fragment key={row.styleNumber}>
+                    {/* Parent style row */}
+                    <tr
+                      onClick={() => onStyleClick(row.styleNumber)}
+                      className={`border-b border-border-primary cursor-pointer transition-colors ${
+                        isExpanded ? 'bg-surface-tertiary' : `${rowBg} hover:bg-hover-accent`
+                      }`}
+                    >
+                      <td className={`px-4 py-4 sticky left-0 z-10 border-r border-border-primary ${isExpanded ? 'bg-surface-tertiary' : rowBg} hover:bg-hover-accent`}>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleExpand(row.styleNumber); }}
+                            className={`w-[18px] h-[18px] flex items-center justify-center rounded text-text-muted transition-transform flex-shrink-0 hover:text-text-primary ${
+                              isExpanded ? 'rotate-90 bg-cyan-500/15 text-cyan-400' : 'bg-surface-tertiary'
+                            }`}
+                            title={isExpanded ? 'Collapse colors' : 'Expand colors'}
+                          >
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                          <span className="font-mono text-xl font-bold text-text-primary">
+                            {combineStyles && row.allStyleNumbers && row.allStyleNumbers.length > 1
+                              ? row.allStyleNumbers.join(', ')
+                              : row.styleNumber}
+                          </span>
+                          {row.variantStyles && row.variantStyles.length > 0 && (
+                            <span
+                              className="text-xs font-semibold px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-full cursor-help whitespace-nowrap"
+                              title={`Combined ${row.allStyleNumbers?.length || row.variantStyles.length + 1} styles:\n${row.variantStyles.map((v: { styleNumber: string; styleDesc: string }) => `• ${v.styleNumber}${v.styleDesc ? ` – ${v.styleDesc}` : ''}`).join('\n')}`}
+                            >
+                              {row.allStyleNumbers?.length || row.variantStyles.length + 1} styles
                             </span>
-                            {prior && isNew && (
-                              <span className="text-[11px] font-bold text-cyan-500">NEW</span>
-                            )}
-                            {prior && delta !== null && (
-                              <span
-                                className={`text-[11px] font-semibold ${deltaColor(delta)}`}
-                                title={`vs ${prior}`}
-                              >
-                                {fmtDelta(delta)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-text-faint">—</span>
-                        )}
+                          )}
+                        </div>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      <td className={`px-4 py-4 text-lg text-text-secondary truncate max-w-[280px] sticky left-[100px] z-10 border-r border-border-primary ${isExpanded ? 'bg-surface-tertiary' : rowBg} hover:bg-hover-accent`}
+                        title={combineStyles && row.variantStyles && row.variantStyles.length > 0
+                          ? `${row.styleDesc}\n${row.variantStyles.map((v: { styleNumber?: string; styleDesc: string }) => `• ${v.styleNumber}: ${v.styleDesc}`).join('\n')}`
+                          : row.styleDesc}
+                      >
+                        {row.styleDesc}
+                      </td>
+                      {displaySeasons.map((season) => {
+                        const value = row.seasonData[season];
+                        const source = row.seasonSources[season];
+                        const delta = row.seasonDeltas?.[season] ?? null;
+                        const isNew = row.seasonIsNew?.[season] ?? false;
+                        const prior = priorSeasonMap[season];
+                        // Source indicator: ● pricebyseason, ○ linelist, ◇ sales, ■ landed_sheet
+                        const getSourceIndicator = (src: string) => {
+                          if (src === 'pricebyseason') return { symbol: '●', color: 'text-emerald-500', title: 'Source: pricebyseason' };
+                          if (src === 'linelist') return { symbol: '○', color: 'text-blue-500', title: 'Source: Line List' };
+                          if (src === 'sales') return { symbol: '◇', color: 'text-amber-500', title: 'Source: Calculated from Sales' };
+                          if (src === 'landed_sheet') return { symbol: '■', color: 'text-purple-500', title: 'Source: Landed Request Sheet' };
+                          if (src.includes('/')) return { symbol: '◆', color: 'text-text-faint', title: `Source: ${src}` };
+                          return null;
+                        };
+                        const indicator = source ? getSourceIndicator(source) : null;
+                        return (
+                          <td
+                            key={season}
+                            className="px-3 py-2 text-right font-mono border-l border-border-primary"
+                          >
+                            {value !== null ? (
+                              <div className="flex flex-col items-end">
+                                <span className="text-text-primary font-medium text-lg inline-flex items-center gap-1">
+                                  {formatValue(value, metric)}
+                                  {indicator && (
+                                    <span className={`text-xs ${indicator.color}`} title={indicator.title}>
+                                      {indicator.symbol}
+                                    </span>
+                                  )}
+                                </span>
+                                {prior && isNew && (
+                                  <span className="text-[11px] font-bold text-cyan-500">NEW</span>
+                                )}
+                                {prior && delta !== null && (
+                                  <span
+                                    className={`text-[11px] font-semibold ${deltaColor(delta)}`}
+                                    title={`vs ${prior}`}
+                                  >
+                                    {fmtDelta(delta)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-text-faint">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* Expanded color sub-rows */}
+                    {isExpanded && colors.length > 0 && colors.map((color) => (
+                      <tr
+                        key={`${row.styleNumber}-${color.color}`}
+                        className="border-b border-border-primary transition-colors"
+                        style={{ background: 'var(--color-surface-secondary, #0d0d0f)' }}
+                      >
+                        <td className="px-4 py-2 sticky left-0 z-10 border-r border-border-primary" style={{ background: 'var(--color-surface-secondary, #0d0d0f)' }}>
+                          <div className="flex items-center gap-2 pl-7">
+                            <span className="text-sm font-mono font-semibold text-text-primary">{color.color}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                              color.status === 'Active'
+                                ? 'bg-emerald-500/15 text-emerald-400'
+                                : 'bg-red-500/15 text-red-400'
+                            }`}>
+                              {color.status === 'Active' ? 'Active' : 'Disc'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 sticky left-[100px] z-10 border-r border-border-primary" style={{ background: 'var(--color-surface-secondary, #0d0d0f)' }}>
+                          <div className="flex flex-col">
+                            <span className="text-sm text-text-secondary truncate">{color.colorDesc}</span>
+                            <div className="flex gap-2 text-[10px] text-text-muted">
+                              <span>Intro: {color.colorSeason}</span>
+                              {color.webAvailable && <span className="text-blue-400">Web</span>}
+                            </div>
+                          </div>
+                        </td>
+                        {displaySeasons.map((season) => (
+                          <td key={season} className="px-3 py-2 text-center border-l border-border-primary">
+                            {color.seasonPresence.has(season) ? (
+                              <span className="inline-block w-3 h-3 rounded-full bg-emerald-500" title={`${color.colorDesc} offered in ${season}`} />
+                            ) : (
+                              <span className="text-text-faint text-xs">—</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {isExpanded && colors.length === 0 && (
+                      <tr className="border-b border-border-primary" style={{ background: 'var(--color-surface-secondary, #0d0d0f)' }}>
+                        <td colSpan={2 + displaySeasons.length} className="px-4 py-3 pl-12 text-sm text-text-muted italic">
+                          No color data available for this style
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             {/* Totals Row */}
             <tfoot>
