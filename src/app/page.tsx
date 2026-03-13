@@ -480,7 +480,7 @@ export default function Home() {
     const loadSalesProgressively = async () => {
       const controller = new AbortController();
       salesLoadAbort = controller;
-      const PAGE_SIZE = 50000;
+      const PAGE_SIZE = 10000;
       let page = 0;
       let allSales: SalesRecord[] = [];
       let totalPages = 1;
@@ -934,7 +934,7 @@ export default function Home() {
 
     try {
       // Reload sales progressively from the database
-      const PAGE_SIZE = 50000;
+      const PAGE_SIZE = 10000;
       let page = 0;
       let allSales: SalesRecord[] = [];
       let totalPages = 1;
