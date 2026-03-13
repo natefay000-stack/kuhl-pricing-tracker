@@ -1560,6 +1560,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
+                inventoryOH={inventoryOH}
                 salesAggregations={salesAggregations}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
