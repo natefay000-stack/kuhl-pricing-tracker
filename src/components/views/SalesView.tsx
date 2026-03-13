@@ -62,6 +62,8 @@ interface SalesViewProps {
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
+  selectedCustomerType?: string;
+  selectedCustomer?: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
 }
@@ -216,6 +218,8 @@ export default function SalesView({
   selectedSeason,
   selectedDivision,
   selectedCategory,
+  selectedCustomerType,
+  selectedCustomer,
   searchQuery: globalSearchQuery,
   onStyleClick,
 }: SalesViewProps) {
@@ -318,9 +322,11 @@ export default function SalesView({
         const norm = normalizeCategory(s.categoryDesc);
         if (norm !== selectedCategory) return false;
       }
+      if (selectedCustomerType && s.customerType !== selectedCustomerType) return false;
+      if (selectedCustomer && s.customer !== selectedCustomer) return false;
       return true;
     });
-  }, [sales, activeSeason, selectedDivision, selectedCategory]);
+  }, [sales, activeSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer]);
 
   const compareSales = useMemo(() => {
     if (!compareSeason) return [];
@@ -331,9 +337,11 @@ export default function SalesView({
         const norm = normalizeCategory(s.categoryDesc);
         if (norm !== selectedCategory) return false;
       }
+      if (selectedCustomerType && s.customerType !== selectedCustomerType) return false;
+      if (selectedCustomer && s.customer !== selectedCustomer) return false;
       return true;
     });
-  }, [sales, compareSeason, selectedDivision, selectedCategory]);
+  }, [sales, compareSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer]);
 
   // ── Metrics for header cards ──
   const metrics = useMemo(() => {
@@ -485,13 +493,20 @@ export default function SalesView({
 
   const priceLookup = useMemo(() => {
     const lookup = new Map<string, { wholesale: number; msrp: number }>();
+    // First pass: set any available price per style (fallback)
     products.forEach(p => {
-      if (!lookup.has(p.styleNumber)) {
+      if (!lookup.has(p.styleNumber) && (p.price > 0 || p.msrp > 0)) {
+        lookup.set(p.styleNumber, { wholesale: p.price || 0, msrp: p.msrp || 0 });
+      }
+    });
+    // Second pass: override with active season prices (more accurate)
+    products.forEach(p => {
+      if (p.season === activeSeason && (p.price > 0 || p.msrp > 0)) {
         lookup.set(p.styleNumber, { wholesale: p.price || 0, msrp: p.msrp || 0 });
       }
     });
     return lookup;
-  }, [products]);
+  }, [products, activeSeason]);
 
   const ohByStyle = useMemo(() => {
     const map = new Map<string, number>();

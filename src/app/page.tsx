@@ -1565,6 +1565,8 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                selectedCustomer={selectedCustomer}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
