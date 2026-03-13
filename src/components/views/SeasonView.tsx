@@ -734,6 +734,7 @@ export default function SeasonView({
   }, [seasons, selectedSeasons]);
 
   // Color data for expanded styles — lazily computed only for expanded rows
+  // Merges product records AND sales records to build complete season presence
   const colorsByStyleSeason = useMemo(() => {
     if (expandedStyles.size === 0) return new Map<string, Array<{
       color: string; colorDesc: string; colorSeason: string;
@@ -760,7 +761,7 @@ export default function SeasonView({
         styleNumbers.includes(cleanStyleNumber(p.styleNumber))
       );
 
-      // Build color list with per-season presence
+      // Build color list with per-season presence from product records
       const colorMap = new Map<string, {
         color: string; colorDesc: string; colorSeason: string;
         status: 'Active' | 'Discontinued'; webAvailable: boolean;
@@ -783,11 +784,35 @@ export default function SeasonView({
         }
       });
 
+      // Supplement with sales data — sales records often cover more seasons
+      // than line-list product records since sales span historical seasons
+      const relevantSales = sales.filter(s =>
+        styleNumbers.includes(cleanStyleNumber(s.styleNumber))
+      );
+      relevantSales.forEach(s => {
+        const colorCode = s.colorCode || s.color || '';
+        if (!colorCode || !s.season) return;
+        const existing = colorMap.get(colorCode);
+        if (existing) {
+          existing.seasonPresence.add(s.season);
+        } else {
+          // Color found in sales but not in product records — add it
+          colorMap.set(colorCode, {
+            color: colorCode,
+            colorDesc: s.colorDesc || '',
+            colorSeason: s.season,
+            status: 'Active',
+            webAvailable: false,
+            seasonPresence: new Set([s.season]),
+          });
+        }
+      });
+
       map.set(styleNumber, Array.from(colorMap.values()).sort((a, b) => a.color.localeCompare(b.color)));
     });
 
     return map;
-  }, [expandedStyles, products, combineStyles]);
+  }, [expandedStyles, products, sales, combineStyles]);
 
   // Map each displayed season to its prior same-type (SP→SP, FA→FA) season
   const priorSeasonMap = useMemo(() => {
