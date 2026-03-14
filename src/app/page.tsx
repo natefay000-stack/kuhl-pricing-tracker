@@ -7,6 +7,7 @@ import FilterBar from '@/components/layout/FilterBar';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
+import PersistenceWarningModal from '@/components/PersistenceWarningModal';
 import { SalesLoadingContext } from '@/components/SalesLoadingBanner';
 import retryDynamic from '@/lib/retryDynamic';
 
@@ -177,6 +178,21 @@ async function checkedFetch(url: string, init: RequestInit): Promise<Response> {
   return res;
 }
 
+// Retry wrapper with exponential backoff — reduces transient failures on batch imports
+async function checkedFetchWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await checkedFetch(url, init);
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+      console.warn(`Batch request failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 // Abort controller ref shared between background loaders and import handlers.
 // When an import starts we abort any in-flight background sales load.
 let salesLoadAbort: AbortController | null = null;
@@ -196,6 +212,10 @@ export default function Home() {
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [loadingSlow, setLoadingSlow] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [sessionOnlyMode, setSessionOnlyMode] = useState(false);
+  const [sessionOnlyTypes, setSessionOnlyTypes] = useState<string[]>([]);
+  const [showPersistenceModal, setShowPersistenceModal] = useState(false);
+  const [persistenceErrorDetail, setPersistenceErrorDetail] = useState('');
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesLoadingProgress, setSalesLoadingProgress] = useState('');
 
@@ -810,6 +830,8 @@ export default function Home() {
     // Cancel any background sales loading to prevent race conditions
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
+    setSessionOnlyMode(false);
+    setSessionOnlyTypes([]);
     console.log('Importing sales-only data:', data.sales.length, 'records');
 
     // Replace all sales with new data
@@ -821,7 +843,7 @@ export default function Home() {
 
     // Persist to database (full refresh - no season filter)
     try {
-      const BATCH_SIZE = 1000;
+      const BATCH_SIZE = 10000;
       const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
       console.log(`Importing ${data.sales.length} sales records in ${totalBatches} batches`);
 
@@ -830,7 +852,7 @@ export default function Home() {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
 
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -842,10 +864,14 @@ export default function Home() {
         });
       }
       console.log('Sales data persisted to database');
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     } catch (dbErr) {
-      const msg = `Sales DB import failed: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}. Data is loaded locally but may be lost on refresh.`;
-      console.error(msg);
-      setImportError(msg);
+      const detail = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      console.error('Sales DB persist error:', detail);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, 'Sales'])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
     }
   };
 
@@ -861,6 +887,8 @@ export default function Home() {
     // Cancel any background sales loading to prevent race conditions
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
+    setSessionOnlyMode(false);
+    setSessionOnlyTypes([]);
     console.log('REPLACE import:', data.sales.length, 'sales records for seasons:', data.seasons);
 
     // Keep sales from seasons NOT being replaced
@@ -879,7 +907,7 @@ export default function Home() {
       // First, delete existing sales for each season
       for (const season of data.seasons) {
         console.log(`Deleting existing sales for season: ${season}`);
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -892,8 +920,8 @@ export default function Home() {
         });
       }
 
-      // Then insert all new sales in batches
-      const BATCH_SIZE = 1000;  // Keep under Vercel's 4.5MB body limit
+      // Then insert all new sales in batches (10K per batch to reduce round-trips)
+      const BATCH_SIZE = 10000;
       const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
       console.log(`Inserting ${data.sales.length} sales records in ${totalBatches} batches`);
 
@@ -902,7 +930,7 @@ export default function Home() {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         console.log(`Inserting sales batch ${batchNum}/${totalBatches}`);
 
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -914,14 +942,15 @@ export default function Home() {
         });
       }
       console.log('Sales REPLACE import complete');
+      // Trigger snapshot rebuild after successful DB write
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     } catch (dbErr) {
       const detail = dbErr instanceof Error ? dbErr.message : String(dbErr);
-      const isQuota = detail.includes('quota') || detail.includes('exceeded');
-      const msg = isQuota
-        ? 'Database quota exceeded — data is loaded for this session but won\'t persist across refreshes. Consider upgrading your database plan.'
-        : `Database save failed: ${detail}. Data is loaded for this session but may be lost on refresh.`;
       console.error('Sales DB persist error:', detail);
-      setImportError(msg);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, 'Sales'])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
     }
   };
 
@@ -931,6 +960,8 @@ export default function Home() {
     // Cancel any background sales loading to prevent race conditions
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
+    setSessionOnlyMode(false);
+    setSessionOnlyTypes([]);
     console.log('Direct-to-DB import complete — reloading sales from database...');
 
     try {
@@ -954,10 +985,16 @@ export default function Home() {
       // Invalidate core cache so next page load refreshes from DB
       // (sales themselves aren't cached, but aggregations may be stale)
       try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+
+      // Trigger snapshot rebuild (data already in DB from server-side write)
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     } catch (err) {
-      const msg = `Failed to reload sales after direct-to-DB import: ${err instanceof Error ? err.message : String(err)}`;
-      console.error(msg);
-      setImportError(msg);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error('Sales reload error:', detail);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, 'Sales'])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
     }
   };
 
@@ -971,6 +1008,8 @@ export default function Home() {
     // Cancel any background sales loading to prevent race conditions
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
+    setSessionOnlyMode(false);
+    setSessionOnlyTypes([]);
     console.log('Importing multi-season data:', data.products?.length || 0, 'products', data.pricing?.length || 0, 'pricing', data.costs?.length || 0, 'costs', data.inventory?.length || 0, 'inventory');
 
     // Track final values for a single cache write at the end
@@ -998,7 +1037,7 @@ export default function Home() {
       try {
         for (const season of Array.from(seasonsInFile)) {
           console.log(`Deleting existing products for season: ${season}`);
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1011,10 +1050,10 @@ export default function Home() {
           });
         }
 
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 10000;
         for (let i = 0; i < data.products.length; i += BATCH_SIZE) {
           const batch = data.products.slice(i, i + BATCH_SIZE);
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1039,10 +1078,10 @@ export default function Home() {
 
       // Persist to database
       try {
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 10000;
         for (let i = 0; i < data.pricing.length; i += BATCH_SIZE) {
           const batch = data.pricing.slice(i, i + BATCH_SIZE);
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1105,7 +1144,7 @@ export default function Home() {
           // Landed cost: delete all existing for these seasons, then insert
           for (const season of Array.from(seasonsInFile)) {
             console.log(`Deleting all costs for season: ${season} (landed_cost import)`);
-            await checkedFetch('/api/data/import', {
+            await checkedFetchWithRetry('/api/data/import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1123,7 +1162,7 @@ export default function Home() {
           //  non-landed records for these seasons and re-insert the kept ones + new ones)
           for (const season of Array.from(seasonsInFile)) {
             console.log(`Deleting costs for season: ${season} (standard_cost import)`);
-            await checkedFetch('/api/data/import', {
+            await checkedFetchWithRetry('/api/data/import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1140,10 +1179,10 @@ export default function Home() {
             c => seasonsInFile.has(c.season) && c.costSource === 'landed_cost'
           );
           if (landedToReinsert.length > 0) {
-            const BATCH_SIZE = 1000;
+            const BATCH_SIZE = 10000;
             for (let i = 0; i < landedToReinsert.length; i += BATCH_SIZE) {
               const batch = landedToReinsert.slice(i, i + BATCH_SIZE);
-              await checkedFetch('/api/data/import', {
+              await checkedFetchWithRetry('/api/data/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1170,10 +1209,10 @@ export default function Home() {
               return !landedKeysDb.has(`${c.styleNumber}-${c.season}`);
             });
 
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 10000;
         for (let i = 0; i < costsToInsert.length; i += BATCH_SIZE) {
           const batch = costsToInsert.slice(i, i + BATCH_SIZE);
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1200,7 +1239,7 @@ export default function Home() {
 
       // Persist to database — delete all then insert in batches
       try {
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1211,10 +1250,10 @@ export default function Home() {
           }),
         });
 
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 10000;
         for (let i = 0; i < data.inventory.length; i += BATCH_SIZE) {
           const batch = data.inventory.slice(i, i + BATCH_SIZE);
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1234,11 +1273,18 @@ export default function Home() {
     // Single cache write with all final values (avoids stale closures from sequential writes)
     setCachedCore({ products: finalProducts, pricing: finalPricing, costs: finalCosts, inventory: finalInventory });
 
-    // Surface any DB persistence errors
+    // Surface any DB persistence errors via session-only mode
     if (dbErrors.length > 0) {
-      const msg = `Data loaded in-memory but failed to persist to database:\n${dbErrors.join('\n')}`;
-      console.error(msg);
-      setImportError(msg);
+      const failedTypes = dbErrors.map(e => e.split(':')[0]);
+      const detail = dbErrors.join('\n');
+      console.error('DB persistence errors:', detail);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, ...failedTypes])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
+    } else {
+      // All succeeded — trigger snapshot rebuild
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     }
   };
 
@@ -1253,6 +1299,8 @@ export default function Home() {
     // Cancel any background sales loading to prevent race conditions
     if (salesLoadAbort) { salesLoadAbort.abort(); salesLoadAbort = null; }
     setImportError(null);
+    setSessionOnlyMode(false);
+    setSessionOnlyTypes([]);
     console.log('Importing season data:', data.season, data.products.length, 'products', data.pricing?.length || 0, 'pricing', data.sales?.length || 0, 'sales');
 
     // Remove existing data for this season, then add new data
@@ -1281,7 +1329,7 @@ export default function Home() {
     // Import products to database
     if (data.products.length > 0) {
       try {
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1300,7 +1348,7 @@ export default function Home() {
     // Import pricing to database
     if (data.pricing && data.pricing.length > 0) {
       try {
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1319,7 +1367,7 @@ export default function Home() {
     // Import costs to database
     if (data.costs.length > 0) {
       try {
-        await checkedFetch('/api/data/import', {
+        await checkedFetchWithRetry('/api/data/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1347,7 +1395,7 @@ export default function Home() {
           const batchNum = Math.floor(i / BATCH_SIZE) + 1;
           console.log(`Importing sales batch ${batchNum}/${totalBatches}`);
 
-          await checkedFetch('/api/data/import', {
+          await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1365,11 +1413,17 @@ export default function Home() {
     }
 
     if (dbErrors.length > 0) {
-      const msg = `Data loaded in-memory but failed to persist to database:\n${dbErrors.join('\n')}`;
-      console.error(msg);
-      setImportError(msg);
+      const failedTypes = dbErrors.map(e => e.split(':')[0]);
+      const detail = dbErrors.join('\n');
+      console.error('DB persistence errors:', detail);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, ...failedTypes])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
     } else {
       console.log('Data persisted to database');
+      // Trigger snapshot rebuild after successful DB write
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     }
 
     // Set filter to show the imported season
@@ -1486,8 +1540,24 @@ export default function Home() {
           onYearChange={setSelectedYear}
         />
 
-        {/* Import error banner */}
-        {importError && (
+        {/* Session-only warning banner — persists until successful re-import */}
+        {sessionOnlyMode && (
+          <div className="mx-4 mt-2 p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl flex items-center gap-3">
+            <span className="text-amber-400 text-lg flex-shrink-0">⚠</span>
+            <span className="text-amber-300 text-sm font-medium flex-1">
+              Data loaded for this session only ({sessionOnlyTypes.join(', ')}). Changes will be lost on refresh.
+              <button
+                onClick={() => { setShowPersistenceModal(false); setShowImportModal(true); }}
+                className="ml-2 underline hover:text-amber-200 transition-colors"
+              >
+                Re-import
+              </button>
+            </span>
+          </div>
+        )}
+
+        {/* Legacy import error banner (fallback) */}
+        {importError && !sessionOnlyMode && (
           <div className="mx-4 mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
             <span className="text-red-400 text-sm font-medium flex-1 whitespace-pre-line">{importError}</span>
             <button
@@ -1822,6 +1892,19 @@ export default function Home() {
           onImportSalesReplace={handleSalesReplaceImport}
           onImportDirectToDb={handleDirectToDbImport}
           onClose={() => setShowImportModal(false)}
+        />
+      )}
+
+      {/* Persistence Warning Modal — blocks UI when DB writes fail */}
+      {showPersistenceModal && (
+        <PersistenceWarningModal
+          failedTypes={sessionOnlyTypes}
+          errorDetails={persistenceErrorDetail}
+          onAcknowledge={() => setShowPersistenceModal(false)}
+          onRetryImport={() => {
+            setShowPersistenceModal(false);
+            setShowImportModal(true);
+          }}
         />
       )}
     </div>

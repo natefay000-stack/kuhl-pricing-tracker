@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     let count = 0;
-    const batchSize = 1000;
+    const batchSize = 5000; // Process in larger batches within the transaction
 
     // Wrap delete + insert in a transaction to prevent partial data loss on failure
     await prisma.$transaction(async (tx) => {
