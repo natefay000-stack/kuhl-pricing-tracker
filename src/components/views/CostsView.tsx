@@ -7,6 +7,7 @@ import { matchesDivision } from '@/utils/divisionMap';
 import { formatCurrency, formatCurrencyShort, formatPercentRaw, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 import { buildCSV } from '@/utils/exportData';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
+import { buildCostFallbackLookup } from '@/utils/costFallback';
 import {
   DollarSign,
   TrendingUp,
@@ -24,6 +25,7 @@ import {
   Users,
   Layers,
   AlertTriangle,
+  Clock,
 } from 'lucide-react';
 
 interface CostsViewProps {
@@ -172,6 +174,7 @@ export default function CostsView({
       suggestedMsrp: number;
       count: number;
       costSource: string; // 'landed_cost' | 'standard_cost' | 'product'
+      costFallbackSeason?: string;
     }>();
 
     costs.forEach((c) => {
@@ -250,6 +253,18 @@ export default function CostsView({
       });
     });
 
+    // Fallback pass: fill missing landed costs from prior seasons
+    const fallbackLookup = buildCostFallbackLookup(costs, products);
+    grouped.forEach((g) => {
+      if (g.landed <= 0) {
+        const result = fallbackLookup.getCostWithFallback(g.styleNumber, g.season);
+        if (result.source === 'fallback' && result.cost > 0) {
+          g.landed = result.cost;
+          g.costFallbackSeason = result.fallbackSeason;
+        }
+      }
+    });
+
     // Apply factory/country/team/developer + global division/category filters after merge
     const filtered = Array.from(grouped.values()).filter((g) => {
       const factory = g.factories.size === 1 ? Array.from(g.factories)[0] : g.factories.size > 1 ? 'Multiple' : '';
@@ -301,6 +316,7 @@ export default function CostsView({
         units: salesData.units,
         colorCount: g.count,
         costSource: g.costSource,
+        costFallbackSeason: g.costFallbackSeason,
       };
     });
   }, [costs, products, filterSeason, filterStyleNumber, filterFactory, filterCountry, filterTeam, filterDeveloper, salesByStyleSeason, selectedDivision, selectedCategory, productLookup, globalSearchQuery]);
@@ -1064,7 +1080,14 @@ export default function CostsView({
                       {formatCurrency(cost.fob)}
                     </td>
                     <td className="px-4 py-4 text-right font-mono text-base font-bold text-text-primary border-l border-border-primary">
-                      {formatCurrency(cost.landed)}
+                      <span className="inline-flex items-center gap-1">
+                        {formatCurrency(cost.landed)}
+                        {cost.costFallbackSeason && (
+                          <span className="inline-flex items-center" title={`Cost from ${cost.costFallbackSeason} (no landed cost for ${cost.season})`}>
+                            <Clock className="w-3 h-3 text-amber-400" />
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-4 text-right font-mono text-base font-medium text-text-primary border-l border-border-primary">
                       {formatCurrency(cost.suggestedWholesale)}

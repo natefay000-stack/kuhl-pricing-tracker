@@ -22,10 +22,12 @@ import {
   Filter,
   X,
   Download,
+  Clock,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
+import { buildCostFallbackLookup } from '@/utils/costFallback';
 
 interface MarginsViewProps {
   products: Product[];
@@ -65,6 +67,7 @@ interface StyleChannelMargin {
   wholesaleSource: string;
   costSource: string;
   costWarning: 'none' | 'above-wholesale' | 'above-msrp' | 'missing';
+  costFallbackSeason?: string;
   baselineMargin: number;
   totalRevenue: number;
   totalUnits: number;
@@ -282,33 +285,13 @@ export default function MarginsView({
     return Array.from(seasons).sort().filter(s => isRelevantSeason(s));
   }, [sales]);
 
-  // Build cost lookup from costs data — keyed by styleNumber-season for accuracy
-  const costLookup = useMemo(() => {
-    const lookup = new Map<string, number>();
-    costs.forEach(c => {
-      const key = `${c.styleNumber}-${c.season}`;
-      if (c.landed > 0) {
-        lookup.set(key, c.landed);
-      } else if (c.fob > 0) {
-        lookup.set(key, c.fob);
-      }
-      // Also set a style-only fallback (last cost seen)
-      if (!lookup.has(c.styleNumber)) {
-        lookup.set(c.styleNumber, c.landed > 0 ? c.landed : c.fob);
-      }
-    });
-    // Also get costs from products as fallback
-    products.forEach(p => {
-      const key = `${p.styleNumber}-${p.season}`;
-      if (!lookup.has(key) && p.cost > 0) {
-        lookup.set(key, p.cost);
-      }
-      if (!lookup.has(p.styleNumber) && p.cost > 0) {
-        lookup.set(p.styleNumber, p.cost);
-      }
-    });
-    return lookup;
+  // Build cost lookup from costs data — with prior-season fallback
+  const costFallbackLookup = useMemo(() => {
+    return buildCostFallbackLookup(costs, products);
   }, [costs, products]);
+
+  // Convenience wrapper that returns { cost, source, fallbackSeason }
+  const getCost = costFallbackLookup.getCostWithFallback;
 
   // Filter sales by season and additional filters
   const filteredSales = useMemo(() => {
@@ -353,7 +336,8 @@ export default function MarginsView({
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = normalizeCustomerType(record.customerType);
-      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
+      const costResult = getCost(record.styleNumber, record.season);
+      const landedCost = costResult.cost;
       const units = record.unitsBooked || 0;
       const priceInfo = wholesalePriceLookup.get(record.styleNumber);
       const wholesalePrice = priceInfo?.wholesale || 0;
@@ -429,7 +413,7 @@ export default function MarginsView({
         avgDiscount: blendedDiscount,
       },
     };
-  }, [filteredSales, costLookup, wholesalePriceLookup, selectedDivision, selectedCategory]);
+  }, [filteredSales, getCost, wholesalePriceLookup, selectedDivision, selectedCategory]);
 
   // Style-Level Margin Analysis with Channel Mix
   const styleChannelMargins = useMemo(() => {
@@ -444,6 +428,7 @@ export default function MarginsView({
       msrpSource: string;
       wholesaleSource: string;
       costSource: string;
+      costFallbackSeason?: string;
       channels: Map<string, { revenue: number; units: number }>;
     }>();
 
@@ -455,7 +440,8 @@ export default function MarginsView({
       if (styleLevelSeasonFilter !== 'all' && record.season !== styleLevelSeasonFilter) return;
 
       const channel = normalizeCustomerType(record.customerType);
-      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
+      const costResult = getCost(record.styleNumber, record.season);
+      const landedCost = costResult.cost;
 
       if (!byStyle.has(record.styleNumber)) {
         // Get pricing from products (line list)
@@ -483,9 +469,13 @@ export default function MarginsView({
         // Track Cost source
         let cost = 0;
         let costSource: 'landed' | 'linelist' | 'none' = 'none';
+        let costFallbackSeason: string | undefined;
         if (landedCost > 0) {
           cost = landedCost;
           costSource = 'landed';
+          if (costResult.source === 'fallback') {
+            costFallbackSeason = costResult.fallbackSeason;
+          }
         } else if (product?.cost) {
           cost = product.cost;
           costSource = 'linelist';
@@ -502,6 +492,7 @@ export default function MarginsView({
           msrpSource,
           wholesaleSource,
           costSource,
+          costFallbackSeason,
           channels: new Map(),
         });
       }
@@ -572,6 +563,7 @@ export default function MarginsView({
         wholesaleSource: style.wholesaleSource,
         costSource: style.costSource,
         costWarning,
+        costFallbackSeason: style.costFallbackSeason,
         baselineMargin,
         totalRevenue,
         totalUnits,
@@ -583,7 +575,7 @@ export default function MarginsView({
     });
 
     return results.filter(s => s.totalRevenue > 0);
-  }, [filteredSales, costLookup, products, selectedDivision, selectedCategory, styleLevelSeasonFilter]);
+  }, [filteredSales, getCost, products, selectedDivision, selectedCategory, styleLevelSeasonFilter]);
 
   // Customer breakdown for drill-down - with filters
   const customerBreakdown = useMemo(() => {
@@ -601,7 +593,7 @@ export default function MarginsView({
       const customer = record.customer && record.customer.trim()
         ? record.customer.trim()
         : `Unknown (${type})`;
-      const landedCost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
+      const landedCost = getCost(record.styleNumber, record.season).cost;
       const units = record.unitsBooked || 0;
 
       if (!byCustomer.has(customer)) {
@@ -635,14 +627,14 @@ export default function MarginsView({
 
     // Apply showTopN limit (0 = show all)
     return showTopN > 0 ? results.slice(0, showTopN) : results;
-  }, [filteredSales, costLookup, selectedDivision, selectedCategory, customerTypeFilters, showTopN]);
+  }, [filteredSales, getCost, selectedDivision, selectedCategory, customerTypeFilters, showTopN]);
 
   // Calculate margins by style
   const styleMargins = useMemo(() => {
     const byStyle = new Map<string, StyleMargin>();
 
     filteredSales.forEach(record => {
-      const cost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
+      const cost = getCost(record.styleNumber, record.season).cost;
 
       if (!byStyle.has(record.styleNumber)) {
         byStyle.set(record.styleNumber, {
@@ -674,7 +666,7 @@ export default function MarginsView({
       s.vsTarget = s.margin - TARGET_MARGIN;
       return s;
     });
-  }, [filteredSales, costLookup]);
+  }, [filteredSales, getCost]);
 
   // Apply filters (division, category, tier, channel)
   const filteredStyleMargins = useMemo(() => {
@@ -812,7 +804,7 @@ export default function MarginsView({
       if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
 
       const channel = record.customerType || 'Other';
-      const cost = costLookup.get(`${record.styleNumber}-${record.season}`) || costLookup.get(record.styleNumber) || 0;
+      const cost = getCost(record.styleNumber, record.season).cost;
 
       if (!byChannel.has(channel)) {
         byChannel.set(channel, {
@@ -837,7 +829,7 @@ export default function MarginsView({
         return c;
       })
       .sort((a, b) => b.margin - a.margin);
-  }, [filteredSales, costLookup, selectedDivision, selectedCategory]);
+  }, [filteredSales, getCost, selectedDivision, selectedCategory]);
 
   // Margins by gender
   const genderMargins = useMemo(() => {
@@ -1612,6 +1604,11 @@ export default function MarginsView({
                               {style.costWarning === 'above-msrp' && (
                                 <span className="text-red-400 text-xs" title="Cost exceeds MSRP — bad data">🚫</span>
                               )}
+                              {style.costFallbackSeason && (
+                                <span className="ml-1 inline-flex items-center" title={`Cost from ${style.costFallbackSeason} (no landed cost for current season)`}>
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-text-primary">
@@ -1712,9 +1709,14 @@ export default function MarginsView({
                                 })}
                               </div>
                               <div className="mt-4 pt-4 border-t border-border-strong flex items-center gap-6 text-sm">
-                                <div>
+                                <div className="flex items-center">
                                   <span className="text-text-secondary">Landed Cost:</span>
                                   <span className="font-mono font-medium ml-2">${style.landedCost.toFixed(2)}</span>
+                                  {style.costFallbackSeason && (
+                                    <span className="ml-1 inline-flex items-center" title={`Cost from ${style.costFallbackSeason} (no landed cost for current season)`}>
+                                      <Clock className="w-3 h-3 text-amber-400" />
+                                    </span>
+                                  )}
                                 </div>
                                 <div>
                                   <span className="text-text-secondary">Wholesale Price:</span>
