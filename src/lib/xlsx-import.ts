@@ -39,6 +39,9 @@ export interface LineListItem {
   shortDescription: string;
   longDescription: string;
   costSource: 'line_list' | 'landed_sheet';
+  market: string;       // "WHOLESALE", "DIRECT", "WHSL/DIRECT"
+  workbook: string;     // "WHOLESALE", "WEB", "REI", "REI / WEB", "SCHEELS / WEB", etc.
+  catalogOrder: number; // Sort order within the catalog
 }
 
 export interface LandedCostItem {
@@ -252,6 +255,9 @@ export function parseLineListXLSX(buffer: ArrayBuffer): LineListItem[] {
         shortDescription: parseString(row['Short Description']),
         longDescription: parseString(row['Long Description']),
         costSource: 'line_list',
+        market: parseString(row['Market']),
+        workbook: parseString(row['Workbook']),
+        catalogOrder: parseNumber(row['Catalog Order']),
       };
     });
 }
@@ -631,6 +637,9 @@ export function convertToAppFormats(
       factoryName: p.factory,
       designerName: p.designer,
       techDesignerName: p.developer,
+      workbook: p.workbook,
+      market: p.market,
+      catalogOrder: p.catalogOrder,
     };
   });
 

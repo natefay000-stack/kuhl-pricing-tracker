@@ -4,7 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isFutureSeason } from '@/utils/season';
-import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X } from 'lucide-react';
+import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X, Plus, Tag, Check, Minus, RotateCcw } from 'lucide-react';
+import { useCatalogs } from '@/hooks/useCatalogs';
+import { BUILT_IN_CATALOGS } from '@/lib/catalogs';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatPercent } from '@/utils/format';
@@ -112,6 +114,13 @@ const COLUMN_GROUPS: ColumnGroup[] = [
       { key: 'sellingSeasons', label: 'Selling Seasons', width: '120px' },
     ],
   },
+  {
+    id: 'catalogs',
+    label: 'Catalogs',
+    columns: [
+      { key: 'catalogs', label: 'Catalogs', width: '180px' },
+    ],
+  },
 ];
 
 const ITEMS_PER_PAGE = 50;
@@ -157,6 +166,7 @@ export default function LineListView({
     specs: false,
     sourcing: false,
     availability: false,
+    catalogs: true,
   });
   const [sortColumn, setSortColumn] = useState<string>('styleNumber');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -179,6 +189,37 @@ export default function LineListView({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
   const [rollUpStyles, setRollUpStyles] = useState<boolean>(false);
+
+  const {
+    catalogs,
+    selectedCatalog,
+    setSelectedCatalog,
+    membershipMap,
+    addStyleToCatalog,
+    removeStyleFromCatalog,
+    resetOverride,
+    createCatalog,
+    deleteCatalog,
+    getStylesInCatalog,
+    getOverrideStatus,
+  } = useCatalogs(products, selectedSeason);
+
+  // State for "Create Catalog" modal
+  const [showCreateCatalog, setShowCreateCatalog] = useState(false);
+  const [newCatalogName, setNewCatalogName] = useState('');
+  const [newCatalogShort, setNewCatalogShort] = useState('');
+  const [newCatalogColor, setNewCatalogColor] = useState('blue');
+
+  // Catalog popover state
+  const [catalogPopoverStyle, setCatalogPopoverStyle] = useState<string | null>(null);
+
+  // Close popover on click outside
+  useEffect(() => {
+    if (!catalogPopoverStyle) return;
+    const handler = () => setCatalogPopoverStyle(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [catalogPopoverStyle]);
 
   // Get filter options
   const divisions = useMemo(() => {
@@ -289,6 +330,12 @@ export default function LineListView({
       data = data.filter((d) => stylesWithSales.has(d.styleNumber));
     }
 
+    // Catalog filter
+    if (selectedCatalog !== 'master') {
+      const catalogStyles = getStylesInCatalog(selectedCatalog);
+      data = data.filter((d) => catalogStyles.has(d.styleNumber));
+    }
+
     // Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -386,6 +433,9 @@ export default function LineListView({
     hideNoSales,
     isSelectedSeasonFuture,
     stylesWithSales,
+    selectedCatalog,
+    getStylesInCatalog,
+    membershipMap,
   ]);
 
   // Roll up to style level (aggregate colors into one row per style)
@@ -607,6 +657,13 @@ export default function LineListView({
           obj[col.label] = (row as unknown as Record<string, unknown>)[col.key];
         }
       });
+      // Add catalog membership to export
+      const styleCats = membershipMap.get(row.styleNumber);
+      if (styleCats && styleCats.size > 0) {
+        obj['Catalogs'] = catalogs.filter(c => styleCats.has(c.id)).map(c => c.label).join(', ');
+      } else {
+        obj['Catalogs'] = '';
+      }
       return obj;
     });
 
@@ -644,6 +701,101 @@ export default function LineListView({
     }
     if (key === 'categoryDesc') {
       return normalizeCategory(row.categoryDesc) || '—';
+    }
+    if (key === 'catalogs') {
+      const styleCatalogs = membershipMap.get(row.styleNumber) || new Set();
+      const isPopoverOpen = catalogPopoverStyle === row.styleNumber;
+
+      return (
+        <div className="relative flex flex-wrap gap-1 items-center">
+          {catalogs.map((cat) => {
+            const isIn = styleCatalogs.has(cat.id);
+            const override = getOverrideStatus(cat.id, row.styleNumber);
+            if (!isIn) return null;
+
+            const badgeColors: Record<string, string> = {
+              red: 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400',
+              green: 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400',
+              purple: 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-400',
+              amber: 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400',
+              blue: 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400',
+              cyan: 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400',
+              orange: 'bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400',
+            };
+
+            return (
+              <span
+                key={cat.id}
+                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-bold rounded ${badgeColors[cat.color] || badgeColors.blue}`}
+                title={override === 'add' ? `Manually added to ${cat.label}` : cat.label}
+              >
+                {cat.shortLabel}
+                {override === 'add' && <span className="text-[10px] opacity-60">*</span>}
+              </span>
+            );
+          })}
+          {styleCatalogs.size === 0 && <span className="text-xs text-text-faint">—</span>}
+
+          {/* Edit button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCatalogPopoverStyle(isPopoverOpen ? null : row.styleNumber);
+            }}
+            className="ml-auto opacity-0 group-hover/row:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-surface-tertiary text-text-muted hover:text-text-secondary transition-all"
+            title="Edit catalog membership"
+          >
+            <Tag className="w-3 h-3" />
+          </button>
+
+          {/* Popover */}
+          {isPopoverOpen && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-surface rounded-xl border-2 border-border-primary shadow-xl p-3 min-w-[200px]">
+              <div className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Catalogs</div>
+              {catalogs.map((cat) => {
+                const isIn = styleCatalogs.has(cat.id);
+                const override = getOverrideStatus(cat.id, row.styleNumber);
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isIn) {
+                        if (override === 'add') {
+                          resetOverride(cat.id, row.styleNumber);
+                        } else {
+                          removeStyleFromCatalog(cat.id, row.styleNumber);
+                        }
+                      } else {
+                        if (override === 'remove') {
+                          resetOverride(cat.id, row.styleNumber);
+                        } else {
+                          addStyleToCatalog(cat.id, row.styleNumber);
+                        }
+                      }
+                    }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      isIn ? 'text-text-primary' : 'text-text-muted'
+                    } hover:bg-surface-tertiary`}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                      isIn ? 'bg-cyan-600 border-cyan-600' : 'border-border-strong'
+                    }`}>
+                      {isIn && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    {cat.label}
+                    {override && (
+                      <span className="text-[10px] text-amber-500 ml-auto">
+                        {override === 'add' ? 'added' : 'removed'}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
     }
     const val = (row as unknown as Record<string, unknown>)[key];
     return val !== null && val !== undefined ? String(val) : '—';
@@ -820,6 +972,152 @@ export default function LineListView({
           )}
         </div>
       </div>
+
+      {/* Catalog Tabs */}
+      <div className="bg-surface rounded-xl border-2 border-border-primary p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Tag className="w-4 h-4 text-text-muted" />
+          <span className="text-xs font-bold text-text-muted uppercase tracking-wide">Catalog</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Master tab */}
+          <button
+            onClick={() => { setSelectedCatalog('master'); setCurrentPage(1); }}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+              selectedCatalog === 'master'
+                ? 'bg-cyan-600 text-white shadow-md'
+                : 'bg-surface-secondary text-text-secondary hover:bg-surface-tertiary border border-border-primary'
+            }`}
+          >
+            Master
+            <span className="ml-1.5 text-xs opacity-75">({stats.styles})</span>
+          </button>
+
+          {/* Catalog tabs */}
+          {catalogs.map((cat) => {
+            const count = getStylesInCatalog(cat.id).size;
+            const colorClasses: Record<string, { active: string; inactive: string }> = {
+              red: { active: 'bg-red-600 text-white', inactive: 'border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950' },
+              green: { active: 'bg-green-600 text-white', inactive: 'border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950' },
+              purple: { active: 'bg-purple-600 text-white', inactive: 'border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950' },
+              amber: { active: 'bg-amber-600 text-white', inactive: 'border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950' },
+              blue: { active: 'bg-blue-600 text-white', inactive: 'border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950' },
+              cyan: { active: 'bg-cyan-600 text-white', inactive: 'border-cyan-300 dark:border-cyan-800 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950' },
+              orange: { active: 'bg-orange-600 text-white', inactive: 'border-orange-300 dark:border-orange-800 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950' },
+            };
+            const colors = colorClasses[cat.color] || colorClasses.blue;
+            const isActive = selectedCatalog === cat.id;
+
+            return (
+              <div key={cat.id} className="relative group">
+                <button
+                  onClick={() => { setSelectedCatalog(cat.id); setCurrentPage(1); }}
+                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all border ${
+                    isActive ? colors.active + ' shadow-md border-transparent' : colors.inactive
+                  }`}
+                >
+                  {cat.label}
+                  <span className="ml-1.5 text-xs opacity-75">({count})</span>
+                </button>
+                {/* Delete button for custom catalogs */}
+                {!cat.isBuiltIn && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteCatalog(cat.id); if (selectedCatalog === cat.id) setSelectedCatalog('master'); }}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600"
+                    title="Delete catalog"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add Custom Catalog button */}
+          <button
+            onClick={() => setShowCreateCatalog(true)}
+            className="px-3 py-2 text-sm font-bold rounded-lg border-2 border-dashed border-border-primary text-text-muted hover:border-cyan-500 hover:text-cyan-600 transition-all flex items-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Custom
+          </button>
+        </div>
+      </div>
+
+      {/* Create Catalog Modal */}
+      {showCreateCatalog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateCatalog(false)}>
+          <div className="bg-surface rounded-2xl border-2 border-border-primary p-6 w-[400px] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-text-primary mb-4">Create Custom Catalog</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Name</label>
+                <input
+                  type="text"
+                  value={newCatalogName}
+                  onChange={(e) => {
+                    setNewCatalogName(e.target.value);
+                    if (!newCatalogShort || newCatalogShort === newCatalogName.slice(0, 4).toUpperCase()) {
+                      setNewCatalogShort(e.target.value.slice(0, 4).toUpperCase());
+                    }
+                  }}
+                  placeholder="e.g., Cabela's"
+                  className="mt-1 w-full px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Short Label (3-4 chars)</label>
+                <input
+                  type="text"
+                  value={newCatalogShort}
+                  onChange={(e) => setNewCatalogShort(e.target.value.slice(0, 4).toUpperCase())}
+                  placeholder="e.g., CAB"
+                  className="mt-1 w-full px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 font-mono"
+                  maxLength={4}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Color</label>
+                <div className="flex gap-2 mt-1">
+                  {['blue', 'cyan', 'green', 'amber', 'orange', 'red', 'purple'].map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setNewCatalogColor(color)}
+                      className={`w-8 h-8 rounded-full border-2 transition-all ${
+                        newCatalogColor === color ? 'border-text-primary scale-110' : 'border-transparent'
+                      } bg-${color}-500`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowCreateCatalog(false)}
+                  className="flex-1 px-4 py-2.5 text-base font-semibold text-text-secondary border-2 border-border-primary rounded-lg hover:bg-surface-tertiary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (newCatalogName.trim()) {
+                      createCatalog(newCatalogName.trim(), newCatalogShort || newCatalogName.slice(0, 4), newCatalogColor);
+                      setShowCreateCatalog(false);
+                      setNewCatalogName('');
+                      setNewCatalogShort('');
+                      setNewCatalogColor('blue');
+                    }
+                  }}
+                  disabled={!newCatalogName.trim()}
+                  className="flex-1 px-4 py-2.5 text-base font-semibold bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className={`grid gap-4 ${isSelectedSeasonFuture ? 'grid-cols-5' : 'grid-cols-6'}`}>
@@ -1010,7 +1308,7 @@ export default function LineListView({
                 <tr
                   key={`${row.styleNumber}-${row.color}-${rowIdx}`}
                   onClick={() => onStyleClick(row.styleNumber)}
-                  className={`border-b border-border-primary cursor-pointer transition-colors ${
+                  className={`group/row border-b border-border-primary cursor-pointer transition-colors ${
                     rowIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary'
                   } hover:bg-hover-accent`}
                 >

@@ -72,6 +72,11 @@ export interface Product {
   // Notes
   styleColorNotes: string;
 
+  // Catalog assignment (from line list Workbook column)
+  workbook?: string;      // "WHOLESALE", "WEB", "REI", "REI / WEB", "SCHEELS / WEB", etc.
+  market?: string;        // "WHOLESALE", "DIRECT", "WHSL/DIRECT"
+  catalogOrder?: number;  // Sort order within catalog
+
   // System fields
   createdAt?: string;
   updatedAt?: string;

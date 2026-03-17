@@ -40,6 +40,9 @@ model Product {
   sellingSeasons          String?
   htsCode                 String?
   styleColorNotes         String?
+  workbook                String?   // Catalog assignment: "WHOLESALE", "WEB", "REI", "REI / WEB", etc.
+  market                  String?   // Market channel: "WHOLESALE", "DIRECT", "WHSL/DIRECT"
+  catalogOrder            Int?      // Sort order within catalog
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

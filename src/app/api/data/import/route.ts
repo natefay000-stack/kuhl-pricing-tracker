@@ -89,6 +89,9 @@ export async function POST(request: NextRequest) {
               sellingSeasons: String(item.sellingSeasons || ''),
               htsCode: String(item.htsCode || ''),
               styleColorNotes: String(item.styleColorNotes || ''),
+              workbook: item.workbook ? String(item.workbook) : null,
+              market: item.market ? String(item.market) : null,
+              catalogOrder: item.catalogOrder ? Number(item.catalogOrder) : null,
             }));
             await tx.product.createMany({ data: batch, skipDuplicates: true });
             count += batch.length;
