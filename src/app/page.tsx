@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Sidebar, { ViewId, VIEW_LABELS } from '@/components/layout/Sidebar';
-import AppHeader from '@/components/layout/AppHeader';
+import AppHeader, { SearchSuggestion } from '@/components/layout/AppHeader';
 import FilterBar from '@/components/layout/FilterBar';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StyleDetailPanel from '@/components/StyleDetailPanel';
 import SmartImportModal from '@/components/SmartImportModal';
 import PersistenceWarningModal from '@/components/PersistenceWarningModal';
+import KeyboardShortcutsHelp from '@/components/KeyboardShortcutsHelp';
 import { SalesLoadingContext } from '@/components/SalesLoadingBanner';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import retryDynamic from '@/lib/retryDynamic';
 
 // Lazy-load view components with automatic retry on chunk load failure.
@@ -219,6 +221,7 @@ export default function Home() {
   const [persistenceErrorDetail, setPersistenceErrorDetail] = useState('');
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesLoadingProgress, setSalesLoadingProgress] = useState('');
+  const [dataTimestamp, setDataTimestamp] = useState<number | null>(null);
 
   // UI State
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
@@ -491,6 +494,84 @@ export default function Home() {
     return Array.from(all).sort();
   }, [invoiceOnlySales]);
 
+  // ── Search suggestions — combine styles, customers, categories, colors ──
+  const searchSuggestions = useMemo((): SearchSuggestion[] => {
+    if (!searchQuery || searchQuery.length < 2) return [];
+    const q = searchQuery.toLowerCase();
+    const results: SearchSuggestion[] = [];
+
+    // Styles
+    const seenStyles = new Set<string>();
+    products.forEach(p => {
+      if (seenStyles.size >= 5) return;
+      const match = p.styleNumber?.toLowerCase().includes(q) || p.styleDesc?.toLowerCase().includes(q);
+      if (match && p.styleNumber && !seenStyles.has(p.styleNumber)) {
+        seenStyles.add(p.styleNumber);
+        results.push({ type: 'style', label: p.styleDesc || p.styleNumber, sublabel: p.styleNumber, value: p.styleNumber });
+      }
+    });
+
+    // Customers
+    const seenCustomers = new Set<string>();
+    sales.forEach(s => {
+      if (seenCustomers.size >= 5) return;
+      if (s.customer && s.customer !== 'Unknown' && s.customer.toLowerCase().includes(q) && !seenCustomers.has(s.customer)) {
+        seenCustomers.add(s.customer);
+        results.push({ type: 'customer', label: s.customer, sublabel: s.customerType || undefined, value: s.customer });
+      }
+    });
+
+    // Categories
+    categories.forEach(cat => {
+      if (results.filter(r => r.type === 'category').length >= 5) return;
+      if (cat.toLowerCase().includes(q)) {
+        results.push({ type: 'category', label: cat, value: cat });
+      }
+    });
+
+    // Colors
+    const seenColors = new Set<string>();
+    products.forEach(p => {
+      if (seenColors.size >= 5) return;
+      if (p.colorDesc && p.colorDesc.toLowerCase().includes(q) && !seenColors.has(p.colorDesc)) {
+        seenColors.add(p.colorDesc);
+        results.push({ type: 'color', label: p.colorDesc, sublabel: p.styleNumber, value: p.colorDesc });
+      }
+    });
+
+    return results;
+  }, [searchQuery, products, sales, categories]);
+
+  // Handle search suggestion click
+  const handleSuggestionClick = useCallback((suggestion: SearchSuggestion) => {
+    if (suggestion.type === 'style') {
+      setSelectedStyleNumber(suggestion.value);
+    } else {
+      setSearchQuery(suggestion.value);
+    }
+  }, []);
+
+  // ── Keyboard shortcuts ──
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useKeyboardShortcuts({
+    onSearch: () => {
+      // Focus the search input in AppHeader
+      const input = document.querySelector<HTMLInputElement>('header input[type="text"]');
+      input?.focus();
+    },
+    onEscape: () => {
+      setSelectedStyleNumber(null);
+    },
+  });
+
+  // Record counts for sidebar
+  const recordCounts = useMemo(() => ({
+    products: products.length,
+    sales: sales.length,
+    costs: costs.length,
+  }), [products.length, sales.length, costs.length]);
+
   // ── Helper: yield to event loop so React can paint status updates ──
   const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
@@ -603,6 +684,7 @@ export default function Home() {
       if (core.inventoryAggregations) setInvAggregations(core.inventoryAggregations);
       if (core.ohAggregations) setOHAggregations(core.ohAggregations);
       setSales([]);
+      setDataTimestamp(Date.now());
     };
 
     async function initializeData() {
@@ -1499,6 +1581,8 @@ export default function Home() {
         onImportClick={() => setShowImportModal(true)}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
+        dataTimestamp={dataTimestamp || undefined}
+        recordCounts={recordCounts}
       />
 
       {/* Main Content */}
@@ -1510,6 +1594,8 @@ export default function Home() {
           onRefresh={handleRefresh}
           onExportPdf={handleExportPdf}
           onExportExcel={handleExportExcel}
+          searchSuggestions={searchSuggestions}
+          onSuggestionClick={handleSuggestionClick}
         />
 
         {/* Filter Bar — on Geo Heat Map, use invoice-specific options since the view only shows invoice data */}
@@ -1912,6 +1998,9 @@ export default function Home() {
           onClose={() => setShowImportModal(false)}
         />
       )}
+
+      {/* Keyboard Shortcuts Help — toggled by pressing ? */}
+      <KeyboardShortcutsHelp />
 
       {/* Persistence Warning Modal — blocks UI when DB writes fail */}
       {showPersistenceModal && (

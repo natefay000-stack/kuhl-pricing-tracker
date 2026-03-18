@@ -39,6 +39,25 @@ interface SidebarProps {
   onSeasonsClick?: () => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  dataTimestamp?: number;
+  recordCounts?: { products: number; sales: number; costs: number };
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Updated just now';
+  if (minutes < 60) return `Updated ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Updated ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `Updated ${days}d ago`;
+}
+
+function formatCompactNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return n.toLocaleString();
 }
 
 interface NavGroup {
@@ -98,7 +117,7 @@ export const VIEW_LABELS: Record<ViewId, string> = Object.fromEntries(
 
 const SIDEBAR_PINNED_KEY = 'kuhl-sidebar-pinned';
 
-export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick, collapsed, onCollapsedChange }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick, collapsed, onCollapsedChange, dataTimestamp, recordCounts }: SidebarProps) {
   const [pinned, setPinned] = useState(true);
   const [hovered, setHovered] = useState(false);
 
@@ -247,10 +266,29 @@ export default function Sidebar({ activeView, onViewChange, onImportClick, onSea
 
       {/* Footer */}
       {expanded && (
-        <div className="p-4 border-t border-white/5">
-          <p className="text-[10px] text-gray-500">
-            Product Database
-          </p>
+        <div className="px-4 py-3 border-t border-white/5 space-y-1.5">
+          {dataTimestamp && (
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  Date.now() - dataTimestamp < 3600000 ? 'bg-emerald-400' : 'bg-amber-400'
+                }`}
+              />
+              <span className="text-[10px] text-gray-500">
+                {formatRelativeTime(dataTimestamp)}
+              </span>
+            </div>
+          )}
+          {recordCounts && (
+            <p className="text-[10px] text-gray-400">
+              {recordCounts.products.toLocaleString()} styles{' '}
+              <span className="text-gray-600">&bull;</span>{' '}
+              {formatCompactNumber(recordCounts.sales)} sales
+            </p>
+          )}
+          {!dataTimestamp && !recordCounts && (
+            <p className="text-[10px] text-gray-500">Product Database</p>
+          )}
         </div>
       )}
     </aside>

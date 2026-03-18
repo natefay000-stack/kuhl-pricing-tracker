@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { SalesAggregations } from '@/app/page';
-import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator } from 'lucide-react';
+import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator, AlertTriangle, Info } from 'lucide-react';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 import { matchesSeason } from '@/lib/store';
@@ -93,8 +93,22 @@ export default function DashboardView({
         }
       });
 
+      // Count how many unique styles have cost data
+      const allStyleNumbers = new Set(filteredSales.map((s) => s.styleNumber));
+      const costedStyleNumbers = new Set<string>();
+      filteredSales.forEach((s) => {
+        const costKey = `${s.styleNumber}-${s.season}`;
+        if (costLookup.has(costKey)) {
+          costedStyleNumbers.add(s.styleNumber);
+        }
+      });
+
       const margin = costedRevenue > 0 ? ((costedRevenue - totalCost) / costedRevenue) * 100 : 0;
-      return { totalRevenue, totalUnits, uniqueStyles, margin };
+      return {
+        totalRevenue, totalUnits, uniqueStyles, margin,
+        costedStyles: costedStyleNumbers.size,
+        totalStylesForMargin: allStyleNumbers.size,
+      };
     }
 
     // Fallback: compute from aggregations (available before raw sales load)
@@ -108,10 +122,10 @@ export default function DashboardView({
       });
       const totalRevenue = filtered.reduce((sum, a) => sum + (a.revenue || 0), 0);
       const totalUnits = filtered.reduce((sum, a) => sum + (a.units || 0), 0);
-      return { totalRevenue, totalUnits, uniqueStyles: 0, margin: 0 };
+      return { totalRevenue, totalUnits, uniqueStyles: 0, margin: 0, costedStyles: 0, totalStylesForMargin: 0 };
     }
 
-    return { totalRevenue: 0, totalUnits: 0, uniqueStyles: 0, margin: 0 };
+    return { totalRevenue: 0, totalUnits: 0, uniqueStyles: 0, margin: 0, costedStyles: 0, totalStylesForMargin: 0 };
   }, [hasSalesData, filteredSales, costs, salesAggregations, selectedSeason, selectedDivision, selectedCategory]);
 
   // Sales by category — use aggregations as fallback
@@ -279,7 +293,7 @@ export default function DashboardView({
         const hasCost = unitCost !== undefined && unitCost > 0;
         const totalCost = hasCost ? unitCost * style.units : 0;
         const margin = hasCost && style.revenue > 0 ? ((style.revenue - totalCost) / style.revenue) * 100 : 0;
-        return { ...style, margin };
+        return { ...style, margin, hasCost };
       })
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
@@ -348,6 +362,18 @@ export default function DashboardView({
               <p className="text-sm text-text-muted font-bold uppercase tracking-wide">
                 Margin
               </p>
+              {stats.totalStylesForMargin > 0 && (
+                <p className={`text-xs mt-1 flex items-center gap-1 ${
+                  stats.costedStyles / stats.totalStylesForMargin < 0.5
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-text-faint'
+                }`}>
+                  {stats.costedStyles / stats.totalStylesForMargin < 0.5 && (
+                    <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  )}
+                  {formatNumber(stats.costedStyles)}/{formatNumber(stats.totalStylesForMargin)} styles
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -368,6 +394,16 @@ export default function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* Missing cost data info banner */}
+      {stats.totalStylesForMargin > 0 && stats.costedStyles < stats.totalStylesForMargin && (
+        <div className="flex items-center gap-2 text-xs text-text-faint px-1">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>
+            {formatNumber(stats.totalStylesForMargin - stats.costedStyles)} styles missing cost data — margin reflects only costed styles
+          </span>
+        </div>
+      )}
 
       {/* Two Column Row */}
       <div className="grid grid-cols-2 gap-6">
@@ -579,11 +615,20 @@ export default function DashboardView({
                     {formatCurrencyShort(style.revenue)}
                   </td>
                   <td className="px-4 py-4 text-right border-l border-border-primary">
-                    <span
-                      className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginBg(style.margin)} ${getMarginColor(style.margin)}`}
-                    >
-                      {formatPercent(style.margin)}
-                    </span>
+                    {!style.hasCost ? (
+                      <span
+                        className="text-base font-mono italic px-3 py-1 rounded text-gray-500 bg-gray-100 dark:bg-gray-800"
+                        title="No cost data available"
+                      >
+                        N/A
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-base font-mono font-bold px-3 py-1 rounded ${getMarginBg(style.margin)} ${getMarginColor(style.margin)}`}
+                      >
+                        {formatPercent(style.margin)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-4 border-l border-border-primary">
                     <ChevronRight className="w-5 h-5 text-text-faint" />
