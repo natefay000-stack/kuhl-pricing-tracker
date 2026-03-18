@@ -81,14 +81,19 @@ export default function DashboardView({
         if (c.landed > 0) costLookup.set(key, c.landed);
       });
 
+      // Only include sales that have matching cost data for an accurate margin
+      let costedRevenue = 0;
       let totalCost = 0;
       filteredSales.forEach((s) => {
         const costKey = `${s.styleNumber}-${s.season}`;
-        const unitCost = costLookup.get(costKey) || 0;
-        totalCost += unitCost * s.unitsBooked;
+        const unitCost = costLookup.get(costKey);
+        if (unitCost !== undefined && unitCost > 0) {
+          costedRevenue += s.revenue || 0;
+          totalCost += unitCost * s.unitsBooked;
+        }
       });
 
-      const margin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
+      const margin = costedRevenue > 0 ? ((costedRevenue - totalCost) / costedRevenue) * 100 : 0;
       return { totalRevenue, totalUnits, uniqueStyles, margin };
     }
 
@@ -270,9 +275,10 @@ export default function DashboardView({
 
     return Array.from(grouped.values())
       .map((style) => {
-        const unitCost = costLookup.get(style.styleNumber) || 0;
-        const totalCost = unitCost * style.units;
-        const margin = style.revenue > 0 ? ((style.revenue - totalCost) / style.revenue) * 100 : 0;
+        const unitCost = costLookup.get(style.styleNumber);
+        const hasCost = unitCost !== undefined && unitCost > 0;
+        const totalCost = hasCost ? unitCost * style.units : 0;
+        const margin = hasCost && style.revenue > 0 ? ((style.revenue - totalCost) / style.revenue) * 100 : 0;
         return { ...style, margin };
       })
       .sort((a, b) => b.revenue - a.revenue)
