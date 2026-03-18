@@ -33,6 +33,7 @@ const SellThroughView = retryDynamic(() => import('@/components/views/SellThroug
 const TariffView = retryDynamic(() => import('@/components/views/TariffView'));
 const InvOpnSeasonView = retryDynamic(() => import('@/components/views/InvOpnSeasonView'));
 const GeoHeatmapView = retryDynamic(() => import('@/components/views/GeoHeatmapView'));
+const ForecastView = retryDynamic(() => import('@/components/views/ForecastView'));
 const SourceFilesView = retryDynamic(() => import('@/components/views/SourceFilesView'));
 import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations } from '@/types/product';
 import { clearAllData } from '@/lib/db';
@@ -1683,6 +1684,23 @@ export default function Home() {
               <SellThroughView
                 products={products}
                 sales={dateFilteredSales}
+                inventoryOH={inventoryOH}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'forecast' && (
+            <ErrorBoundary viewName="Forecast">
+              <ForecastView
+                products={products}
+                sales={dateFilteredSales}
+                pricing={pricing}
+                costs={costs}
                 inventoryOH={inventoryOH}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
