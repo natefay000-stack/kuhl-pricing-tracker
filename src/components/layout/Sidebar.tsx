@@ -29,6 +29,7 @@ import {
   MapPin,
   FolderOpen,
   BookOpen,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -43,6 +44,8 @@ interface SidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   dataTimestamp?: number;
   recordCounts?: { products: number; sales: number; costs: number };
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -119,7 +122,7 @@ export const VIEW_LABELS: Record<ViewId, string> = Object.fromEntries(
 
 const SIDEBAR_PINNED_KEY = 'kuhl-sidebar-pinned';
 
-export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick, collapsed, onCollapsedChange, dataTimestamp, recordCounts }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, onImportClick, onSeasonsClick, collapsed, onCollapsedChange, dataTimestamp, recordCounts, mobileOpen, onMobileClose }: SidebarProps) {
   const [pinned, setPinned] = useState(true);
   const [hovered, setHovered] = useState(false);
 
@@ -144,170 +147,201 @@ export default function Sidebar({ activeView, onViewChange, onImportClick, onSea
   // Expanded = pinned OR hovered (when unpinned)
   const expanded = pinned || hovered;
 
-  return (
-    <aside
-      className={`text-white flex flex-col h-screen fixed left-0 top-0 z-40 transition-all duration-200 ease-in-out ${
-        expanded ? 'w-56' : 'w-[60px]'
-      }`}
-      style={{
-        background: 'rgba(10, 14, 26, 0.82)',
-        backdropFilter: 'blur(32px) saturate(1.6)',
-        WebkitBackdropFilter: 'blur(32px) saturate(1.6)',
-        borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-        boxShadow: '4px 0 24px rgba(0, 0, 0, 0.2), inset -1px 0 0 rgba(255, 255, 255, 0.04)',
-      }}
-      onMouseEnter={() => !pinned && setHovered(true)}
-      onMouseLeave={() => !pinned && setHovered(false)}
-    >
-      {/* Header: Logo + Pin */}
-      <div className="flex items-center justify-between p-3 min-h-[56px]" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
-        {expanded ? (
-          <>
-            <div>
-              <h1 className="font-display font-bold text-xl tracking-tight">KÜHL</h1>
-              <p className="text-[10px] text-gray-400 mt-0.5">Pricing Tracker</p>
-            </div>
-            <button
-              onClick={togglePin}
-              className={`p-1.5 rounded-md transition-colors ${
-                pinned
-                  ? 'text-cyan-400 hover:bg-white/5'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-              }`}
-              title={pinned ? 'Unpin sidebar' : 'Pin sidebar open'}
-            >
-              {pinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
-            </button>
-          </>
-        ) : (
-          <div className="w-full flex justify-center">
-            <button
-              onClick={togglePin}
-              className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
-              title="Pin sidebar open"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </div>
+  // Handle nav click — close mobile sidebar after navigation
+  const handleNavClick = (view: ViewId) => {
+    onViewChange(view);
+    onMobileClose?.();
+  };
 
-      {/* Navigation */}
-      <nav className="flex-1 py-2 overflow-y-auto overflow-x-hidden">
-        {navGroups.map((group) => (
-          <div key={group.label} className="mb-1">
-            {/* Group label */}
-            {expanded && (
-              <div className="px-4 pt-3 pb-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                  {group.label}
+  return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
+      <aside
+        className={`
+          text-white flex flex-col h-screen fixed left-0 top-0 z-50 transition-all duration-200 ease-in-out
+          ${expanded ? 'w-56' : 'w-[60px]'}
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0 lg:z-40
+        `}
+        style={{
+          background: 'rgba(10, 14, 26, 0.95)',
+          backdropFilter: 'blur(32px) saturate(1.6)',
+          WebkitBackdropFilter: 'blur(32px) saturate(1.6)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+          boxShadow: '4px 0 24px rgba(0, 0, 0, 0.2), inset -1px 0 0 rgba(255, 255, 255, 0.04)',
+        }}
+        onMouseEnter={() => !pinned && setHovered(true)}
+        onMouseLeave={() => !pinned && setHovered(false)}
+      >
+        {/* Header: Logo + Pin / Close */}
+        <div className="flex items-center justify-between p-3 min-h-[56px]" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
+          {expanded ? (
+            <>
+              <div>
+                <h1 className="font-display font-bold text-xl tracking-tight">KÜHL</h1>
+                <p className="text-[10px] text-gray-400 mt-0.5">Pricing Tracker</p>
+              </div>
+              <div className="flex items-center gap-1">
+                {/* Close button — mobile only */}
+                <button
+                  onClick={onMobileClose}
+                  className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors lg:hidden"
+                  title="Close menu"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                {/* Pin button — desktop only */}
+                <button
+                  onClick={togglePin}
+                  className={`hidden lg:block p-1.5 rounded-md transition-colors ${
+                    pinned
+                      ? 'text-cyan-400 hover:bg-white/5'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                  title={pinned ? 'Unpin sidebar' : 'Pin sidebar open'}
+                >
+                  {pinned ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="w-full flex justify-center">
+              <button
+                onClick={togglePin}
+                className="p-1.5 rounded-md text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
+                title="Pin sidebar open"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-2 overflow-y-auto overflow-x-hidden">
+          {navGroups.map((group) => (
+            <div key={group.label} className="mb-1">
+              {/* Group label */}
+              {expanded && (
+                <div className="px-4 pt-3 pb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                    {group.label}
+                  </span>
+                </div>
+              )}
+              {!expanded && group !== navGroups[0] && (
+                <div className="mx-3 my-1.5 border-t border-white/5" />
+              )}
+
+              <ul className="space-y-0.5 px-2">
+                {group.items.map((view) => {
+                  const isActive = activeView === view.id;
+                  return (
+                    <li key={view.id}>
+                      <button
+                        onClick={() => handleNavClick(view.id)}
+                        className={`
+                          w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-all
+                          ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
+                          ${isActive
+                            ? 'bg-cyan-600/20 text-cyan-400'
+                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                          }
+                        `}
+                        title={!expanded ? view.label : undefined}
+                      >
+                        <span className="text-base flex-shrink-0 w-5 text-center">{view.emoji}</span>
+                        {expanded && <span className="truncate">{view.label}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Style Stories Link */}
+        <div className="px-2 pb-1">
+          <Link
+            href="/styles"
+            onClick={onMobileClose}
+            className={`
+              w-full flex items-center gap-3 rounded-lg text-sm font-medium text-yellow-400/70 hover:text-yellow-400 hover:bg-yellow-400/10 transition-all
+              ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
+            `}
+            title={!expanded ? 'Style Stories' : undefined}
+          >
+            <span className="text-base flex-shrink-0 w-5 text-center">📖</span>
+            {expanded && <span className="truncate">Style Stories</span>}
+          </Link>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="px-2 pb-2 space-y-1">
+          {onImportClick && (
+            <button
+              onClick={() => { onImportClick(); onMobileClose?.(); }}
+              className={`
+                w-full flex items-center gap-3 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all border border-dashed border-gray-700 hover:border-cyan-500
+                ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
+              `}
+              title={!expanded ? 'Import Data' : undefined}
+            >
+              <Upload className="w-4 h-4 flex-shrink-0" />
+              {expanded && 'Import Data'}
+            </button>
+          )}
+          {onSeasonsClick && (
+            <button
+              onClick={() => { onSeasonsClick(); onMobileClose?.(); }}
+              className={`
+                w-full flex items-center gap-3 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all
+                ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
+              `}
+              title={!expanded ? 'Manage Seasons' : undefined}
+            >
+              <Settings className="w-4 h-4 flex-shrink-0" />
+              {expanded && 'Manage Seasons'}
+            </button>
+          )}
+        </div>
+
+        {/* Footer */}
+        {expanded && (
+          <div className="px-4 py-3 border-t border-white/5 space-y-1.5">
+            {dataTimestamp && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    Date.now() - dataTimestamp < 3600000 ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                />
+                <span className="text-[10px] text-gray-500">
+                  {formatRelativeTime(dataTimestamp)}
                 </span>
               </div>
             )}
-            {!expanded && group !== navGroups[0] && (
-              <div className="mx-3 my-1.5 border-t border-white/5" />
+            {recordCounts && (
+              <p className="text-[10px] text-gray-400">
+                {recordCounts.products.toLocaleString()} styles{' '}
+                <span className="text-gray-600">&bull;</span>{' '}
+                {formatCompactNumber(recordCounts.sales)} sales
+              </p>
             )}
-
-            <ul className="space-y-0.5 px-2">
-              {group.items.map((view) => {
-                const isActive = activeView === view.id;
-                return (
-                  <li key={view.id}>
-                    <button
-                      onClick={() => onViewChange(view.id)}
-                      className={`
-                        w-full flex items-center gap-3 rounded-lg text-sm font-medium transition-all
-                        ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
-                        ${isActive
-                          ? 'bg-cyan-600/20 text-cyan-400'
-                          : 'text-gray-400 hover:text-white hover:bg-white/5'
-                        }
-                      `}
-                      title={!expanded ? view.label : undefined}
-                    >
-                      <span className="text-base flex-shrink-0 w-5 text-center">{view.emoji}</span>
-                      {expanded && <span className="truncate">{view.label}</span>}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            {!dataTimestamp && !recordCounts && (
+              <p className="text-[10px] text-gray-500">Product Database</p>
+            )}
           </div>
-        ))}
-      </nav>
-
-      {/* Style Stories Link */}
-      <div className="px-2 pb-1">
-        <Link
-          href="/styles"
-          className={`
-            w-full flex items-center gap-3 rounded-lg text-sm font-medium text-yellow-400/70 hover:text-yellow-400 hover:bg-yellow-400/10 transition-all
-            ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
-          `}
-          title={!expanded ? 'Style Stories' : undefined}
-        >
-          <span className="text-base flex-shrink-0 w-5 text-center">📖</span>
-          {expanded && <span className="truncate">Style Stories</span>}
-        </Link>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="px-2 pb-2 space-y-1">
-        {onImportClick && (
-          <button
-            onClick={onImportClick}
-            className={`
-              w-full flex items-center gap-3 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all border border-dashed border-gray-700 hover:border-cyan-500
-              ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
-            `}
-            title={!expanded ? 'Import Data' : undefined}
-          >
-            <Upload className="w-4 h-4 flex-shrink-0" />
-            {expanded && 'Import Data'}
-          </button>
         )}
-        {onSeasonsClick && (
-          <button
-            onClick={onSeasonsClick}
-            className={`
-              w-full flex items-center gap-3 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-white/5 transition-all
-              ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
-            `}
-            title={!expanded ? 'Manage Seasons' : undefined}
-          >
-            <Settings className="w-4 h-4 flex-shrink-0" />
-            {expanded && 'Manage Seasons'}
-          </button>
-        )}
-      </div>
-
-      {/* Footer */}
-      {expanded && (
-        <div className="px-4 py-3 border-t border-white/5 space-y-1.5">
-          {dataTimestamp && (
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                  Date.now() - dataTimestamp < 3600000 ? 'bg-emerald-400' : 'bg-amber-400'
-                }`}
-              />
-              <span className="text-[10px] text-gray-500">
-                {formatRelativeTime(dataTimestamp)}
-              </span>
-            </div>
-          )}
-          {recordCounts && (
-            <p className="text-[10px] text-gray-400">
-              {recordCounts.products.toLocaleString()} styles{' '}
-              <span className="text-gray-600">&bull;</span>{' '}
-              {formatCompactNumber(recordCounts.sales)} sales
-            </p>
-          )}
-          {!dataTimestamp && !recordCounts && (
-            <p className="text-[10px] text-gray-500">Product Database</p>
-          )}
-        </div>
-      )}
-    </aside>
+      </aside>
+    </>
   );
 }

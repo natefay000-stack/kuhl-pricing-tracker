@@ -227,6 +227,7 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Filter state
   const [selectedSeason, setSelectedSeason] = useState<string>('');
@@ -1583,10 +1584,12 @@ export default function Home() {
         onCollapsedChange={setSidebarCollapsed}
         dataTimestamp={dataTimestamp || undefined}
         recordCounts={recordCounts}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main Content */}
-      <main className={`flex-1 bg-surface-secondary transition-all duration-200 ease-in-out ${sidebarCollapsed ? 'ml-[60px]' : 'ml-56'}`}>
+      <main className={`flex-1 bg-surface-secondary transition-all duration-200 ease-in-out ml-0 ${sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-56'}`}>
         {/* Header */}
         <AppHeader
           searchQuery={searchQuery}
@@ -1596,6 +1599,7 @@ export default function Home() {
           onExportExcel={handleExportExcel}
           searchSuggestions={searchSuggestions}
           onSuggestionClick={handleSuggestionClick}
+          onMenuClick={() => setMobileSidebarOpen(true)}
         />
 
         {/* Filter Bar — on Geo Heat Map, use invoice-specific options since the view only shows invoice data */}
