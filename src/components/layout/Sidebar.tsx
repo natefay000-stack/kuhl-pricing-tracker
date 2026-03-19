@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   LayoutDashboard,
   Calendar,
@@ -27,6 +28,7 @@ import {
   BarChart3,
   MapPin,
   FolderOpen,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -233,6 +235,21 @@ export default function Sidebar({ activeView, onViewChange, onImportClick, onSea
           </div>
         ))}
       </nav>
+
+      {/* Style Stories Link */}
+      <div className="px-2 pb-1">
+        <Link
+          href="/styles"
+          className={`
+            w-full flex items-center gap-3 rounded-lg text-sm font-medium text-yellow-400/70 hover:text-yellow-400 hover:bg-yellow-400/10 transition-all
+            ${expanded ? 'px-3 py-2' : 'px-0 py-2 justify-center'}
+          `}
+          title={!expanded ? 'Style Stories' : undefined}
+        >
+          <span className="text-base flex-shrink-0 w-5 text-center">📖</span>
+          {expanded && <span className="truncate">Style Stories</span>}
+        </Link>
+      </div>
 
       {/* Action Buttons */}
       <div className="px-2 pb-2 space-y-1">
