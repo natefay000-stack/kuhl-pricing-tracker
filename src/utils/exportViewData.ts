@@ -422,8 +422,9 @@ export function getViewExportData(
     case 'geoheatmap':
       return { sheets: buildGeoData(bundle), filename: 'KUHL_Geo_Heatmap' };
 
-    // Views without meaningful tabular data — PDF only
+    // Consolidated views — fallthrough to parent export
     case 'executive':
+      return { sheets: buildDashboardData(bundle), filename: 'KUHL_Executive' };
     case 'datasources':
       return null;
 

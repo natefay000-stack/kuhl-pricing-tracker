@@ -74,10 +74,8 @@ const navGroups: NavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { id: 'executive', label: 'Executive', icon: BarChart3, emoji: '🏢' },
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, emoji: '📊' },
       { id: 'season', label: 'Season View', icon: Calendar, emoji: '📅' },
-      { id: 'seasoncomp', label: 'Season Comp', icon: GitCompare, emoji: '🔀' },
     ],
   },
   {
@@ -87,8 +85,7 @@ const navGroups: NavGroup[] = [
       { id: 'inventory', label: 'Inventory', icon: Warehouse, emoji: '📦' },
       { id: 'sellthrough', label: 'Sell-Through', icon: ArrowRightLeft, emoji: '🔄' },
       { id: 'forecast', label: 'Forecast', icon: TrendingUp, emoji: '🔮' },
-      { id: 'customers', label: 'Customers', icon: Users, emoji: '👥' },
-      { id: 'margins', label: 'Margins', icon: Percent, emoji: '💰' },
+      { id: 'margins', label: 'Margins & Costs', icon: Percent, emoji: '💰' },
       { id: 'topstyles', label: 'Top Styles', icon: Trophy, emoji: '🏆' },
       { id: 'stylecolor', label: 'Style/Color', icon: Palette, emoji: '🎨' },
       { id: 'invopnseason', label: 'Inv-Opn Season', icon: ClipboardList, emoji: '📦' },
@@ -99,9 +96,7 @@ const navGroups: NavGroup[] = [
     label: 'Product',
     items: [
       { id: 'products', label: 'Style Master', icon: Package, emoji: '📋' },
-      { id: 'pricing', label: 'Pricing', icon: TrendingUp, emoji: '💵' },
       { id: 'linelist', label: 'Line List', icon: List, emoji: '📑' },
-      { id: 'costs', label: 'Costs', icon: DollarSign, emoji: '💲' },
       { id: 'tariffs', label: 'Tariffs', icon: Scale, emoji: '🏛️' },
     ],
   },
@@ -109,16 +104,22 @@ const navGroups: NavGroup[] = [
     label: 'Data',
     items: [
       { id: 'validation', label: 'Validation', icon: AlertTriangle, emoji: '⚠️' },
-      { id: 'datasources', label: 'Sources', icon: GitCompare, emoji: '🔗' },
       { id: 'sourcefiles', label: 'Source Files', icon: FolderOpen, emoji: '📁' },
     ],
   },
 ];
 
 // Flat map of ViewId → display label (used for PDF headers, filenames, etc.)
-export const VIEW_LABELS: Record<ViewId, string> = Object.fromEntries(
-  navGroups.flatMap(g => g.items.map(i => [i.id, i.label]))
-) as Record<ViewId, string>;
+// Includes labels for consolidated views that no longer appear in the sidebar
+export const VIEW_LABELS: Record<ViewId, string> = {
+  ...Object.fromEntries(navGroups.flatMap(g => g.items.map(i => [i.id, i.label]))),
+  executive: 'Executive',
+  seasoncomp: 'Season Comparison',
+  customers: 'Customers',
+  datasources: 'Sources',
+  costs: 'Costs',
+  pricing: 'Pricing',
+} as Record<ViewId, string>;
 
 const SIDEBAR_PINNED_KEY = 'kuhl-sidebar-pinned';
 

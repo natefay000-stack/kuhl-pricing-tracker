@@ -15,19 +15,13 @@ import retryDynamic from '@/lib/retryDynamic';
 
 // Lazy-load view components with automatic retry on chunk load failure.
 // retryDynamic wraps next/dynamic with 3 retries + cache-bust + auto-reload fallback.
-const ExecutiveDashboardView = retryDynamic(() => import('@/components/views/ExecutiveDashboardView'));
-const DashboardView = retryDynamic(() => import('@/components/views/DashboardView'));
-const SeasonView = retryDynamic(() => import('@/components/views/SeasonView'));
-const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
+const DashboardWithExecutiveView = retryDynamic(() => import('@/components/views/DashboardWithExecutiveView'));
+const SeasonWithCompView = retryDynamic(() => import('@/components/views/SeasonWithCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
-const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
-const PricingView = retryDynamic(() => import('@/components/views/PricingView'));
-const MarginsView = retryDynamic(() => import('@/components/views/MarginsView'));
+const MarginsCostsView = retryDynamic(() => import('@/components/views/MarginsCostsView'));
 const StyleMasterView = retryDynamic(() => import('@/components/views/StyleMasterView'));
 const LineListView = retryDynamic(() => import('@/components/views/LineListView'));
 const ValidationView = retryDynamic(() => import('@/components/views/ValidationView'));
-const CustomerView = retryDynamic(() => import('@/components/views/CustomerView'));
-const DataFlowView = retryDynamic(() => import('@/components/views/DataFlowView'));
 const InventoryView = retryDynamic(() => import('@/components/views/InventoryView'));
 const TopStylesChannelView = retryDynamic(() => import('@/components/views/TopStylesChannelView'));
 const StyleColorPerfView = retryDynamic(() => import('@/components/views/StyleColorPerfView'));
@@ -240,8 +234,19 @@ export default function Home() {
   const [selectedYear, setSelectedYear] = useState<string>('');
 
   // Reset filters when navigating between views
+  // Consolidated views: redirect removed sidebar items to their parent view
+  const VIEW_REDIRECTS: Partial<Record<ViewId, ViewId>> = {
+    executive: 'dashboard',
+    seasoncomp: 'season',
+    customers: 'sales',
+    datasources: 'sourcefiles',
+    costs: 'margins',
+    pricing: 'margins',
+  };
+
   const handleViewChange = useCallback((view: ViewId) => {
-    setActiveView(view);
+    const resolved = VIEW_REDIRECTS[view] || view;
+    setActiveView(resolved);
     setSelectedDivision('');
     setSelectedCategory('');
     setSelectedDesigner('');
@@ -1663,15 +1668,9 @@ export default function Home() {
         {/* View Content */}
         <SalesLoadingContext.Provider value={{ salesLoading, salesLoadingProgress }}>
         <div ref={viewContentRef} className="min-h-[calc(100vh-112px)]">
-          {activeView === 'executive' && (
-            <ErrorBoundary viewName="Executive Dashboard">
-              <ExecutiveDashboardView />
-            </ErrorBoundary>
-          )}
-
           {activeView === 'dashboard' && (
             <ErrorBoundary viewName="Dashboard">
-              <DashboardView
+              <DashboardWithExecutiveView
                 products={products}
                 sales={dateFilteredSales}
                 costs={costs}
@@ -1687,25 +1686,11 @@ export default function Home() {
 
           {activeView === 'season' && (
             <ErrorBoundary viewName="Season View">
-              <SeasonView
+              <SeasonWithCompView
                 products={products}
                 sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
-                selectedSeason={selectedSeason}
-                selectedDivision={selectedDivision}
-                selectedCategory={selectedCategory}
-                searchQuery={searchQuery}
-                onStyleClick={handleStyleClick}
-              />
-            </ErrorBoundary>
-          )}
-
-          {activeView === 'seasoncomp' && (
-            <ErrorBoundary viewName="Season Comparison">
-              <SeasonCompView
-                products={products}
-                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1801,44 +1786,12 @@ export default function Home() {
             </ErrorBoundary>
           )}
 
-          {activeView === 'costs' && (
-            <ErrorBoundary viewName="Costs">
-              <CostsView
-                products={products}
-                pricing={pricing}
-                costs={costs}
-                sales={dateFilteredSales}
-                selectedSeason={selectedSeason}
-                selectedDivision={selectedDivision}
-                selectedCategory={selectedCategory}
-                searchQuery={searchQuery}
-                onStyleClick={handleStyleClick}
-              />
-            </ErrorBoundary>
-          )}
-
           {activeView === 'tariffs' && (
             <ErrorBoundary viewName="Tariffs">
               <TariffView
                 products={products}
                 sales={dateFilteredSales}
                 costs={costs}
-                selectedSeason={selectedSeason}
-                selectedDivision={selectedDivision}
-                selectedCategory={selectedCategory}
-                searchQuery={searchQuery}
-                onStyleClick={handleStyleClick}
-              />
-            </ErrorBoundary>
-          )}
-
-          {activeView === 'pricing' && (
-            <ErrorBoundary viewName="Pricing">
-              <PricingView
-                products={products}
-                pricing={pricing}
-                costs={costs}
-                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1864,29 +1817,15 @@ export default function Home() {
           )}
 
           {activeView === 'margins' && (
-            <ErrorBoundary viewName="Margins">
-              <MarginsView
+            <ErrorBoundary viewName="Margins & Costs">
+              <MarginsCostsView
                 products={products}
                 sales={dateFilteredSales}
+                pricing={pricing}
                 costs={costs}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
-                searchQuery={searchQuery}
-                onStyleClick={handleStyleClick}
-              />
-            </ErrorBoundary>
-          )}
-
-          {activeView === 'customers' && (
-            <ErrorBoundary viewName="Customers">
-              <CustomerView
-                products={products}
-                sales={dateFilteredSales}
-                selectedSeason={selectedSeason}
-                selectedDivision={selectedDivision}
-                selectedCategory={selectedCategory}
-                selectedCustomerType={selectedCustomerType}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
@@ -1917,12 +1856,6 @@ export default function Home() {
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
-            </ErrorBoundary>
-          )}
-
-          {activeView === 'datasources' && (
-            <ErrorBoundary viewName="Data Flow">
-              <DataFlowView />
             </ErrorBoundary>
           )}
 
