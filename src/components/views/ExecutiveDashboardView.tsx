@@ -352,7 +352,7 @@ export default function ExecutiveDashboardView() {
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <span style={{ fontSize: 14, fontWeight: 600 }}>Season Order Status — Pick Your Favorite View</span>
-          <span style={{ fontSize: 11, color: C.dim }}>5 visualization options for user testing</span>
+          <span style={{ fontSize: 11, color: C.dim }}>6 visualization options for user testing</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
@@ -474,6 +474,59 @@ export default function ExecutiveDashboardView() {
                   ))}
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Option 6: Shipped / Invoice */}
+          <div style={cardStyle}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ background: C.purple, color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 10, marginRight: 8 }}>6</span>
+                Shipped / Invoice
+              </div>
+              <span style={{ fontSize: 9, color: C.dim, fontWeight: 400 }}>26FA &middot; Last 30 days</span>
+            </div>
+            <div style={{ padding: '12px 16px', fontSize: 9 }}>
+              {/* Column headers */}
+              <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(4, 1fr)', gap: 3, marginBottom: 6 }}>
+                <span />
+                {['JAN', 'FEB', 'MAR', 'APR'].map(m => (
+                  <span key={m} style={{ textAlign: 'center', color: m === 'FEB' ? C.purple : C.dim, padding: '4px 0', background: m === 'FEB' ? 'rgba(191,90,242,0.12)' : 'transparent', borderRadius: 3, fontSize: 9, fontWeight: 600 }}>{m}</span>
+                ))}
+              </div>
+              {/* Data rows */}
+              {[
+                { label: 'Shipped', dot: C.green, vals: ['$12.4M', '$18.1M', '$8.2M', '—'], colors: [C.green, C.green, C.green, ''] },
+                { label: 'Invoiced', dot: C.blue, vals: ['$12.4M', '$16.8M', '$4.1M', '—'], colors: [C.blue, C.blue, C.blue, ''] },
+                { label: 'Variance', dot: C.orange, vals: ['$0', '$1.3M', '$4.1M', '—'], colors: ['', C.orange, C.orange, ''] },
+              ].map(row => (
+                <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '52px repeat(4, 1fr)', gap: 3, marginBottom: 3 }}>
+                  <span style={{ fontSize: 9, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 2, background: row.dot, display: 'inline-block' }} />{row.label}
+                  </span>
+                  {row.vals.map((v, i) => {
+                    const isEmpty = v === '—' || v === '$0';
+                    return (
+                      <span key={i} style={{
+                        textAlign: 'center', padding: '6px 2px', borderRadius: 3, fontFamily: mono, fontSize: 8, fontWeight: 600,
+                        background: isEmpty ? C.surface : (row.colors[i] || C.surface),
+                        color: isEmpty ? '#3a3a42' : '#000',
+                      }}>{v}</span>
+                    );
+                  })}
+                </div>
+              ))}
+              {/* Summary bar */}
+              <div style={{ marginTop: 8, padding: '8px 10px', background: C.surface, borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <span style={{ fontSize: 9, color: C.muted }}>Shipped <strong style={{ color: C.green, fontFamily: mono }}>$38.7M</strong></span>
+                  <span style={{ fontSize: 9, color: C.muted }}>Invoiced <strong style={{ color: C.blue, fontFamily: mono }}>$33.3M</strong></span>
+                </div>
+                <span style={{ fontSize: 9, color: C.orange }}>
+                  $5.4M uninvoiced
+                  <span style={{ marginLeft: 6, background: 'rgba(255,159,10,0.15)', color: C.orange, padding: '2px 6px', borderRadius: 3, fontSize: 8, fontWeight: 600 }}>86% billed</span>
+                </span>
+              </div>
             </div>
           </div>
 
