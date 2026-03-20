@@ -4,6 +4,9 @@
  * This script reads the Excel files from /data and populates the PostgreSQL database.
  * Run with: npx ts-node scripts/seed-database.ts
  *
+ * ⚠️  WARNING: This script DELETES all existing data before seeding.
+ *     Do NOT run this on a production database with real data.
+ *
  * Make sure DATABASE_URL is set in .env before running.
  */
 
@@ -11,6 +14,7 @@ import { PrismaClient } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 
 const prisma = new PrismaClient();
 
@@ -21,6 +25,81 @@ const LINE_LIST_FILE = 'FC LL 1.23.2026.xlsx';
 const SALES_FILE = '26FA sales data 1.23.2026.xlsx';
 const PRICING_FILE = 'pricebyseason1.23.26.xlsx';
 const COSTS_FILE = 'Landed Request Sheet.xlsx';
+
+// ─── Safety: Environment check ───────────────────────────────────────────────
+
+function isProductionDatabase(): boolean {
+  const url = process.env.DATABASE_URL || '';
+  // Check for production-like indicators
+  return (
+    url.includes('neon.tech') ||
+    url.includes('supabase.co') ||
+    url.includes('amazonaws.com') ||
+    url.includes('production') ||
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL === '1'
+  );
+}
+
+async function getRecordCounts(): Promise<{
+  products: number;
+  sales: number;
+  pricing: number;
+  costs: number;
+  total: number;
+}> {
+  const [products, sales, pricing, costs] = await Promise.all([
+    prisma.product.count(),
+    prisma.sale.count(),
+    prisma.pricing.count(),
+    prisma.cost.count(),
+  ]);
+  return { products, sales, pricing, costs, total: products + sales + pricing + costs };
+}
+
+async function confirmDestructiveAction(counts: {
+  products: number;
+  sales: number;
+  pricing: number;
+  costs: number;
+  total: number;
+}): Promise<boolean> {
+  // Allow --force flag to skip prompt (for CI pipelines only)
+  if (process.argv.includes('--force')) {
+    console.log('⚠️  --force flag detected, skipping confirmation prompt');
+    return true;
+  }
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    console.log('');
+    console.log('╔══════════════════════════════════════════════════════════╗');
+    console.log('║  ⚠️   DESTRUCTIVE OPERATION — DATA WILL BE DELETED  ⚠️   ║');
+    console.log('╠══════════════════════════════════════════════════════════╣');
+    console.log(`║  Products:  ${String(counts.products).padStart(8)}  records will be DELETED       ║`);
+    console.log(`║  Sales:     ${String(counts.sales).padStart(8)}  records will be DELETED       ║`);
+    console.log(`║  Pricing:   ${String(counts.pricing).padStart(8)}  records will be DELETED       ║`);
+    console.log(`║  Costs:     ${String(counts.costs).padStart(8)}  records will be DELETED       ║`);
+    console.log(`║  ──────────────────────────────────────────────────      ║`);
+    console.log(`║  TOTAL:     ${String(counts.total).padStart(8)}  records at risk               ║`);
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log('');
+
+    if (counts.total > 0) {
+      rl.question('Type "DELETE ALL DATA" to confirm: ', (answer) => {
+        rl.close();
+        resolve(answer.trim() === 'DELETE ALL DATA');
+      });
+    } else {
+      console.log('Database is empty — no confirmation needed.');
+      rl.close();
+      resolve(true);
+    }
+  });
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function parseString(val: unknown): string {
   if (val === null || val === undefined) return '';
@@ -68,6 +147,8 @@ function normalizeSeasonCode(raw: string): { season: string; seasonType: string 
 
   return { season: normalized || s, seasonType };
 }
+
+// ─── Seed Functions ──────────────────────────────────────────────────────────
 
 async function seedProducts() {
   const filePath = path.join(DATA_DIR, LINE_LIST_FILE);
@@ -306,6 +387,8 @@ async function seedCosts() {
   return count;
 }
 
+// ─── Main ────────────────────────────────────────────────────────────────────
+
 async function main() {
   console.log('='.repeat(60));
   console.log('KÜHL Database Seed Script');
@@ -316,6 +399,23 @@ async function main() {
     console.log('Connecting to database...');
     await prisma.$connect();
     console.log('Connected!\n');
+
+    // Safety check: warn if targeting a production database
+    if (isProductionDatabase()) {
+      console.log('🔴  WARNING: You are targeting a PRODUCTION database!');
+      console.log(`    URL: ${(process.env.DATABASE_URL || '').replace(/:[^@]+@/, ':****@')}\n`);
+    }
+
+    // Show current record counts and require confirmation
+    const counts = await getRecordCounts();
+    const confirmed = await confirmDestructiveAction(counts);
+
+    if (!confirmed) {
+      console.log('\n❌  Seed cancelled. No data was modified.');
+      process.exit(0);
+    }
+
+    console.log('\n🚀  Starting seed...\n');
 
     const productCount = await seedProducts();
     console.log(`✓ Imported ${productCount} products\n`);

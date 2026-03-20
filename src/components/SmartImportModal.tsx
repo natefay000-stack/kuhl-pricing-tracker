@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { generateSeasonOptions } from '@/utils/season';
 import {
   X,
@@ -14,6 +14,7 @@ import {
   EyeOff,
   AlertTriangle,
   Clock,
+  ShieldAlert,
 } from 'lucide-react';
 import { FileType, detectFileType } from '@/lib/file-detection';
 import * as XLSX from 'xlsx';
@@ -138,11 +139,50 @@ export default function SmartImportModal({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Overwrite warning state
+  const [overwriteCheck, setOverwriteCheck] = useState<{
+    existingCount: number;
+    warning: string | null;
+    lastImport: { fileName: string; recordCount: number; importedAt: string } | null;
+  } | null>(null);
+  const [overwriteConfirmed, setOverwriteConfirmed] = useState(false);
+
   // Multi-file state
   const [multiFileMode, setMultiFileMode] = useState(false);
   const [multiFileState, setMultiFileState] = useState<MultiFileState>('queue');
   const [multiFiles, setMultiFiles] = useState<MultiFileItem[]>([]);
   const [multiFileTotalRecords, setMultiFileTotalRecords] = useState(0);
+
+  // Check for existing data when entering confirm state
+  useEffect(() => {
+    if (state !== 'confirm' || !selectedType || selectedType === 'unknown') {
+      setOverwriteCheck(null);
+      setOverwriteConfirmed(false);
+      return;
+    }
+
+    const params = new URLSearchParams({ type: selectedType });
+    if (selectedSeason && selectedType === 'lineList') {
+      params.set('season', selectedSeason);
+    }
+
+    fetch(`/api/import-check?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.existingCount > 0) {
+          setOverwriteCheck(data);
+          setOverwriteConfirmed(false);
+        } else {
+          setOverwriteCheck(null);
+          setOverwriteConfirmed(true);
+        }
+      })
+      .catch(() => {
+        // If check fails, don't block the import
+        setOverwriteCheck(null);
+        setOverwriteConfirmed(true);
+      });
+  }, [state, selectedType, selectedSeason]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1190,6 +1230,39 @@ export default function SmartImportModal({
                   <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                 </div>
               )}
+
+              {/* Overwrite Warning */}
+              {overwriteCheck && overwriteCheck.warning && (
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg space-y-3">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                        Existing Data Will Be Replaced
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        {overwriteCheck.warning}
+                      </p>
+                      {overwriteCheck.lastImport && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          Last import: {overwriteCheck.lastImport.fileName} ({overwriteCheck.lastImport.recordCount.toLocaleString()} records, {new Date(overwriteCheck.lastImport.importedAt).toLocaleDateString()})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={overwriteConfirmed}
+                      onChange={e => setOverwriteConfirmed(e.target.checked)}
+                      className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                      I understand — replace existing data
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
           )}
 
@@ -1246,10 +1319,10 @@ export default function SmartImportModal({
               </button>
               <button
                 onClick={handleImport}
-                disabled={selectedType === 'unknown'}
+                disabled={selectedType === 'unknown' || (overwriteCheck !== null && !overwriteConfirmed)}
                 className="px-6 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Import
+                {overwriteCheck && overwriteConfirmed ? 'Replace & Import' : 'Import'}
               </button>
             </>
           )}
