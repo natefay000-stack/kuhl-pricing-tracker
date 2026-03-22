@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     let count = 0;
-    const batchSize = 5000; // Process in larger batches within the transaction
+    const batchSize = 2000; // Keep small to fit within Vercel serverless timeouts
 
     // Wrap delete + insert in a transaction to prevent partial data loss on failure
     await prisma.$transaction(async (tx) => {
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
       });
     }, {
       maxWait: 10000,
-      timeout: 50000, // 50s — fits within Vercel Hobby 60s function limit
+      timeout: 30000, // 30s — conservative to avoid Vercel timeouts; client sends small batches
     });
 
     // Skip snapshot rebuild on batch imports — it loads ALL records from DB

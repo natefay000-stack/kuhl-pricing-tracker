@@ -15,13 +15,19 @@ import retryDynamic from '@/lib/retryDynamic';
 
 // Lazy-load view components with automatic retry on chunk load failure.
 // retryDynamic wraps next/dynamic with 3 retries + cache-bust + auto-reload fallback.
-const DashboardWithExecutiveView = retryDynamic(() => import('@/components/views/DashboardWithExecutiveView'));
-const SeasonWithCompView = retryDynamic(() => import('@/components/views/SeasonWithCompView'));
+const ExecutiveDashboardView = retryDynamic(() => import('@/components/views/ExecutiveDashboardView'));
+const DashboardView = retryDynamic(() => import('@/components/views/DashboardView'));
+const SeasonView = retryDynamic(() => import('@/components/views/SeasonView'));
+const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
-const MarginsCostsView = retryDynamic(() => import('@/components/views/MarginsCostsView'));
+const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
+const PricingView = retryDynamic(() => import('@/components/views/PricingView'));
+const MarginsView = retryDynamic(() => import('@/components/views/MarginsView'));
 const StyleMasterView = retryDynamic(() => import('@/components/views/StyleMasterView'));
 const LineListView = retryDynamic(() => import('@/components/views/LineListView'));
 const ValidationView = retryDynamic(() => import('@/components/views/ValidationView'));
+const CustomerView = retryDynamic(() => import('@/components/views/CustomerView'));
+const DataFlowView = retryDynamic(() => import('@/components/views/DataFlowView'));
 const InventoryView = retryDynamic(() => import('@/components/views/InventoryView'));
 const TopStylesChannelView = retryDynamic(() => import('@/components/views/TopStylesChannelView'));
 const StyleColorPerfView = retryDynamic(() => import('@/components/views/StyleColorPerfView'));
@@ -221,7 +227,6 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Filter state
   const [selectedSeason, setSelectedSeason] = useState<string>('');
@@ -234,19 +239,8 @@ export default function Home() {
   const [selectedYear, setSelectedYear] = useState<string>('');
 
   // Reset filters when navigating between views
-  // Consolidated views: redirect removed sidebar items to their parent view
-  const VIEW_REDIRECTS: Partial<Record<ViewId, ViewId>> = {
-    executive: 'dashboard',
-    seasoncomp: 'season',
-    customers: 'sales',
-    datasources: 'sourcefiles',
-    costs: 'margins',
-    pricing: 'margins',
-  };
-
   const handleViewChange = useCallback((view: ViewId) => {
-    const resolved = VIEW_REDIRECTS[view] || view;
-    setActiveView(resolved);
+    setActiveView(view);
     setSelectedDivision('');
     setSelectedCategory('');
     setSelectedDesigner('');
@@ -991,45 +985,48 @@ export default function Home() {
     // Invalidate cache — sales aggregations are now stale
     try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
 
-    // Persist to database - delete then insert for each season
+    // Persist to database — process one season at a time (delete + insert)
+    // so a failure mid-way doesn't wipe seasons we haven't re-inserted yet
     try {
-      // First, delete existing sales for each season
-      for (const season of data.seasons) {
-        console.log(`Deleting existing sales for season: ${season}`);
-        await checkedFetchWithRetry('/api/data/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'sales',
-            season,
-            data: [],
-            fileName: `sales_clear_${season}`,
-            replaceExisting: true,
-          }),
-        });
+      const BATCH_SIZE = 2000; // Small enough to complete within Vercel's timeout
+      const salesBySeason: Record<string, Record<string, unknown>[]> = {};
+      for (const s of data.sales) {
+        const season = (s.season as string) || 'Unknown';
+        if (!salesBySeason[season]) salesBySeason[season] = [];
+        salesBySeason[season].push(s);
       }
 
-      // Then insert all new sales in batches (10K per batch to reduce round-trips)
-      const BATCH_SIZE = 10000;
-      const totalBatches = Math.ceil(data.sales.length / BATCH_SIZE);
-      console.log(`Inserting ${data.sales.length} sales records in ${totalBatches} batches`);
+      const seasonList = Object.keys(salesBySeason);
+      console.log(`Persisting ${data.sales.length} sales across ${seasonList.length} seasons in ${BATCH_SIZE}-record chunks`);
 
-      for (let i = 0; i < data.sales.length; i += BATCH_SIZE) {
-        const batch = data.sales.slice(i, i + BATCH_SIZE);
-        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        console.log(`Inserting sales batch ${batchNum}/${totalBatches}`);
+      for (const season of seasonList) {
+        const seasonSales = salesBySeason[season];
+        // First batch for this season: delete existing + insert (replaceExisting: true)
+        // Subsequent batches: append only (replaceExisting: false)
+        const totalBatches = Math.ceil(seasonSales.length / BATCH_SIZE);
 
-        await checkedFetchWithRetry('/api/data/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'sales',
-            data: batch,
-            fileName: `sales_replace_batch_${batchNum}`,
-            replaceExisting: false,
-          }),
-        });
+        for (let i = 0; i < seasonSales.length; i += BATCH_SIZE) {
+          const batch = seasonSales.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          const isFirstBatch = i === 0;
+
+          console.log(`${season} batch ${batchNum}/${totalBatches} (${batch.length} records${isFirstBatch ? ', replacing' : ''})`);
+
+          await checkedFetchWithRetry('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'sales',
+              season,
+              data: batch,
+              fileName: `sales_${season}_batch_${batchNum}`,
+              replaceExisting: isFirstBatch,
+            }),
+          });
+        }
+        console.log(`✓ ${season}: ${seasonSales.length} records saved`);
       }
+
       console.log('Sales REPLACE import complete');
       // Trigger snapshot rebuild after successful DB write
       try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
@@ -1589,12 +1586,10 @@ export default function Home() {
         onCollapsedChange={setSidebarCollapsed}
         dataTimestamp={dataTimestamp || undefined}
         recordCounts={recordCounts}
-        mobileOpen={mobileSidebarOpen}
-        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main Content */}
-      <main className={`flex-1 bg-surface-secondary transition-all duration-200 ease-in-out ml-0 ${sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-56'}`}>
+      <main className={`flex-1 bg-surface-secondary transition-all duration-200 ease-in-out ${sidebarCollapsed ? 'ml-[60px]' : 'ml-56'}`}>
         {/* Header */}
         <AppHeader
           searchQuery={searchQuery}
@@ -1604,7 +1599,6 @@ export default function Home() {
           onExportExcel={handleExportExcel}
           searchSuggestions={searchSuggestions}
           onSuggestionClick={handleSuggestionClick}
-          onMenuClick={() => setMobileSidebarOpen(true)}
         />
 
         {/* Filter Bar — on Geo Heat Map, use invoice-specific options since the view only shows invoice data */}
@@ -1668,9 +1662,15 @@ export default function Home() {
         {/* View Content */}
         <SalesLoadingContext.Provider value={{ salesLoading, salesLoadingProgress }}>
         <div ref={viewContentRef} className="min-h-[calc(100vh-112px)]">
+          {activeView === 'executive' && (
+            <ErrorBoundary viewName="Executive Dashboard">
+              <ExecutiveDashboardView />
+            </ErrorBoundary>
+          )}
+
           {activeView === 'dashboard' && (
             <ErrorBoundary viewName="Dashboard">
-              <DashboardWithExecutiveView
+              <DashboardView
                 products={products}
                 sales={dateFilteredSales}
                 costs={costs}
@@ -1686,11 +1686,25 @@ export default function Home() {
 
           {activeView === 'season' && (
             <ErrorBoundary viewName="Season View">
-              <SeasonWithCompView
+              <SeasonView
                 products={products}
                 sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'seasoncomp' && (
+            <ErrorBoundary viewName="Season Comparison">
+              <SeasonCompView
+                products={products}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1786,12 +1800,44 @@ export default function Home() {
             </ErrorBoundary>
           )}
 
+          {activeView === 'costs' && (
+            <ErrorBoundary viewName="Costs">
+              <CostsView
+                products={products}
+                pricing={pricing}
+                costs={costs}
+                sales={dateFilteredSales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
           {activeView === 'tariffs' && (
             <ErrorBoundary viewName="Tariffs">
               <TariffView
                 products={products}
                 sales={dateFilteredSales}
                 costs={costs}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'pricing' && (
+            <ErrorBoundary viewName="Pricing">
+              <PricingView
+                products={products}
+                pricing={pricing}
+                costs={costs}
+                sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1817,15 +1863,29 @@ export default function Home() {
           )}
 
           {activeView === 'margins' && (
-            <ErrorBoundary viewName="Margins & Costs">
-              <MarginsCostsView
+            <ErrorBoundary viewName="Margins">
+              <MarginsView
                 products={products}
                 sales={dateFilteredSales}
-                pricing={pricing}
                 costs={costs}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'customers' && (
+            <ErrorBoundary viewName="Customers">
+              <CustomerView
+                products={products}
+                sales={dateFilteredSales}
+                selectedSeason={selectedSeason}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
@@ -1856,6 +1916,12 @@ export default function Home() {
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'datasources' && (
+            <ErrorBoundary viewName="Data Flow">
+              <DataFlowView />
             </ErrorBoundary>
           )}
 
