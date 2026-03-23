@@ -195,14 +195,15 @@ async function main() {
 
     // ── Step 1: Fetch non-sales tables (small) ──
     console.log('Fetching core tables...');
-    const [products, pricing, costs, inventory] = await Promise.all([
+    const [products, pricing, costs, inventory, invoices] = await Promise.all([
       prisma.product.findMany({ orderBy: { season: 'desc' } }),
       prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
       prisma.cost.findMany({ orderBy: { season: 'desc' } }),
       prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
+      prisma.invoice.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
     ]);
 
-    console.log(`  Products: ${products.length} | Pricing: ${pricing.length} | Costs: ${costs.length} | Inventory: ${inventory.length}`);
+    console.log(`  Products: ${products.length} | Pricing: ${pricing.length} | Costs: ${costs.length} | Inventory: ${inventory.length} | Invoices: ${invoices.length}`);
 
     // Compute inventory aggregations
     const inventoryAggregations = computeInventoryAggregations(inventory);
@@ -272,8 +273,9 @@ async function main() {
         pricing: pricing.length,
         costs: costs.length,
         inventory: inventory.length,
+        invoices: invoices.length,
       },
-      data: { products, pricing, costs, inventory },
+      data: { products, pricing, costs, inventory, invoices },
       salesAggregations,
       inventoryAggregations,
     };
@@ -314,8 +316,8 @@ async function main() {
       ensureDir(publicDir);
       fs.writeFileSync(path.join(publicDir, 'data-core.json'), JSON.stringify({
         success: true, buildTime: new Date().toISOString(),
-        counts: { products: 0, sales: 0, pricing: 0, costs: 0, inventory: 0 },
-        data: { products: [], pricing: [], costs: [], inventory: [] },
+        counts: { products: 0, sales: 0, pricing: 0, costs: 0, inventory: 0, invoices: 0 },
+        data: { products: [], pricing: [], costs: [], inventory: [], invoices: [] },
         salesAggregations: { byChannel: [], byCategory: [], byGender: [], byCustomer: [] },
         inventoryAggregations: { totalCount: 0, byType: [], byWarehouse: [], byPeriod: [] },
       }));
