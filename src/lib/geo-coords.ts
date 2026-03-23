@@ -12,13 +12,17 @@ export type HeatPoint = [number, number, number]; // [lat, lng, intensity]
 
 export type ZipCentroids = Record<string, [number, number]>; // "XXXXX" → [lat, lng]
 
+export type ZipPopulation = Record<string, number>; // "XXXXX" → population
+
 // ── Module-level caches ──
 let cachedCityCoords: CityCoords | null = null;
 let cachedStateCentroids: StateCentroids | null = null;
 let cachedZipCentroids: ZipCentroids | null = null;
+let cachedZipPopulation: ZipPopulation | null = null;
 let cityPromise: Promise<CityCoords> | null = null;
 let centroidPromise: Promise<StateCentroids> | null = null;
 let zipPromise: Promise<ZipCentroids> | null = null;
+let zipPopPromise: Promise<ZipPopulation> | null = null;
 
 // Full state name → abbreviation mapping
 const STATE_NAME_TO_ABBR: Record<string, string> = {
@@ -80,6 +84,18 @@ export async function loadZipCentroids(): Promise<ZipCentroids> {
       return data;
     });
   return zipPromise;
+}
+
+export async function loadZipPopulation(): Promise<ZipPopulation> {
+  if (cachedZipPopulation) return cachedZipPopulation;
+  if (zipPopPromise) return zipPopPromise;
+  zipPopPromise = fetch('/geo/zip-population.json')
+    .then(r => r.json())
+    .then((data: ZipPopulation) => {
+      cachedZipPopulation = data;
+      return data;
+    });
+  return zipPopPromise;
 }
 
 // ── Heat Point Builder ──
@@ -223,4 +239,42 @@ export function buildZipAggregations(
   }
 
   return results.sort((a, b) => b.revenue - a.revenue);
+}
+
+// ── ZIP Penetration (sales per capita) ──
+
+export interface ZipDotData {
+  zip: string;
+  lat: number;
+  lng: number;
+  revenue: number;
+  units: number;
+  orders: number;
+  population: number;
+  revenuePerCapita: number;
+  state: string;
+}
+
+/**
+ * Build ZIP dot data with per-capita penetration metrics.
+ * Each dot is colored by revenue intensity (green = high, transparent = low).
+ */
+export function buildZipDotData(
+  zipAggs: ZipAggregation[],
+  zipPopulation: ZipPopulation | null,
+): ZipDotData[] {
+  if (!zipPopulation) return zipAggs.map(z => ({
+    ...z,
+    population: 0,
+    revenuePerCapita: 0,
+  }));
+
+  return zipAggs.map(z => {
+    const pop = zipPopulation[z.zip] || 0;
+    return {
+      ...z,
+      population: pop,
+      revenuePerCapita: pop > 0 ? z.revenue / pop : 0,
+    };
+  });
 }

@@ -9,7 +9,7 @@ import {
 } from '@/lib/geo-utils';
 import { loadCbsaMetros, aggregateSalesByMetro, type MetroData } from '@/lib/cbsa-data';
 import { matchesSeason } from '@/lib/store';
-import { loadCityCoords, loadStateCentroids, loadZipCentroids, buildHeatPoints, buildZipAggregations, type CityCoords, type StateCentroids, type ZipCentroids } from '@/lib/geo-coords';
+import { loadCityCoords, loadStateCentroids, loadZipCentroids, loadZipPopulation, buildHeatPoints, buildZipAggregations, buildZipDotData, type CityCoords, type StateCentroids, type ZipCentroids, type ZipPopulation } from '@/lib/geo-coords';
 import retryDynamic from '@/lib/retryDynamic';
 import type { MetroMarker, ZipDotMarker } from '@/components/geo/LeafletHeatMap';
 
@@ -195,6 +195,7 @@ export default function GeoHeatmapView({
   const [cityCoords, setCityCoords] = useState<CityCoords | null>(null);
   const [stateCentroidsData, setStateCentroidsData] = useState<StateCentroids | null>(null);
   const [zipCentroids, setZipCentroids] = useState<ZipCentroids | null>(null);
+  const [zipPopulation, setZipPopulation] = useState<ZipPopulation | null>(null);
 
   // Month/Year filter state (local to this view)
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -236,14 +237,15 @@ export default function GeoHeatmapView({
   // Load CBSA metro data + zip map + city coords + state centroids on mount
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadCbsaMetros(), loadZipToCountyMap(), loadCityCoords(), loadStateCentroids(), loadZipCentroids()])
-      .then(([metros, zipMap, coords, centroids, zipCoords]) => {
+    Promise.all([loadCbsaMetros(), loadZipToCountyMap(), loadCityCoords(), loadStateCentroids(), loadZipCentroids(), loadZipPopulation()])
+      .then(([metros, zipMap, coords, centroids, zipCoords, zipPop]) => {
         if (!cancelled) {
           setCbsaMetros(metros);
           setZipToCounty(zipMap);
           setCityCoords(coords);
           setStateCentroidsData(centroids);
           setZipCentroids(zipCoords);
+          setZipPopulation(zipPop);
         }
       })
       .catch(err => console.error('Failed to load geo data:', err));
@@ -508,17 +510,31 @@ export default function GeoHeatmapView({
     const zipAggs = buildZipAggregations(filteredSales, zipCentroids);
     if (zipAggs.length === 0) return [];
 
-    const maxVal = zipAggs[0]?.revenue || 1; // already sorted desc
+    const zipDots = buildZipDotData(zipAggs, zipPopulation);
 
-    return zipAggs.map(z => {
-      const value = metric === 'revenue' ? z.revenue
-        : metric === 'units' ? z.units
-        : metric === 'orders' ? z.orders
-        : z.orders > 0 ? z.revenue / z.orders : 0;
-      const metricMax = metric === 'revenue' ? maxVal
-        : Math.max(...zipAggs.map(a =>
-          metric === 'units' ? a.units : metric === 'orders' ? a.orders : a.orders > 0 ? a.revenue / a.orders : 0
-        ));
+    // Determine value and max based on metric
+    const getValue = (z: typeof zipDots[0]) => {
+      switch (metric) {
+        case 'revenue': return z.revenue;
+        case 'units': return z.units;
+        case 'orders': return z.orders;
+        case 'avgOrder': return z.orders > 0 ? z.revenue / z.orders : 0;
+        default: return z.revenue;
+      }
+    };
+
+    const values = zipDots.map(getValue);
+    const metricMax = Math.max(...values, 1);
+
+    return zipDots.map(z => {
+      const value = getValue(z);
+      const pop = z.population;
+      const perCapita = z.revenuePerCapita;
+
+      // Format label with population context
+      const revenueStr = `$${value >= 1000 ? (value / 1000).toFixed(1) + 'K' : value.toFixed(0)}`;
+      const popStr = pop > 0 ? ` · Pop: ${pop.toLocaleString()}` : '';
+      const perCapStr = perCapita > 0 ? ` · $${perCapita.toFixed(2)}/person` : '';
 
       return {
         zip: z.zip,
@@ -526,13 +542,13 @@ export default function GeoHeatmapView({
         lng: z.lng,
         value,
         formattedValue: metric === 'revenue' || metric === 'avgOrder'
-          ? `$${value >= 1000 ? (value / 1000).toFixed(1) + 'K' : value.toFixed(0)}`
-          : value.toLocaleString(),
+          ? revenueStr + popStr + perCapStr
+          : value.toLocaleString() + popStr,
         intensity: metricMax > 0 ? Math.min(1, value / metricMax) : 0,
         state: z.state,
       };
     });
-  }, [mapMode, filteredSales, zipCentroids, metric]);
+  }, [mapMode, filteredSales, zipCentroids, zipPopulation, metric]);
 
   // --- Metro markers for the Leaflet map ---
   const metroMarkers: MetroMarker[] = useMemo(() => {
@@ -730,14 +746,28 @@ export default function GeoHeatmapView({
 
           {/* Legend */}
           <div className="flex items-center gap-3 px-4 py-3 border-t border-[#2a2a32]">
-            <span className="text-xs text-[#636366]">Low</span>
-            <div className="flex-1 h-2 rounded-full" style={{
-              background: 'linear-gradient(to right, #0d2266, #1a3a9a, #6a1b9a, #b71c1c, #d84315, #ef6c00, #f9a825, #ffee58, #ffffff)',
-            }} />
+            <span className="text-xs text-[#636366]">$0</span>
+            {mapMode === 'heat' ? (
+              <div className="flex-1 h-2 rounded-full" style={{
+                background: 'linear-gradient(to right, #0d2266, #1a3a9a, #6a1b9a, #b71c1c, #d84315, #ef6c00, #f9a825, #ffee58, #ffffff)',
+              }} />
+            ) : (
+              <div className="flex-1 h-2 rounded-full" style={{
+                background: 'linear-gradient(to right, rgba(34,197,94,0.05), #dcfce7, #bbf7d0, #86efac, #4ade80, #22c55e)',
+              }} />
+            )}
             <span className="text-xs text-[#636366]">High</span>
             <span className="text-[10px] text-[#636366] ml-2">
-              {metric === 'revenue' ? 'Revenue' : metric === 'units' ? 'Units' : metric === 'orders' ? 'Orders' : 'Avg Order'} density
+              {mapMode === 'zip'
+                ? `${metric === 'revenue' ? 'Revenue' : metric === 'units' ? 'Units' : metric === 'orders' ? 'Orders' : 'Avg Order'} by ZIP`
+                : `${metric === 'revenue' ? 'Revenue' : metric === 'units' ? 'Units' : metric === 'orders' ? 'Orders' : 'Avg Order'} density`
+              }
             </span>
+            {mapMode === 'zip' && (
+              <span className="text-[10px] text-[#30d158] ml-2">
+                {zipDotMarkers.length.toLocaleString()} ZIP codes
+              </span>
+            )}
           </div>
         </div>
 
