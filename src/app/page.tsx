@@ -42,6 +42,7 @@ import { clearAllData } from '@/lib/db';
 import { exportViewToPdf } from '@/utils/exportPdf';
 import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
 import { exportMultiSheetExcel } from '@/utils/exportData';
+import { normalizeDivisionDesc } from '@/utils/divisionMap';
 
 // Cache version - increment to invalidate cache
 // v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
@@ -440,8 +441,14 @@ export default function Home() {
           needsPatch = true;
         }
 
-        // Inherit divisionDesc from booking/product data by style number
-        if (!s.divisionDesc && s.styleNumber) {
+        // Normalize division codes to display names
+        if (s.divisionDesc) {
+          const normalized = normalizeDivisionDesc(s.divisionDesc);
+          if (normalized !== s.divisionDesc) {
+            patches.divisionDesc = normalized;
+            needsPatch = true;
+          }
+        } else if (s.styleNumber) {
           const info = styleInfoMap.get(s.styleNumber);
           if (info?.divisionDesc) {
             patches.divisionDesc = info.divisionDesc;
@@ -473,10 +480,19 @@ export default function Home() {
         patches.customerType = customerTypeMap.get(inv.customer)!;
         needsPatch = true;
       }
-      if (!inv.divisionDesc && inv.styleNumber) {
+
+      // Normalize division: convert raw codes (01, 02, 06, 08) to display names
+      if (inv.divisionDesc) {
+        const normalized = normalizeDivisionDesc(inv.divisionDesc);
+        if (normalized !== inv.divisionDesc) {
+          patches.divisionDesc = normalized;
+          needsPatch = true;
+        }
+      } else if (inv.styleNumber) {
         const info = styleInfoMap.get(inv.styleNumber);
         if (info?.divisionDesc) { patches.divisionDesc = info.divisionDesc; needsPatch = true; }
       }
+
       if (!inv.categoryDesc && inv.styleNumber) {
         const info = styleInfoMap.get(inv.styleNumber);
         if (info?.categoryDesc) { patches.categoryDesc = info.categoryDesc; needsPatch = true; }
