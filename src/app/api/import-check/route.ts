@@ -27,8 +27,10 @@ export async function GET(request: NextRequest) {
         existingCount = await prisma.product.count({ where });
         break;
       case 'sales':
-      case 'invoice':
         existingCount = await prisma.sale.count({ where });
+        break;
+      case 'invoice':
+        existingCount = await prisma.invoice.count({ where });
         break;
       case 'pricing':
         existingCount = await prisma.pricing.count({ where });

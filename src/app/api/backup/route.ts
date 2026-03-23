@@ -24,18 +24,19 @@ export async function GET(request: NextRequest) {
   try {
     // Fast path: just return record counts
     if (countsOnly) {
-      const [products, sales, pricing, costs, inventory, importLogs] = await Promise.all([
+      const [products, sales, pricing, costs, inventory, invoicesCount, importLogs] = await Promise.all([
         prisma.product.count(),
         prisma.sale.count(),
         prisma.pricing.count(),
         prisma.cost.count(),
         prisma.inventory.count(),
+        prisma.invoice.count(),
         prisma.importLog.count(),
       ]);
 
       return NextResponse.json({
-        counts: { products, sales, pricing, costs, inventory, importLogs },
-        total: products + sales + pricing + costs + inventory,
+        counts: { products, sales, pricing, costs, inventory, invoices: invoicesCount, importLogs },
+        total: products + sales + pricing + costs + inventory + invoicesCount,
         timestamp: new Date().toISOString(),
       });
     }
@@ -64,6 +65,9 @@ export async function GET(request: NextRequest) {
     }
     if (requestedTables.includes('inventory')) {
       backup.inventory = await prisma.inventory.findMany();
+    }
+    if (requestedTables.includes('invoices')) {
+      backup.invoices = await prisma.invoice.findMany();
     }
     if (requestedTables.includes('importlogs')) {
       backup.importLogs = await prisma.importLog.findMany({

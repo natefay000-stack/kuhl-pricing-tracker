@@ -186,6 +186,52 @@ export interface SalesRecord {
   dataSource?: string;
 }
 
+// Invoice record — separate from sales, contains geographic data for heat map
+export interface InvoiceRecord {
+  id: string;
+  styleNumber: string;
+  styleDesc?: string;
+  colorCode?: string;
+  colorDesc?: string;
+  season: string;
+  customer?: string;
+  customerType?: string;
+  gender?: string;
+  orderType?: string;
+  // Geographic fields
+  shipToState?: string;
+  shipToCity?: string;
+  shipToZip?: string;
+  billToState?: string;
+  billToCity?: string;
+  billToZip?: string;
+  // Invoice fields
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  accountingPeriod?: string;
+  shippedAtNet?: number;
+  returnedAtNet?: number;
+  totalPrice?: number;
+  totalAtNet?: number;
+  totalAtWholesale?: number;
+  returnedAtWholesale?: number;
+  shippedAtMsrp?: number;
+  warehouse?: string;
+  warehouseDesc?: string;
+  commissionRate?: number;
+  ytdNetInvoicing?: number;
+  ytdCreditMemos?: number;
+  ytdSales?: number;
+  openAtNet?: number;
+  openOrder?: number;
+  returned?: number;
+  unitsShipped?: number;
+  unitsReturned?: number;
+  // Enriched fields (from product/sales data)
+  divisionDesc?: string;
+  categoryDesc?: string;
+}
+
 // Customer type labels
 export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   'KI': 'KUHL International',

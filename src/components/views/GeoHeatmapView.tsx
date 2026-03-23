@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { SalesRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
+import { SalesRecord, InvoiceRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { matchesDivision } from '@/utils/divisionMap';
 import {
   loadZipToCountyMap,
@@ -162,6 +162,7 @@ function getMetricValue(d: { revenue: number; units: number; orders: number }, m
 
 interface GeoHeatmapViewProps {
   sales: SalesRecord[];
+  invoices?: InvoiceRecord[];
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
@@ -170,7 +171,7 @@ interface GeoHeatmapViewProps {
 }
 
 export default function GeoHeatmapView({
-  sales, selectedSeason, selectedDivision, selectedCategory,
+  sales, invoices = [], selectedSeason, selectedDivision, selectedCategory,
   selectedCustomerType, selectedCustomer,
 }: GeoHeatmapViewProps) {
   // State-level state
@@ -244,9 +245,46 @@ export default function GeoHeatmapView({
     return () => { cancelled = true; };
   }, []);
 
-  // Filter sales by all active filters
+  // Merge invoices into sales-compatible records for geographic display
+  const allGeoRecords = useMemo(() => {
+    // Convert InvoiceRecords to SalesRecord-compatible shape
+    const invoiceAsSales: SalesRecord[] = invoices.map((inv, i) => ({
+      id: inv.id || `inv-${i}`,
+      styleNumber: inv.styleNumber,
+      styleDesc: inv.styleDesc || '',
+      colorCode: inv.colorCode,
+      colorDesc: inv.colorDesc || '',
+      season: inv.season,
+      customer: inv.customer,
+      customerType: inv.customerType || '',
+      divisionDesc: inv.divisionDesc || '',
+      categoryDesc: inv.categoryDesc || '',
+      gender: inv.gender,
+      orderType: inv.orderType,
+      shipToState: inv.shipToState,
+      shipToCity: inv.shipToCity,
+      shipToZip: inv.shipToZip,
+      billToState: inv.billToState,
+      billToCity: inv.billToCity,
+      billToZip: inv.billToZip,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceDate: inv.invoiceDate,
+      shippedAtNet: inv.shippedAtNet || 0,
+      returnedAtNet: inv.returnedAtNet || 0,
+      unitsShipped: inv.unitsShipped || 0,
+      unitsReturned: inv.unitsReturned || 0,
+      revenue: inv.shippedAtNet || 0,
+      unitsBooked: inv.unitsShipped || 0,
+      cost: 0,
+    }));
+
+    // Prefer invoices (have geo data), fall back to sales with geo data
+    return [...invoiceAsSales, ...sales.filter(s => s.shipToState || s.billToState)];
+  }, [sales, invoices]);
+
+  // Filter by all active filters
   const filteredSales = useMemo(() => {
-    return sales.filter((s) => {
+    return allGeoRecords.filter((s) => {
       if (!matchesSeason(s.season, selectedSeason)) return false;
       if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
       if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
@@ -266,7 +304,7 @@ export default function GeoHeatmapView({
       }
       return true;
     });
-  }, [sales, selectedSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, quickGender, dateStart, dateEnd]);
+  }, [allGeoRecords, selectedSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, quickGender, dateStart, dateEnd]);
 
   // Aggregate sales by state
   const { stateData, maxValue, totalRevenue, totalUnits, statesWithData } = useMemo(() => {

@@ -37,7 +37,7 @@ const InvOpnSeasonView = retryDynamic(() => import('@/components/views/InvOpnSea
 const GeoHeatmapView = retryDynamic(() => import('@/components/views/GeoHeatmapView'));
 const ForecastView = retryDynamic(() => import('@/components/views/ForecastView'));
 const SourceFilesView = retryDynamic(() => import('@/components/views/SourceFilesView'));
-import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations } from '@/types/product';
+import { Product, SalesRecord, PricingRecord, CostRecord, InventoryRecord, InventoryOHRecord, InventoryOHAggregations, InvoiceRecord } from '@/types/product';
 import { clearAllData } from '@/lib/db';
 import { exportViewToPdf } from '@/utils/exportPdf';
 import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
@@ -205,6 +205,7 @@ export default function Home() {
   const [sales, setSales] = useState<SalesRecord[]>([]);
   const [pricing, setPricing] = useState<PricingRecord[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [inventory, setInventory] = useState<InventoryRecord[]>([]);
   const [inventoryOH, setInventoryOH] = useState<InventoryOHRecord[]>([]);
   const [ohAggregations, setOHAggregations] = useState<InventoryOHAggregations | null>(null);
@@ -672,6 +673,7 @@ export default function Home() {
     const applyCoreData = (core: {
       products: Product[]; pricing: PricingRecord[]; costs: CostRecord[];
       inventory?: InventoryRecord[]; inventoryOH?: InventoryOHRecord[];
+      invoices?: InvoiceRecord[];
       salesAggregations?: SalesAggregations | null; inventoryAggregations?: InventoryAggregations | null;
       ohAggregations?: InventoryOHAggregations | null;
     }) => {
@@ -683,6 +685,7 @@ export default function Home() {
       if (core.salesAggregations) setSalesAggregations(core.salesAggregations);
       if (core.inventoryAggregations) setInvAggregations(core.inventoryAggregations);
       if (core.ohAggregations) setOHAggregations(core.ohAggregations);
+      if (core.invoices) setInvoices(core.invoices);
       setSales([]);
       setDataTimestamp(Date.now());
     };
@@ -1035,6 +1038,70 @@ export default function Home() {
       console.error('Sales DB persist error:', detail);
       setSessionOnlyMode(true);
       setSessionOnlyTypes(prev => [...new Set([...prev, 'Sales'])]);
+      setPersistenceErrorDetail(detail);
+      setShowPersistenceModal(true);
+    }
+  };
+
+  // Handle invoice import — writes to separate Invoice table, never touches Sales
+  const handleInvoiceImport = async (data: {
+    invoices: Record<string, unknown>[];
+    seasons: string[];
+  }) => {
+    if (!data.invoices || !Array.isArray(data.invoices)) {
+      console.warn('handleInvoiceImport called with no invoice data — ignoring');
+      return;
+    }
+    console.log('Invoice import:', data.invoices.length, 'records for seasons:', data.seasons);
+
+    // Update local state
+    const newInvoices = data.invoices as unknown as InvoiceRecord[];
+    const seasonsSet = new Set(data.seasons);
+    const invoicesToKeep = invoices.filter(inv => !seasonsSet.has(inv.season));
+    setInvoices([...invoicesToKeep, ...newInvoices]);
+
+    // Persist to database in chunks per season
+    try {
+      const BATCH_SIZE = 2000;
+      const invoicesBySeason: Record<string, Record<string, unknown>[]> = {};
+      for (const inv of data.invoices) {
+        const season = (inv.season as string) || 'Unknown';
+        if (!invoicesBySeason[season]) invoicesBySeason[season] = [];
+        invoicesBySeason[season].push(inv);
+      }
+
+      for (const season of Object.keys(invoicesBySeason)) {
+        const seasonInvoices = invoicesBySeason[season];
+        const totalBatches = Math.ceil(seasonInvoices.length / BATCH_SIZE);
+
+        for (let i = 0; i < seasonInvoices.length; i += BATCH_SIZE) {
+          const batch = seasonInvoices.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          const isFirstBatch = i === 0;
+
+          console.log(`Invoice ${season} batch ${batchNum}/${totalBatches} (${batch.length} records${isFirstBatch ? ', replacing' : ''})`);
+
+          await checkedFetchWithRetry('/api/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'invoice',
+              season,
+              data: batch,
+              fileName: `invoice_${season}_batch_${batchNum}`,
+              replaceExisting: isFirstBatch,
+            }),
+          });
+        }
+        console.log(`✓ Invoice ${season}: ${seasonInvoices.length} records saved`);
+      }
+      console.log('Invoice import complete');
+      try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
+    } catch (dbErr) {
+      const detail = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      console.error('Invoice DB persist error:', detail);
+      setSessionOnlyMode(true);
+      setSessionOnlyTypes(prev => [...new Set([...prev, 'Invoice'])]);
       setPersistenceErrorDetail(detail);
       setShowPersistenceModal(true);
     }
@@ -1946,6 +2013,7 @@ export default function Home() {
             <ErrorBoundary viewName="Geo Heat Map">
               <GeoHeatmapView
                 sales={invoiceOnlySales}
+                invoices={invoices}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -1997,6 +2065,7 @@ export default function Home() {
           onImportSalesOnly={handleSalesOnlyImport}
           onImportMultiSeason={handleMultiSeasonImport}
           onImportSalesReplace={handleSalesReplaceImport}
+          onImportInvoice={handleInvoiceImport}
           onImportDirectToDb={handleDirectToDbImport}
           onClose={() => setShowImportModal(false)}
         />

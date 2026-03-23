@@ -119,6 +119,57 @@ model Sale {
   @@index([shipToState])
 }
 
+// Invoice data — separate from sales, contains geographic fields for heat map
+model Invoice {
+  id                    String    @id @default(cuid())
+  styleNumber           String
+  styleDesc             String?
+  colorCode             String?
+  colorDesc             String?
+  season                String
+  customer              String?
+  customerType          String?
+  gender                String?
+  orderType             String?
+  // Geographic fields
+  shipToState           String?
+  shipToCity            String?
+  shipToZip             String?
+  billToState           String?
+  billToCity            String?
+  billToZip             String?
+  // Invoice fields
+  invoiceNumber         String?
+  invoiceDate           DateTime?
+  accountingPeriod      String?
+  shippedAtNet          Float     @default(0)
+  returnedAtNet         Float     @default(0)
+  totalPrice            Float     @default(0)
+  totalAtNet            Float     @default(0)
+  totalAtWholesale      Float     @default(0)
+  returnedAtWholesale   Float     @default(0)
+  shippedAtMsrp         Float     @default(0)
+  warehouse             String?
+  warehouseDesc         String?
+  commissionRate        Float     @default(0)
+  ytdNetInvoicing       Float     @default(0)
+  ytdCreditMemos        Float     @default(0)
+  ytdSales              Float     @default(0)
+  openAtNet             Float     @default(0)
+  openOrder             Float     @default(0)
+  returned              Float     @default(0)
+  unitsShipped          Int       @default(0)
+  unitsReturned         Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([season])
+  @@index([styleNumber])
+  @@index([shipToState])
+  @@index([invoiceDate])
+  @@index([customer])
+}
+
 // Pricing by season (from pricebyseason file)
 model Pricing {
   id          String   @id @default(cuid())

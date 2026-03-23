@@ -7,7 +7,7 @@ export const maxDuration = 300; // 5 minutes
 export const dynamic = 'force-dynamic';
 
 interface ImportData {
-  type: 'products' | 'sales' | 'pricing' | 'costs' | 'inventory';
+  type: 'products' | 'sales' | 'pricing' | 'costs' | 'inventory' | 'invoice';
   season?: string;
   data: Record<string, unknown>[];
   fileName?: string;
@@ -53,6 +53,13 @@ export async function POST(request: NextRequest) {
             break;
           case 'inventory':
             await tx.inventory.deleteMany({});
+            break;
+          case 'invoice':
+            if (season) {
+              await tx.invoice.deleteMany({ where: { season } });
+            } else {
+              await tx.invoice.deleteMany({});
+            }
             break;
         }
       }
@@ -249,6 +256,51 @@ export async function POST(request: NextRequest) {
               costDesc: item['Cost Description'] ? String(item['Cost Description']) : null,
             }));
             await tx.inventory.createMany({ data: batch });
+            count += batch.length;
+          }
+          break;
+
+        case 'invoice':
+          for (let i = 0; i < data.length; i += batchSize) {
+            const batch = data.slice(i, i + batchSize).map((item) => ({
+              styleNumber: String(item.styleNumber || ''),
+              styleDesc: item.styleDesc ? String(item.styleDesc) : null,
+              colorCode: item.colorCode ? String(item.colorCode) : null,
+              colorDesc: item.colorDesc ? String(item.colorDesc) : null,
+              season: String(item.season || season || ''),
+              customer: item.customer ? String(item.customer) : null,
+              customerType: item.customerType ? String(item.customerType) : null,
+              gender: item.gender ? String(item.gender) : null,
+              orderType: item.orderType ? String(item.orderType) : null,
+              shipToState: item.shipToState ? String(item.shipToState) : null,
+              shipToCity: item.shipToCity ? String(item.shipToCity) : null,
+              shipToZip: item.shipToZip ? String(item.shipToZip) : null,
+              billToState: item.billToState ? String(item.billToState) : null,
+              billToCity: item.billToCity ? String(item.billToCity) : null,
+              billToZip: item.billToZip ? String(item.billToZip) : null,
+              invoiceNumber: item.invoiceNumber ? String(item.invoiceNumber) : null,
+              invoiceDate: item.invoiceDate ? new Date(String(item.invoiceDate)) : null,
+              accountingPeriod: item.accountingPeriod ? String(item.accountingPeriod) : null,
+              shippedAtNet: Number(item.shippedAtNet || 0),
+              returnedAtNet: Number(item.returnedAtNet || 0),
+              totalPrice: Number(item.totalPrice || 0),
+              totalAtNet: Number(item.totalAtNet || 0),
+              totalAtWholesale: Number(item.totalAtWholesale || 0),
+              returnedAtWholesale: Number(item.returnedAtWholesale || 0),
+              shippedAtMsrp: Number(item.shippedAtMsrp || 0),
+              warehouse: item.warehouse ? String(item.warehouse) : null,
+              warehouseDesc: item.warehouseDesc ? String(item.warehouseDesc) : null,
+              commissionRate: Number(item.commissionRate || 0),
+              ytdNetInvoicing: Number(item.ytdNetInvoicing || 0),
+              ytdCreditMemos: Number(item.ytdCreditMemos || 0),
+              ytdSales: Number(item.ytdSales || 0),
+              openAtNet: Number(item.openAtNet || 0),
+              openOrder: Number(item.openOrder || 0),
+              returned: Number(item.returned || 0),
+              unitsShipped: Number(item.unitsShipped || 0),
+              unitsReturned: Number(item.unitsReturned || 0),
+            }));
+            await tx.invoice.createMany({ data: batch });
             count += batch.length;
           }
           break;

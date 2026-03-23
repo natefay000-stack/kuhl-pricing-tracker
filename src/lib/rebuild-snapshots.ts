@@ -129,12 +129,13 @@ export async function rebuildSnapshots(): Promise<{
   const startTime = Date.now();
   console.log('[Snapshot] Rebuilding from database...');
 
-  const [products, pricing, costs, inventory, sales] = await Promise.all([
+  const [products, pricing, costs, inventory, sales, invoices] = await Promise.all([
     prisma.product.findMany({ orderBy: { season: 'desc' } }),
     prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
     prisma.cost.findMany({ orderBy: { season: 'desc' } }),
     prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
     prisma.sale.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
+    prisma.invoice.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
   ]);
 
   const inventoryAggregations = computeInventoryAggregations(inventory);
@@ -152,7 +153,7 @@ export async function rebuildSnapshots(): Promise<{
     success: true,
     buildTime: new Date().toISOString(),
     counts,
-    data: { products, pricing, costs, inventory },
+    data: { products, pricing, costs, inventory, invoices },
     salesAggregations,
     inventoryAggregations,
   };
@@ -188,7 +189,7 @@ export async function rebuildSnapshots(): Promise<{
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[Snapshot] Rebuilt in ${elapsed}s — ${counts.products} products, ${counts.sales} sales, ${counts.pricing} pricing, ${counts.costs} costs, ${counts.inventory} inventory`);
+  console.log(`[Snapshot] Rebuilt in ${elapsed}s — ${counts.products} products, ${counts.sales} sales, ${invoices.length} invoices, ${counts.pricing} pricing, ${counts.costs} costs, ${counts.inventory} inventory`);
 
   return { corePath, counts };
 }

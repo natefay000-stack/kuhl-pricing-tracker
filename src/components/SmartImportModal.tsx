@@ -84,6 +84,10 @@ interface SmartImportModalProps {
     sales: Record<string, unknown>[];
     seasons: string[];
   }) => void;
+  onImportInvoice: (data: {
+    invoices: Record<string, unknown>[];
+    seasons: string[];
+  }) => void;
   onImportDirectToDb?: () => void; // Called when large files are imported directly to DB — triggers a data refresh
   onClose: () => void;
 }
@@ -123,6 +127,7 @@ export default function SmartImportModal({
   onImportSalesOnly,
   onImportMultiSeason,
   onImportSalesReplace,
+  onImportInvoice,
   onImportDirectToDb,
   onClose,
 }: SmartImportModalProps) {
@@ -698,12 +703,23 @@ export default function SmartImportModal({
       setImportProgress(70);
 
       // Route to appropriate handler based on type
-      if (selectedType === 'sales' || selectedType === 'invoice') {
+      if (selectedType === 'invoice') {
+        const allSeasonValues = ((data.sales || []) as Record<string, unknown>[])
+          .map((s) => s.season as string)
+          .filter((s: string) => s && s.length > 0);
+        const invoiceSeasons: string[] = Array.from(new Set(allSeasonValues));
+        console.log('Invoice import - detected seasons:', invoiceSeasons);
+
+        onImportInvoice({
+          invoices: data.sales as Record<string, unknown>[],
+          seasons: invoiceSeasons,
+        });
+      } else if (selectedType === 'sales') {
         const allSeasonValues = ((data.sales || []) as Record<string, unknown>[])
           .map((s) => s.season as string)
           .filter((s: string) => s && s.length > 0);
         const salesSeasons: string[] = Array.from(new Set(allSeasonValues));
-        console.log(`${selectedType} import - detected seasons:`, salesSeasons);
+        console.log('Sales import - detected seasons:', salesSeasons);
 
         onImportSalesReplace({
           sales: data.sales as Record<string, unknown>[],
