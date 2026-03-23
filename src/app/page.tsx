@@ -462,11 +462,44 @@ export default function Home() {
       });
   }, [dateFilteredSales, invoiceEnrichment]);
 
+  // Enrich invoices (from Invoice table) with customerType/division/category from sales/products
+  const enrichedInvoices = useMemo(() => {
+    const { customerTypeMap, styleInfoMap } = invoiceEnrichment;
+    return invoices.map(inv => {
+      const patches: Partial<InvoiceRecord> = {};
+      let needsPatch = false;
+
+      if (!inv.customerType && inv.customer && customerTypeMap.has(inv.customer)) {
+        patches.customerType = customerTypeMap.get(inv.customer)!;
+        needsPatch = true;
+      }
+      if (!inv.divisionDesc && inv.styleNumber) {
+        const info = styleInfoMap.get(inv.styleNumber);
+        if (info?.divisionDesc) { patches.divisionDesc = info.divisionDesc; needsPatch = true; }
+      }
+      if (!inv.categoryDesc && inv.styleNumber) {
+        const info = styleInfoMap.get(inv.styleNumber);
+        if (info?.categoryDesc) { patches.categoryDesc = info.categoryDesc; needsPatch = true; }
+      }
+
+      return needsPatch ? { ...inv, ...patches } : inv;
+    });
+  }, [invoices, invoiceEnrichment]);
+
   // Invoice-specific filter options — the Geo Heat Map only shows invoice data,
   // so its filter dropdowns should reflect what's in that dataset (not all sales).
+  // Combine invoiceOnlySales (legacy) + enrichedInvoices (new Invoice table) for filter options
+  const allInvoiceData = useMemo(() => {
+    const combined: Array<{ customerType?: string; customer?: string; divisionDesc?: string; categoryDesc?: string }> = [
+      ...invoiceOnlySales,
+      ...enrichedInvoices,
+    ];
+    return combined;
+  }, [invoiceOnlySales, enrichedInvoices]);
+
   const invoiceCustomerTypes = useMemo(() => {
     const all = new Set<string>();
-    invoiceOnlySales.forEach(s => {
+    allInvoiceData.forEach(s => {
       if (s.customerType) {
         s.customerType.split(',').forEach(ct => {
           const trimmed = ct.trim();
@@ -475,25 +508,25 @@ export default function Home() {
       }
     });
     return Array.from(all).sort();
-  }, [invoiceOnlySales]);
+  }, [allInvoiceData]);
 
   const invoiceCustomerNames = useMemo(() => {
     const all = new Set<string>();
-    invoiceOnlySales.forEach(s => s.customer && s.customer !== 'Unknown' && all.add(s.customer));
+    allInvoiceData.forEach(s => s.customer && s.customer !== 'Unknown' && all.add(s.customer));
     return Array.from(all).sort();
-  }, [invoiceOnlySales]);
+  }, [allInvoiceData]);
 
   const invoiceDivisions = useMemo(() => {
     const all = new Set<string>();
-    invoiceOnlySales.forEach(s => s.divisionDesc && all.add(s.divisionDesc));
+    allInvoiceData.forEach(s => s.divisionDesc && all.add(s.divisionDesc));
     return Array.from(all).sort();
-  }, [invoiceOnlySales]);
+  }, [allInvoiceData]);
 
   const invoiceCategories = useMemo(() => {
     const all = new Set<string>();
-    invoiceOnlySales.forEach(s => s.categoryDesc && all.add(s.categoryDesc));
+    allInvoiceData.forEach(s => s.categoryDesc && all.add(s.categoryDesc));
     return Array.from(all).sort();
-  }, [invoiceOnlySales]);
+  }, [allInvoiceData]);
 
   // ── Search suggestions — combine styles, customers, categories, colors ──
   const searchSuggestions = useMemo((): SearchSuggestion[] => {
@@ -2013,7 +2046,7 @@ export default function Home() {
             <ErrorBoundary viewName="Geo Heat Map">
               <GeoHeatmapView
                 sales={invoiceOnlySales}
-                invoices={invoices}
+                invoices={enrichedInvoices}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
