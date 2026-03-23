@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Search, Save, RefreshCw, X, Download, FileText, FileSpreadsheet, ChevronDown, Loader2, Menu } from 'lucide-react';
+import { Search, Save, RefreshCw, X, Download, FileText, FileSpreadsheet, ChevronDown, Loader2 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
 export interface SearchSuggestion {
@@ -20,7 +20,6 @@ interface AppHeaderProps {
   onExportExcel?: () => void;
   searchSuggestions?: SearchSuggestion[];
   onSuggestionClick?: (suggestion: SearchSuggestion) => void;
-  onMenuClick?: () => void;
 }
 
 const SECTION_ORDER: SearchSuggestion['type'][] = ['style', 'customer', 'category', 'color'];
@@ -65,7 +64,6 @@ export default function AppHeader({
   onExportExcel,
   searchSuggestions,
   onSuggestionClick,
-  onMenuClick,
 }: AppHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -203,20 +201,8 @@ export default function AppHeader({
           boxShadow: '0 1px 0 var(--glass-border), 0 4px 16px rgba(0, 0, 0, 0.06)',
         }}
       >
-        <div className="flex items-center gap-3">
-        {/* Mobile menu button */}
-        {onMenuClick && (
-          <button
-            onClick={onMenuClick}
-            className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-tertiary transition-colors lg:hidden"
-            title="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-        )}
-
         {/* Search */}
-        <div className="relative w-48 sm:w-64 lg:w-80" ref={searchContainerRef}>
+        <div className="relative w-80" ref={searchContainerRef}>
           <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${searchQuery ? 'text-blue-500' : 'text-text-faint'}`} />
           <input
             ref={searchInputRef}
@@ -325,7 +311,6 @@ export default function AppHeader({
               ))}
             </div>
           )}
-        </div>
         </div>
 
         {/* Actions */}
