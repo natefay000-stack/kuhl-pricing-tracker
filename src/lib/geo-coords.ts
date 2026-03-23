@@ -10,11 +10,15 @@ export type CityCoords = Record<string, [number, number]>; // "CITY|ST" → [lat
 export type StateCentroids = Record<string, [number, number]>; // "ST" → [lat, lng]
 export type HeatPoint = [number, number, number]; // [lat, lng, intensity]
 
+export type ZipCentroids = Record<string, [number, number]>; // "XXXXX" → [lat, lng]
+
 // ── Module-level caches ──
 let cachedCityCoords: CityCoords | null = null;
 let cachedStateCentroids: StateCentroids | null = null;
+let cachedZipCentroids: ZipCentroids | null = null;
 let cityPromise: Promise<CityCoords> | null = null;
 let centroidPromise: Promise<StateCentroids> | null = null;
+let zipPromise: Promise<ZipCentroids> | null = null;
 
 // Full state name → abbreviation mapping
 const STATE_NAME_TO_ABBR: Record<string, string> = {
@@ -64,6 +68,18 @@ export async function loadStateCentroids(): Promise<StateCentroids> {
       return data;
     });
   return centroidPromise;
+}
+
+export async function loadZipCentroids(): Promise<ZipCentroids> {
+  if (cachedZipCentroids) return cachedZipCentroids;
+  if (zipPromise) return zipPromise;
+  zipPromise = fetch('/geo/zip-centroids.json')
+    .then(r => r.json())
+    .then((data: ZipCentroids) => {
+      cachedZipCentroids = data;
+      return data;
+    });
+  return zipPromise;
 }
 
 // ── Heat Point Builder ──
@@ -144,4 +160,67 @@ export function buildHeatPoints(
   }
 
   return points;
+}
+
+// ── ZIP Code Aggregation ──
+
+export interface ZipAggregation {
+  zip: string;
+  lat: number;
+  lng: number;
+  revenue: number;
+  units: number;
+  orders: number;
+  state: string;
+}
+
+/**
+ * Aggregate invoice/sales data by ZIP code and return with coordinates.
+ * Returns sorted by revenue descending.
+ */
+export function buildZipAggregations(
+  sales: SalesRecord[],
+  zipCentroids: ZipCentroids | null,
+): ZipAggregation[] {
+  if (!zipCentroids || sales.length === 0) return [];
+
+  const zipAgg = new Map<string, { revenue: number; units: number; orders: number; state: string }>();
+
+  for (const sale of sales) {
+    const zip = (sale.shipToZip || sale.billToZip || '').trim().padStart(5, '0');
+    if (!zip || zip === '00000' || zip.length !== 5) continue;
+
+    const state = normalizeState(sale.shipToState || sale.billToState || '');
+
+    let agg = zipAgg.get(zip);
+    if (!agg) {
+      agg = { revenue: 0, units: 0, orders: 0, state };
+      zipAgg.set(zip, agg);
+    }
+
+    const rev = (sale.shippedAtNet || 0) + (sale.revenue || 0);
+    const units = (sale.unitsShipped || 0) + (sale.unitsBooked || 0);
+    agg.revenue += rev;
+    agg.units += units;
+    agg.orders += 1;
+  }
+
+  const results: ZipAggregation[] = [];
+
+  for (const [zip, agg] of zipAgg) {
+    const coords = zipCentroids[zip];
+    if (!coords) continue;
+
+    results.push({
+      zip,
+      lat: coords[0],
+      lng: coords[1],
+      revenue: agg.revenue,
+      units: agg.units,
+      orders: agg.orders,
+      state: agg.state,
+    });
+  }
+
+  return results.sort((a, b) => b.revenue - a.revenue);
 }

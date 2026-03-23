@@ -9,9 +9,9 @@ import {
 } from '@/lib/geo-utils';
 import { loadCbsaMetros, aggregateSalesByMetro, type MetroData } from '@/lib/cbsa-data';
 import { matchesSeason } from '@/lib/store';
-import { loadCityCoords, loadStateCentroids, buildHeatPoints, type CityCoords, type StateCentroids } from '@/lib/geo-coords';
+import { loadCityCoords, loadStateCentroids, loadZipCentroids, buildHeatPoints, buildZipAggregations, type CityCoords, type StateCentroids, type ZipCentroids } from '@/lib/geo-coords';
 import retryDynamic from '@/lib/retryDynamic';
-import type { MetroMarker } from '@/components/geo/LeafletHeatMap';
+import type { MetroMarker, ZipDotMarker } from '@/components/geo/LeafletHeatMap';
 
 const LeafletHeatMap = retryDynamic(() => import('@/components/geo/LeafletHeatMap'));
 
@@ -188,9 +188,13 @@ export default function GeoHeatmapView({
   const [tableMode, setTableMode] = useState<'states' | 'metros' | 'cities'>('states');
   const [quickGender, setQuickGender] = useState<string | null>(null);
 
+  // Map view mode: heat (default) or zip code dots
+  const [mapMode, setMapMode] = useState<'heat' | 'zip'>('heat');
+
   // City coordinate lookups for heat map
   const [cityCoords, setCityCoords] = useState<CityCoords | null>(null);
   const [stateCentroidsData, setStateCentroidsData] = useState<StateCentroids | null>(null);
+  const [zipCentroids, setZipCentroids] = useState<ZipCentroids | null>(null);
 
   // Month/Year filter state (local to this view)
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -232,13 +236,14 @@ export default function GeoHeatmapView({
   // Load CBSA metro data + zip map + city coords + state centroids on mount
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadCbsaMetros(), loadZipToCountyMap(), loadCityCoords(), loadStateCentroids()])
-      .then(([metros, zipMap, coords, centroids]) => {
+    Promise.all([loadCbsaMetros(), loadZipToCountyMap(), loadCityCoords(), loadStateCentroids(), loadZipCentroids()])
+      .then(([metros, zipMap, coords, centroids, zipCoords]) => {
         if (!cancelled) {
           setCbsaMetros(metros);
           setZipToCounty(zipMap);
           setCityCoords(coords);
           setStateCentroidsData(centroids);
+          setZipCentroids(zipCoords);
         }
       })
       .catch(err => console.error('Failed to load geo data:', err));
@@ -496,6 +501,39 @@ export default function GeoHeatmapView({
     return Math.max(...heatPoints.map(p => p[2]));
   }, [heatPoints]);
 
+  // --- ZIP dot markers for zip mode ---
+  const zipDotMarkers: ZipDotMarker[] = useMemo(() => {
+    if (mapMode !== 'zip' || !zipCentroids) return [];
+
+    const zipAggs = buildZipAggregations(filteredSales, zipCentroids);
+    if (zipAggs.length === 0) return [];
+
+    const maxVal = zipAggs[0]?.revenue || 1; // already sorted desc
+
+    return zipAggs.map(z => {
+      const value = metric === 'revenue' ? z.revenue
+        : metric === 'units' ? z.units
+        : metric === 'orders' ? z.orders
+        : z.orders > 0 ? z.revenue / z.orders : 0;
+      const metricMax = metric === 'revenue' ? maxVal
+        : Math.max(...zipAggs.map(a =>
+          metric === 'units' ? a.units : metric === 'orders' ? a.orders : a.orders > 0 ? a.revenue / a.orders : 0
+        ));
+
+      return {
+        zip: z.zip,
+        lat: z.lat,
+        lng: z.lng,
+        value,
+        formattedValue: metric === 'revenue' || metric === 'avgOrder'
+          ? `$${value >= 1000 ? (value / 1000).toFixed(1) + 'K' : value.toFixed(0)}`
+          : value.toLocaleString(),
+        intensity: metricMax > 0 ? Math.min(1, value / metricMax) : 0,
+        state: z.state,
+      };
+    });
+  }, [mapMode, filteredSales, zipCentroids, metric]);
+
   // --- Metro markers for the Leaflet map ---
   const metroMarkers: MetroMarker[] = useMemo(() => {
     if (!cbsaMetros) return [];
@@ -595,18 +633,43 @@ export default function GeoHeatmapView({
               </button>
             )}
           </div>
-          {/* Metro Bubbles Toggle */}
-          <button
-            onClick={() => setShowMetroBubbles(!showMetroBubbles)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              showMetroBubbles
-                ? 'bg-[#ff9f0a]/20 text-[#ff9f0a] border border-[#ff9f0a]/30'
-                : 'text-[#636366] hover:text-[#8e8e93] border border-[#2a2a32]'
-            }`}
-            title="Toggle metro area revenue bubbles"
-          >
-            Metro Areas
-          </button>
+          {/* Map Mode Toggle */}
+          <div className="flex gap-1 bg-[#1c1c1e] rounded-lg p-1 border border-[#2a2a32]">
+            <button
+              onClick={() => setMapMode('heat')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mapMode === 'heat'
+                  ? 'bg-[#0a84ff]/20 text-[#0a84ff]'
+                  : 'text-[#636366] hover:text-[#8e8e93]'
+              }`}
+            >
+              Heat Map
+            </button>
+            <button
+              onClick={() => setMapMode('zip')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mapMode === 'zip'
+                  ? 'bg-[#30d158]/20 text-[#30d158]'
+                  : 'text-[#636366] hover:text-[#8e8e93]'
+              }`}
+            >
+              ZIP Code
+            </button>
+          </div>
+          {/* Metro Bubbles Toggle (heat mode only) */}
+          {mapMode === 'heat' && (
+            <button
+              onClick={() => setShowMetroBubbles(!showMetroBubbles)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                showMetroBubbles
+                  ? 'bg-[#ff9f0a]/20 text-[#ff9f0a] border border-[#ff9f0a]/30'
+                  : 'text-[#636366] hover:text-[#8e8e93] border border-[#2a2a32]'
+              }`}
+              title="Toggle metro area revenue bubbles"
+            >
+              Metro Areas
+            </button>
+          )}
           {/* Metric Toggle */}
           <div className="flex gap-1 bg-[#1c1c1e] rounded-lg p-1">
             {([
@@ -660,6 +723,8 @@ export default function GeoHeatmapView({
               }}
               onMetroHover={(cbsaCode: string | null) => setHoveredMetro(cbsaCode)}
               maxIntensity={heatMaxIntensity}
+              zipDots={zipDotMarkers}
+              mapMode={mapMode}
             />
           </div>
 

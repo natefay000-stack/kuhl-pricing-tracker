@@ -28,6 +28,16 @@ export interface MetroMarker {
   isHovered: boolean;
 }
 
+export interface ZipDotMarker {
+  zip: string;
+  lat: number;
+  lng: number;
+  value: number;
+  formattedValue: string;
+  intensity: number; // 0-1 for color scaling
+  state: string;
+}
+
 export interface LeafletHeatMapProps {
   heatPoints: HeatPoint[];
   metroMarkers: MetroMarker[];
@@ -35,6 +45,8 @@ export interface LeafletHeatMapProps {
   onMetroClick: (cbsaCode: string) => void;
   onMetroHover: (cbsaCode: string | null) => void;
   maxIntensity: number;
+  zipDots?: ZipDotMarker[];
+  mapMode?: 'heat' | 'zip';
 }
 
 // ── Heat gradient — cool-to-hot with visible contrast ──
@@ -177,6 +189,47 @@ function MetroBubbles({
   );
 }
 
+// ── ZIP Code Dot Overlay ──
+
+function ZipDots({ dots }: { dots: ZipDotMarker[] }) {
+  // Color scale: transparent → dark green → bright green
+  const getColor = (intensity: number) => {
+    if (intensity > 0.8) return '#22c55e'; // green-500
+    if (intensity > 0.6) return '#4ade80'; // green-400
+    if (intensity > 0.4) return '#86efac'; // green-300
+    if (intensity > 0.2) return '#bbf7d0'; // green-200
+    return '#dcfce7'; // green-100
+  };
+
+  return (
+    <>
+      {dots.map((d) => (
+        <CircleMarker
+          key={d.zip}
+          center={[d.lat, d.lng]}
+          radius={Math.max(3, Math.min(14, 3 + d.intensity * 11))}
+          pathOptions={{
+            fillColor: getColor(d.intensity),
+            fillOpacity: 0.3 + d.intensity * 0.5,
+            color: getColor(d.intensity),
+            weight: d.intensity > 0.5 ? 1.5 : 0.5,
+            opacity: 0.4 + d.intensity * 0.4,
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -6]}>
+            <div className="text-[11px]">
+              <span className="font-bold">{d.zip}</span>
+              <span className="text-white/60 ml-1">({d.state})</span>
+              <br />
+              <span className="text-green-400 font-semibold">{d.formattedValue}</span>
+            </div>
+          </Tooltip>
+        </CircleMarker>
+      ))}
+    </>
+  );
+}
+
 // ── Main Component ──
 // Wrapper that cleans up any stale Leaflet map instance on the container div
 // before react-leaflet tries to re-initialize (fixes HMR "already initialized" error)
@@ -188,6 +241,8 @@ export default function LeafletHeatMap({
   onMetroClick,
   onMetroHover,
   maxIntensity,
+  zipDots,
+  mapMode = 'heat',
 }: LeafletHeatMapProps) {
   const memoizedPoints = useMemo(() => heatPoints, [heatPoints]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -242,16 +297,23 @@ export default function LeafletHeatMap({
             maxZoom={20}
           />
 
-          {/* Heat layer */}
-          <HeatOverlay points={memoizedPoints} maxIntensity={maxIntensity} />
+          {/* Heat layer (only in heat mode) */}
+          {mapMode === 'heat' && (
+            <HeatOverlay points={memoizedPoints} maxIntensity={maxIntensity} />
+          )}
 
-          {/* Metro markers */}
-          {showMetroBubbles && (
+          {/* Metro markers (only in heat mode) */}
+          {mapMode === 'heat' && showMetroBubbles && (
             <MetroBubbles
               markers={metroMarkers}
               onMetroClick={onMetroClick}
               onMetroHover={onMetroHover}
             />
+          )}
+
+          {/* ZIP code dots (only in zip mode) */}
+          {mapMode === 'zip' && zipDots && zipDots.length > 0 && (
+            <ZipDots dots={zipDots} />
           )}
         </MapContainer>
       )}
