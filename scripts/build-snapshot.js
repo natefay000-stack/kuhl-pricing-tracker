@@ -275,7 +275,7 @@ async function main() {
         inventory: inventory.length,
         invoices: invoices.length,
       },
-      data: { products, pricing, costs, inventory, invoices },
+      data: { products, pricing, costs, inventory },
       salesAggregations,
       inventoryAggregations,
     };
@@ -284,6 +284,13 @@ async function main() {
     fs.writeFileSync(corePath, JSON.stringify(coreSnapshot));
     const coreSizeMB = (fs.statSync(corePath).size / 1024 / 1024).toFixed(1);
 
+    // ── Step 5: Write invoices as separate file (too large for core) ──
+    console.log('\nWriting invoices snapshot...');
+    const invoicePath = path.join(publicDir, 'data-invoices.json');
+    fs.writeFileSync(invoicePath, JSON.stringify(invoices));
+    const invoiceSizeMB = (fs.statSync(invoicePath).size / 1024 / 1024).toFixed(1);
+    console.log(`  Invoices: ${invoices.length} records (${invoiceSizeMB} MB)`);
+
     // Cache for future builds
     saveToCache();
 
@@ -291,7 +298,8 @@ async function main() {
     console.log(`\nSnapshots built in ${elapsed}s`);
     console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
     console.log(`  Sales: ${seasons.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
-    console.log(`Counts: ${products.length} products, ${totalSales} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory`);
+    console.log(`  Invoices: ${invoicePath} (${invoiceSizeMB} MB)`);
+    console.log(`Counts: ${products.length} products, ${totalSales} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory, ${invoices.length} invoices`);
 
     await prisma.$disconnect();
     await pool.end();

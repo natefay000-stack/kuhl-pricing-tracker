@@ -735,6 +735,13 @@ export default function Home() {
       if (core.inventoryAggregations) setInvAggregations(core.inventoryAggregations);
       if (core.ohAggregations) setOHAggregations(core.ohAggregations);
       if (core.invoices) setInvoices(core.invoices);
+      // Load invoices from separate snapshot file if not in core
+      if (!core.invoices || core.invoices.length === 0) {
+        fetch('/data-invoices.json')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data && Array.isArray(data) && data.length > 0) setInvoices(data); })
+          .catch(() => console.warn('No invoice snapshot available'));
+      }
       setSales([]);
       setDataTimestamp(Date.now());
     };
@@ -812,6 +819,12 @@ export default function Home() {
                 salesAggregations: core.salesAggregations || undefined,
                 inventoryAggregations: core.inventoryAggregations || undefined,
               });
+
+              // Load invoices from separate file
+              fetch('/data-invoices.json')
+                .then(r => r.ok ? r.json() : null)
+                .then(data => { if (data && Array.isArray(data) && data.length > 0) setInvoices(data); })
+                .catch(() => console.warn('No invoice snapshot available'));
 
               const gotSnapshot = await loadSalesFromSnapshot();
               if (!gotSnapshot) await loadSalesProgressively();
