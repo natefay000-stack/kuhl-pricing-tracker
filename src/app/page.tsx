@@ -718,6 +718,37 @@ export default function Home() {
       return false;
     };
 
+    // ── Helper: load invoices from snapshot file or DB API ──
+    const loadInvoicesFromAnySource = async () => {
+      // Try 1: Static snapshot file
+      try {
+        const res = await fetch('/data-invoices.json');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            console.log(`Invoices loaded from snapshot: ${data.length}`);
+            setInvoices(data);
+            return;
+          }
+        }
+      } catch { /* fall through */ }
+
+      // Try 2: Database API
+      try {
+        const res = await fetch('/api/data/invoices');
+        if (res.ok) {
+          const result = await res.json();
+          if (result.invoices && result.invoices.length > 0) {
+            console.log(`Invoices loaded from DB API: ${result.invoices.length}`);
+            setInvoices(result.invoices);
+            return;
+          }
+        }
+      } catch { /* fall through */ }
+
+      console.warn('No invoice data available from any source');
+    };
+
     // ── Helper: apply core data to state ──
     const applyCoreData = (core: {
       products: Product[]; pricing: PricingRecord[]; costs: CostRecord[];
@@ -734,13 +765,11 @@ export default function Home() {
       if (core.salesAggregations) setSalesAggregations(core.salesAggregations);
       if (core.inventoryAggregations) setInvAggregations(core.inventoryAggregations);
       if (core.ohAggregations) setOHAggregations(core.ohAggregations);
-      if (core.invoices) setInvoices(core.invoices);
-      // Load invoices from separate snapshot file if not in core
-      if (!core.invoices || core.invoices.length === 0) {
-        fetch('/data-invoices.json')
-          .then(r => r.ok ? r.json() : null)
-          .then(data => { if (data && Array.isArray(data) && data.length > 0) setInvoices(data); })
-          .catch(() => console.warn('No invoice snapshot available'));
+      if (core.invoices && core.invoices.length > 0) {
+        setInvoices(core.invoices);
+      } else {
+        // Invoice data lives in separate file or DB — always load it
+        loadInvoicesFromAnySource();
       }
       setSales([]);
       setDataTimestamp(Date.now());
@@ -820,11 +849,8 @@ export default function Home() {
                 inventoryAggregations: core.inventoryAggregations || undefined,
               });
 
-              // Load invoices from separate file
-              fetch('/data-invoices.json')
-                .then(r => r.ok ? r.json() : null)
-                .then(data => { if (data && Array.isArray(data) && data.length > 0) setInvoices(data); })
-                .catch(() => console.warn('No invoice snapshot available'));
+              // Load invoices from snapshot or DB
+              loadInvoicesFromAnySource();
 
               const gotSnapshot = await loadSalesFromSnapshot();
               if (!gotSnapshot) await loadSalesProgressively();
