@@ -9,6 +9,7 @@ import { isRelevantSeason, parseSeasonCode } from '@/utils/season';
 import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
 import { cleanStyleNumber, getBaseStyleNumber, isVariantDescription, getCombineKey } from '@/utils/combineStyles';
+import { buildCostFallbackLookup } from '@/utils/costFallback';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
 
@@ -423,9 +424,9 @@ export default function SeasonView({
       }
     });
 
-    // COST WATERFALL: Landed Sheet → Line List
-    type CostSource = 'landed_sheet' | 'linelist' | 'none';
-    const costsByStyleSeason = new Map<string, { landed: number; fob: number; source: CostSource }>();
+    // COST WATERFALL: Landed Sheet → Line List → Prior-season fallback
+    type CostSource = 'landed_sheet' | 'linelist' | 'fallback' | 'none';
+    const costsByStyleSeason = new Map<string, { landed: number; fob: number; source: CostSource; fallbackSeason?: string }>();
 
     // 1st Priority: Landed Request Sheet
     costs.forEach((c) => {
@@ -447,6 +448,17 @@ export default function SeasonView({
         costsByStyleSeason.set(key, { landed: p.cost, fob: 0, source: 'linelist' });
       }
     });
+
+    // 3rd Priority: Fallback from prior seasons. Build the fallback lookup from
+    // ALL costs/products (not season-filtered) so we can reach back to any prior season.
+    const fallbackLookup = buildCostFallbackLookup(
+      costs,
+      products.filter(p => p.season && p.cost > 0).map(p => ({
+        styleNumber: getStyleKey(p.styleNumber),
+        season: p.season,
+        cost: p.cost,
+      })),
+    );
 
     // Track which styles have data for each season (for filtering)
     const stylesWithDataBySeason = new Map<string, Set<string>>();
@@ -472,7 +484,7 @@ export default function SeasonView({
       stylesWithDataBySeason.get(season)?.add(styleNumber);
     });
 
-    return { salesByStyleSeason, pricingByStyleSeason, costsByStyleSeason, stylesWithDataBySeason };
+    return { salesByStyleSeason, pricingByStyleSeason, costsByStyleSeason, stylesWithDataBySeason, fallbackLookup };
   }, [sales, pricing, costs, products, selectedCustomerType, selectedCustomer, selectedSeasons, seasons, combineStyles]);
 
   // Build pivot data
@@ -488,7 +500,20 @@ export default function SeasonView({
         const key = `${lookupKey}-${season}`;
         const salesData = dataLookups.salesByStyleSeason.get(key);
         const pricingData = dataLookups.pricingByStyleSeason.get(key);
-        const costData = dataLookups.costsByStyleSeason.get(key);
+        let costData = dataLookups.costsByStyleSeason.get(key);
+
+        // Prior-season fallback: if this season has no cost, try the most recent prior season
+        if (!costData || !costData.landed || costData.landed <= 0) {
+          const fallback = dataLookups.fallbackLookup.getCostWithFallback(lookupKey, season);
+          if (fallback.source === 'fallback' && fallback.cost > 0) {
+            costData = {
+              landed: fallback.cost,
+              fob: 0,
+              source: 'fallback',
+              fallbackSeason: fallback.fallbackSeason,
+            };
+          }
+        }
 
         let value: number | null = null;
         let source = '';
@@ -509,6 +534,9 @@ export default function SeasonView({
           case 'cost':
             value = costData?.landed || null;
             source = costData?.source || '';
+            if (costData?.source === 'fallback' && costData.fallbackSeason) {
+              source = `fallback:${costData.fallbackSeason}`;
+            }
             break;
           case 'margin':
             // Calculate margin from wholesale and landed cost
@@ -520,6 +548,9 @@ export default function SeasonView({
               const totalCost = costData.landed * salesData.units;
               value = ((salesData.revenue - totalCost) / salesData.revenue) * 100;
               source = `sales/${costData.source}`;
+            }
+            if (costData?.source === 'fallback' && costData.fallbackSeason && value !== null) {
+              source = `${source}|fallback:${costData.fallbackSeason}`;
             }
             break;
         }
@@ -738,7 +769,15 @@ export default function SeasonView({
           const key = `${row.styleNumber}-${season}`;
           const salesData = dataLookups.salesByStyleSeason.get(key);
           const pricingData = dataLookups.pricingByStyleSeason.get(key);
-          const costData = dataLookups.costsByStyleSeason.get(key);
+          let costData = dataLookups.costsByStyleSeason.get(key);
+
+          // Apply prior-season fallback if no exact match
+          if (!costData?.landed || costData.landed <= 0) {
+            const fallback = dataLookups.fallbackLookup.getCostWithFallback(row.styleNumber, season);
+            if (fallback.source === 'fallback' && fallback.cost > 0) {
+              costData = { landed: fallback.cost, fob: 0, source: 'fallback', fallbackSeason: fallback.fallbackSeason };
+            }
+          }
 
           // Count styles that have any data for this season (sales or pricing)
           const hasData = (salesData && (salesData.revenue > 0 || salesData.units > 0))
@@ -1309,16 +1348,25 @@ export default function SeasonView({
                         const delta = row.seasonDeltas?.[season] ?? null;
                         const isNew = row.seasonIsNew?.[season] ?? false;
                         const prior = priorSeasonMap[season];
+                        // Detect fallback marker (e.g. "pricebyseason/fallback|fallback:24FA" or "fallback:24FA")
+                        const fallbackMatch = source?.match(/fallback:([^|]+)/);
+                        const fallbackSeason = fallbackMatch ? fallbackMatch[1] : null;
+                        const baseSource = source?.replace(/\|?fallback:[^|]+/, '').replace(/fallback:[^|]+/, '') || '';
+
                         // Source indicator: ● pricebyseason, ○ linelist, ◇ sales, ■ landed_sheet
                         const getSourceIndicator = (src: string) => {
                           if (src === 'pricebyseason') return { symbol: '●', color: 'text-emerald-500', title: 'Source: pricebyseason' };
                           if (src === 'linelist') return { symbol: '○', color: 'text-blue-500', title: 'Source: Line List' };
                           if (src === 'sales') return { symbol: '◇', color: 'text-amber-500', title: 'Source: Calculated from Sales' };
                           if (src === 'landed_sheet') return { symbol: '■', color: 'text-purple-500', title: 'Source: Landed Request Sheet' };
+                          if (src === 'fallback') return null; // handled separately
                           if (src.includes('/')) return { symbol: '◆', color: 'text-text-faint', title: `Source: ${src}` };
                           return null;
                         };
-                        const indicator = source ? getSourceIndicator(source) : null;
+                        const indicator = baseSource ? getSourceIndicator(baseSource) : null;
+                        const fallbackIndicator = fallbackSeason
+                          ? { symbol: '⟲', color: 'text-amber-500', title: `Cost from prior season: ${fallbackSeason}` }
+                          : null;
                         return (
                           <td
                             key={season}
@@ -1331,6 +1379,11 @@ export default function SeasonView({
                                   {indicator && (
                                     <span className={`text-xs ${indicator.color}`} title={indicator.title}>
                                       {indicator.symbol}
+                                    </span>
+                                  )}
+                                  {fallbackIndicator && (
+                                    <span className={`text-sm ${fallbackIndicator.color}`} title={fallbackIndicator.title}>
+                                      {fallbackIndicator.symbol}
                                     </span>
                                   )}
                                 </span>

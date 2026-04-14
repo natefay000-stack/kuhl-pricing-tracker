@@ -6,6 +6,7 @@ import { sortSeasons } from '@/lib/store';
 import { buildCSV } from '@/utils/exportData';
 import { getSeasonStatus } from '@/lib/season-utils';
 import { formatCurrencyShort, formatNumber } from '@/utils/format';
+import { buildCostFallbackLookup } from '@/utils/costFallback';
 import {
   AlertTriangle,
   Trash2,
@@ -223,7 +224,7 @@ export default function ValidationView({
     return sorted;
   }, [products, sales, globalSearchQuery]);
 
-  // RULE 3: Find style+season combos missing landed cost
+  // RULE 3: Find style+season combos missing landed cost (and no prior-season fallback)
   const missingLandedCost = useMemo(() => {
     // Build map of style+season -> landed cost (from costs file first, then products)
     const costMap = new Map<string, number>();
@@ -241,6 +242,22 @@ export default function ValidationView({
         costMap.set(key, p.cost);
       }
     });
+
+    // Build a fallback lookup so we can treat prior-season costs as "covered"
+    const fallbackLookup = buildCostFallbackLookup(
+      costs,
+      products.filter(p => p.season && p.cost > 0).map(p => ({
+        styleNumber: p.styleNumber,
+        season: p.season,
+        cost: p.cost,
+      })),
+    );
+    const hasCostOrFallback = (styleNumber: string, season: string): boolean => {
+      const key = `${styleNumber}-${season}`;
+      if (costMap.has(key)) return true;
+      const result = fallbackLookup.getCostWithFallback(styleNumber, season);
+      return result.source !== 'missing' && result.cost > 0;
+    };
 
     // Build map of pricing by style+season
     const pricingMap = new Map<string, number>();
@@ -274,12 +291,12 @@ export default function ValidationView({
     const missing: MissingLandedCost[] = [];
     const seenKeys = new Set<string>();
 
-    // Check styles with sales but no cost
+    // Check styles with sales but no cost (and no prior-season fallback)
     salesMap.forEach((data, key) => {
-      if (costMap.has(key)) return;
+      const [styleNumber, season] = key.split('-');
+      if (hasCostOrFallback(styleNumber, season)) return;
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
-      const [styleNumber, season] = key.split('-');
       missing.push({
         styleNumber,
         styleDesc: data.styleDesc,
@@ -294,10 +311,10 @@ export default function ValidationView({
 
     // Check styles with pricing but no cost (and not already found via sales)
     pricingMap.forEach((wholesale, key) => {
-      if (costMap.has(key)) return;
+      const [styleNumber, season] = key.split('-');
+      if (hasCostOrFallback(styleNumber, season)) return;
       if (seenKeys.has(key)) return;
       seenKeys.add(key);
-      const [styleNumber, season] = key.split('-');
       // Find description from products
       const product = products.find(p => p.styleNumber === styleNumber);
       missing.push({
