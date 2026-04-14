@@ -437,6 +437,13 @@ export default function CostsView({
     const missingCosts = Array.from(productStyleNumbers).filter(s => !costStyleNumbers.has(s)).length;
     const totalProductStyles = productStyleNumbers.size;
 
+    // Cost coverage: of the rows shown in this view, how many have a valid landed cost?
+    const withLandedCount = withLanded.length;
+    const coveragePct = filteredCostsWithSales.length > 0
+      ? (withLandedCount / filteredCostsWithSales.length) * 100
+      : 100;
+    const missingLandedCount = filteredCostsWithSales.length - withLandedCount;
+
     return {
       totalRecords: filteredCostsWithSales.length,
       totalRevenue,
@@ -450,6 +457,9 @@ export default function CostsView({
       marginBuckets,
       missingCosts,
       totalProductStyles,
+      coveragePct,
+      withLandedCount,
+      missingLandedCount,
     };
   }, [filteredCostsWithSales, products, filterSeason]);
 
@@ -869,21 +879,44 @@ export default function CostsView({
           <div className="text-3xl font-display font-bold text-text-primary">{summary.uniqueCountries}</div>
         </div>
 
-        {/* Missing Costs Card */}
-        <div className={`rounded-xl border-2 p-5 shadow-sm ${
-          summary.missingCosts > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700' : 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700'
-        }`}>
+        {/* Cost Coverage Card */}
+        <div
+          className={`rounded-xl border-2 p-5 shadow-sm ${
+            summary.coveragePct >= 95
+              ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 dark:border-emerald-700'
+              : summary.coveragePct >= 80
+              ? 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700'
+              : 'bg-red-50 dark:bg-red-950 border-red-300 dark:border-red-700'
+          }`}
+          title={`${summary.withLandedCount} of ${summary.totalRecords} style+season rows have landed cost data`}
+        >
           <div className="flex items-start justify-between mb-3">
-            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Missing</span>
-            <AlertTriangle className={`w-6 h-6 ${summary.missingCosts > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+            <span className="text-sm font-bold text-text-secondary uppercase tracking-wide">Cost Coverage</span>
+            <AlertTriangle
+              className={`w-6 h-6 ${
+                summary.coveragePct >= 95
+                  ? 'text-emerald-500'
+                  : summary.coveragePct >= 80
+                  ? 'text-amber-500'
+                  : 'text-red-500'
+              }`}
+            />
           </div>
-          <div className={`text-3xl font-display font-bold ${
-            summary.missingCosts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-          }`}>
-            {summary.missingCosts}
+          <div
+            className={`text-3xl font-display font-bold ${
+              summary.coveragePct >= 95
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : summary.coveragePct >= 80
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-red-600 dark:text-red-400'
+            }`}
+          >
+            {summary.coveragePct.toFixed(0)}%
           </div>
           <div className="text-sm text-text-muted mt-1">
-            of {summary.totalProductStyles} styles
+            {summary.missingLandedCount > 0
+              ? `${summary.missingLandedCount} missing cost`
+              : 'All rows have cost'}
           </div>
         </div>
       </div>

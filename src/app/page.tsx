@@ -2068,6 +2068,8 @@ export default function Home() {
               <ValidationView
                 products={products}
                 sales={dateFilteredSales}
+                costs={costs}
+                pricing={pricing}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
               />

@@ -725,10 +725,14 @@ export default function SeasonView({
 
     // Blended (revenue-weighted) margin totals per season
     const blendedTotals: Record<string, number> = {};
+    // Cost coverage per season: how many styles in the pivot are missing landed cost
+    const coverageBySeason: Record<string, { withCost: number; total: number }> = {};
     if (metric === 'margin') {
       seasons.forEach((season) => {
         let totalRevenue = 0;
         let totalLandedCost = 0;
+        let stylesWithCost = 0;
+        let stylesInSeason = 0;
 
         relevantPivotData.forEach((row) => {
           const key = `${row.styleNumber}-${season}`;
@@ -736,7 +740,13 @@ export default function SeasonView({
           const pricingData = dataLookups.pricingByStyleSeason.get(key);
           const costData = dataLookups.costsByStyleSeason.get(key);
 
+          // Count styles that have any data for this season (sales or pricing)
+          const hasData = (salesData && (salesData.revenue > 0 || salesData.units > 0))
+            || (pricingData && pricingData.wholesale > 0);
+          if (hasData) stylesInSeason++;
+
           if (!costData?.landed || costData.landed <= 0) return;
+          if (hasData) stylesWithCost++;
 
           if (salesData && salesData.revenue > 0 && salesData.units > 0) {
             // Use actual revenue and actual cost (landed × units)
@@ -752,6 +762,7 @@ export default function SeasonView({
         blendedTotals[season] = totalRevenue > 0
           ? ((totalRevenue - totalLandedCost) / totalRevenue) * 100
           : 0;
+        coverageBySeason[season] = { withCost: stylesWithCost, total: stylesInSeason };
       });
     }
 
@@ -776,7 +787,7 @@ export default function SeasonView({
       });
     }
 
-    return { seasonTotals, totalDeltas, blendedTotals, blendedDeltas };
+    return { seasonTotals, totalDeltas, blendedTotals, blendedDeltas, coverageBySeason };
   }, [relevantPivotData, seasons, metric, dataLookups]);
 
   // Seasons to display (filtered if seasons are selected)
@@ -1431,6 +1442,8 @@ export default function SeasonView({
                   const totalVal = useBlended ? totals.blendedTotals[season] : totals.seasonTotals[season];
                   const td = useBlended ? totals.blendedDeltas[season] : totals.totalDeltas[season];
                   const prior = priorSeasonMap[season];
+                  const coverage = metric === 'margin' ? totals.coverageBySeason?.[season] : undefined;
+                  const missingCount = coverage ? coverage.total - coverage.withCost : 0;
                   return (
                     <td key={season} className="px-3 py-2 text-right font-mono border-l border-border-strong">
                       <div className="flex flex-col items-end">
@@ -1443,6 +1456,14 @@ export default function SeasonView({
                             title={`vs ${prior}`}
                           >
                             {fmtDelta(td)}
+                          </span>
+                        )}
+                        {metric === 'margin' && coverage && coverage.total > 0 && missingCount > 0 && (
+                          <span
+                            className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-0.5 mt-0.5"
+                            title={`${missingCount} of ${coverage.total} styles missing landed cost data`}
+                          >
+                            ⚠ {missingCount}/{coverage.total} no cost
                           </span>
                         )}
                       </div>
