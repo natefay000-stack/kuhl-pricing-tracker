@@ -80,6 +80,7 @@ export default function SeasonView({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [combineStyles, setCombineStyles] = useState(false);
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set());
+  const [totalsMode, setTotalsMode] = useState<'blended' | 'sum'>('blended');
 
   const toggleExpand = useCallback((styleNumber: string) => {
     setExpandedStyles((prev) => {
@@ -722,8 +723,61 @@ export default function SeasonView({
       }
     });
 
-    return { seasonTotals, totalDeltas };
-  }, [relevantPivotData, seasons]);
+    // Blended (revenue-weighted) margin totals per season
+    const blendedTotals: Record<string, number> = {};
+    if (metric === 'margin') {
+      seasons.forEach((season) => {
+        let totalRevenue = 0;
+        let totalLandedCost = 0;
+
+        relevantPivotData.forEach((row) => {
+          const key = `${row.styleNumber}-${season}`;
+          const salesData = dataLookups.salesByStyleSeason.get(key);
+          const pricingData = dataLookups.pricingByStyleSeason.get(key);
+          const costData = dataLookups.costsByStyleSeason.get(key);
+
+          if (!costData?.landed || costData.landed <= 0) return;
+
+          if (salesData && salesData.revenue > 0 && salesData.units > 0) {
+            // Use actual revenue and actual cost (landed × units)
+            totalRevenue += salesData.revenue;
+            totalLandedCost += costData.landed * salesData.units;
+          } else if (pricingData?.wholesale && pricingData.wholesale > 0) {
+            // No sales data — use wholesale as a proxy (weight = 1 unit)
+            totalRevenue += pricingData.wholesale;
+            totalLandedCost += costData.landed;
+          }
+        });
+
+        blendedTotals[season] = totalRevenue > 0
+          ? ((totalRevenue - totalLandedCost) / totalRevenue) * 100
+          : 0;
+      });
+    }
+
+    // Deltas for blended totals
+    const blendedDeltas: Record<string, number | null> = {};
+    if (metric === 'margin') {
+      seasons.forEach((season) => {
+        const parsed = parseSeasonCode(season);
+        if (!parsed) return;
+        const sameType = seasons.filter((s) => {
+          const p = parseSeasonCode(s);
+          return p && p.type === parsed.type;
+        });
+        const idx = sameType.indexOf(season);
+        const priorSeason = idx > 0 ? sameType[idx - 1] : null;
+
+        if (priorSeason && blendedTotals[priorSeason] !== 0) {
+          blendedDeltas[season] = pctChange(blendedTotals[season], blendedTotals[priorSeason]);
+        } else {
+          blendedDeltas[season] = null;
+        }
+      });
+    }
+
+    return { seasonTotals, totalDeltas, blendedTotals, blendedDeltas };
+  }, [relevantPivotData, seasons, metric, dataLookups]);
 
   // Seasons to display (filtered if seasons are selected)
   const displaySeasons = useMemo(() => {
@@ -1343,19 +1397,47 @@ export default function SeasonView({
             <tfoot>
               <tr className="bg-surface-tertiary border-t-2 border-border-strong">
                 <td className="px-4 py-4 sticky left-0 bg-surface-tertiary text-xl font-bold text-text-primary border-r border-border-strong">
-                  TOTALS
+                  <div className="flex flex-col gap-1">
+                    <span>TOTALS</span>
+                    {metric === 'margin' && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setTotalsMode('blended')}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors ${
+                            totalsMode === 'blended'
+                              ? 'bg-cyan-600 text-white'
+                              : 'bg-surface text-text-secondary hover:bg-surface-secondary'
+                          }`}
+                        >
+                          Blended
+                        </button>
+                        <button
+                          onClick={() => setTotalsMode('sum')}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors ${
+                            totalsMode === 'sum'
+                              ? 'bg-cyan-600 text-white'
+                              : 'bg-surface text-text-secondary hover:bg-surface-secondary'
+                          }`}
+                        >
+                          Sum
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-4 sticky left-[100px] bg-surface-tertiary border-r border-border-strong"></td>
                 {displaySeasons.map((season) => {
-                  const td = totals.totalDeltas[season];
+                  const useBlended = metric === 'margin' && totalsMode === 'blended';
+                  const totalVal = useBlended ? totals.blendedTotals[season] : totals.seasonTotals[season];
+                  const td = useBlended ? totals.blendedDeltas[season] : totals.totalDeltas[season];
                   const prior = priorSeasonMap[season];
                   return (
                     <td key={season} className="px-3 py-2 text-right font-mono border-l border-border-strong">
                       <div className="flex flex-col items-end">
                         <span className="text-lg font-bold text-text-primary">
-                          {formatValue(totals.seasonTotals[season], metric)}
+                          {formatValue(totalVal, metric)}
                         </span>
-                        {prior && td !== null && (
+                        {prior && td !== null && td !== undefined && (
                           <span
                             className={`text-[11px] font-semibold ${deltaColor(td)}`}
                             title={`vs ${prior}`}

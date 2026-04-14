@@ -10,7 +10,10 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 
 // File names
 const LINE_LIST_FILE = 'FC LL 1.23.2026.xlsx';
-const SALES_FILE = '26FA sales data 1.23.2026.xlsx';
+const SALES_FILES = [
+  '26FA sales data 1.23.2026.xlsx',
+  '26SP SALES 1.31.2026.xlsx',
+];
 const PRICING_FILE = 'pricebyseason1.23.26.xlsx';
 const COSTS_FILE = 'Landed Request Sheet.xlsx';
 
@@ -219,26 +222,40 @@ function loadProducts() {
 }
 
 function loadSales() {
-  const filePath = path.join(DATA_DIR, SALES_FILE);
-  if (!fs.existsSync(filePath)) {
-    console.log('Sales file not found:', filePath);
-    return [];
+  const allSales: ReturnType<typeof parseSalesRows> = [];
+  let globalIndex = 0;
+
+  for (const salesFile of SALES_FILES) {
+    const filePath = path.join(DATA_DIR, salesFile);
+    if (!fs.existsSync(filePath)) {
+      console.log('Sales file not found:', filePath);
+      continue;
+    }
+
+    console.log('Loading sales from:', salesFile);
+    const buffer = fs.readFileSync(filePath);
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    // Use Sheet1 which has the raw data (Sheet2 is a pivot table)
+    const sheetName = workbook.SheetNames.includes('Sheet1') ? 'Sheet1' : workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+
+    console.log(`Sales rows from ${salesFile}:`, rows.length);
+    if (rows.length > 0) {
+      console.log('Sales columns:', Object.keys(rows[0]).slice(0, 15));
+    }
+
+    const parsed = parseSalesRows(rows, globalIndex);
+    allSales.push(...parsed);
+    globalIndex += parsed.length;
   }
 
-  console.log('Loading sales from:', SALES_FILE);
-  const buffer = fs.readFileSync(filePath);
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  console.log('Total sales records loaded:', allSales.length);
+  return allSales;
+}
 
-  // Use Sheet1 which has the raw data (Sheet2 is a pivot table)
-  const sheetName = workbook.SheetNames.includes('Sheet1') ? 'Sheet1' : workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
-
-  console.log('Sales rows:', rows.length);
-  if (rows.length > 0) {
-    console.log('Sales columns:', Object.keys(rows[0]).slice(0, 15));
-  }
-
+function parseSalesRows(rows: Record<string, unknown>[], startIndex: number) {
   return rows
     .filter(row => {
       const styleNumber = parseString(row['Style']);
@@ -248,7 +265,7 @@ function loadSales() {
       const rawSeason = parseString(row['Season']);
       const normalized = normalizeSeasonCode(rawSeason);
       return {
-        id: `sale-${index}`,
+        id: `sale-${startIndex + index}`,
         styleNumber: parseString(row['Style']),
         styleDesc: parseString(row['Style Description']),
         colorCode: parseString(row['Color']),
