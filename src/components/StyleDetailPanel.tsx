@@ -3,8 +3,9 @@
 import { useMemo } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import { formatCurrencyShort } from '@/utils/format';
+import { buildCostFallbackLookup } from '@/utils/costFallback';
 
 interface StyleDetailPanelProps {
   styleNumber: string;
@@ -98,26 +99,56 @@ export default function StyleDetailPanel({
       .slice(0, 5);
   }, [sales, styleNumber]);
 
-  // Get cost/margin info
+  // Get cost/margin info — uses prior-season fallback when current season has no cost
   const costInfo = useMemo(() => {
-    const styleCost = costs.find((c) => c.styleNumber === styleNumber);
     const latestPricing = pricingBySeason[pricingBySeason.length - 1];
+    if (!latestPricing) return null;
 
-    if (!styleCost || !latestPricing) return null;
+    // First try exact match on the latest pricing season
+    let styleCost = costs.find(
+      (c) => c.styleNumber === styleNumber && c.season === latestPricing.season && c.landed > 0,
+    );
+    let fallbackSeason: string | undefined;
+
+    // Otherwise try any cost record for this style
+    if (!styleCost) {
+      styleCost = costs.find((c) => c.styleNumber === styleNumber && c.landed > 0);
+    }
+
+    // If still nothing, use the fallback lookup for prior-season cost
+    let landedCost = styleCost?.landed ?? 0;
+    if (landedCost <= 0) {
+      const fallbackLookup = buildCostFallbackLookup(
+        costs,
+        products.filter(p => p.season && p.cost > 0).map(p => ({
+          styleNumber: p.styleNumber,
+          season: p.season,
+          cost: p.cost,
+        })),
+      );
+      const result = fallbackLookup.getCostWithFallback(styleNumber, latestPricing.season);
+      if (result.cost > 0) {
+        landedCost = result.cost;
+        if (result.source === 'fallback') fallbackSeason = result.fallbackSeason;
+      }
+    }
+
+    if (landedCost <= 0) return null;
 
     const margin = latestPricing.price > 0
-      ? ((latestPricing.price - styleCost.landed) / latestPricing.price) * 100
+      ? ((latestPricing.price - landedCost) / latestPricing.price) * 100
       : 0;
 
     return {
-      cost: styleCost.landed,
+      cost: landedCost,
       wholesale: latestPricing.price,
       msrp: latestPricing.msrp,
       margin,
-      factory: styleCost.factory,
-      coo: styleCost.countryOfOrigin,
+      factory: styleCost?.factory,
+      coo: styleCost?.countryOfOrigin,
+      fallbackSeason,
     };
-  }, [costs, styleNumber, pricingBySeason]);
+  }, [costs, products, styleNumber, pricingBySeason]);
 
   const channelLabels: Record<string, string> = {
     WH: 'Wholesale',
@@ -255,8 +286,16 @@ export default function StyleDetailPanel({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-secondary">Landed Cost:</span>
-                  <span className="font-mono font-medium text-text-primary">
+                  <span className="font-mono font-medium text-text-primary inline-flex items-center gap-1">
                     ${costInfo.cost.toFixed(2)}
+                    {costInfo.fallbackSeason && (
+                      <span
+                        className="inline-flex items-center"
+                        title={`Cost from prior season: ${costInfo.fallbackSeason}`}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-500" />
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
