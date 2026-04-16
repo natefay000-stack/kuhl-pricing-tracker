@@ -1013,6 +1013,17 @@ export default function Home() {
     setSelectedStyleNumber(styleNumber);
   };
 
+  // Called by CostEditModal after a successful save. Replace the matching
+  // cost in local state (no full re-fetch) and sync to localStorage.
+  const handleCostUpdated = (updated: CostRecord) => {
+    setCosts((prev) => {
+      const next = prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
+      // Keep the cached-core snapshot in sync
+      setCachedCore({ products, pricing, costs: next, inventory });
+      return next;
+    });
+  };
+
   // Handle sales-only import (all seasons at once)
   const handleSalesOnlyImport = async (data: {
     sales: Record<string, unknown>[];
@@ -1983,6 +1994,7 @@ export default function Home() {
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
+                onCostUpdated={handleCostUpdated}
               />
             </ErrorBoundary>
           )}
@@ -2160,6 +2172,7 @@ export default function Home() {
           pricing={pricing}
           costs={costs}
           onClose={() => setSelectedStyleNumber(null)}
+          onCostUpdated={handleCostUpdated}
         />
       )}
 

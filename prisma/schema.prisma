@@ -220,6 +220,26 @@ model Cost {
   @@index([styleNumber])
 }
 
+// Audit log for inline cost edits (landed, margin) made through the UI.
+// There is no auth system, so `editedBy` is a free-text name the user types,
+// matching the existing ImportLog.importedBy pattern.
+model CostEdit {
+  id          String   @id @default(cuid())
+  costId      String
+  styleNumber String
+  season      String
+  field       String   // "landed" or "margin"
+  oldValue    Float?
+  newValue    Float?
+  editedBy    String
+  note        String?
+  editedAt    DateTime @default(now())
+
+  @@index([costId])
+  @@index([styleNumber, season])
+  @@index([editedAt])
+}
+
 // Import history to track what files have been imported
 model ImportLog {
   id          String   @id @default(cuid())

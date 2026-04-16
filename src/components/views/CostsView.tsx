@@ -26,7 +26,11 @@ import {
   Layers,
   AlertTriangle,
   Clock,
+  Edit3,
+  History,
 } from 'lucide-react';
+import CostEditModal from '@/components/CostEditModal';
+import CostHistoryModal from '@/components/CostHistoryModal';
 
 interface CostsViewProps {
   products: Product[];
@@ -38,6 +42,7 @@ interface CostsViewProps {
   selectedCategory: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
+  onCostUpdated?: (updated: CostRecord) => void;
 }
 
 type SortField = 'styleNumber' | 'styleName' | 'revenue' | 'units' | 'factory' | 'coo' | 'fob' | 'landed' | 'wholesale' | 'msrp' | 'margin' | 'designTeam';
@@ -71,7 +76,12 @@ export default function CostsView({
   selectedCategory,
   searchQuery: globalSearchQuery,
   onStyleClick,
+  onCostUpdated,
 }: CostsViewProps) {
+  // Edit / history modal state
+  const [editingCost, setEditingCost] = useState<CostRecord | null>(null);
+  const [historyCost, setHistoryCost] = useState<CostRecord | null>(null);
+
   // Filters
   const [filterSeason, setFilterSeason] = useState<string>('');
   const [filterStyleNumber, setFilterStyleNumber] = useState<string>('');
@@ -1065,6 +1075,9 @@ export default function CostsView({
                   <th className="px-3 py-3 text-center text-xs font-bold text-text-muted uppercase tracking-wide border-l border-border-primary">
                     Src
                   </th>
+                  <th className="px-3 py-3 text-center text-xs font-bold text-text-muted uppercase tracking-wide border-l border-border-primary">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1150,6 +1163,45 @@ export default function CostsView({
                       }>
                         {cost.costSource === 'landed_cost' ? 'LC' : cost.costSource === 'standard_cost' ? 'SC' : 'LL'}
                       </span>
+                    </td>
+                    <td className="px-2 py-4 text-center border-l border-border-primary">
+                      {(() => {
+                        // Look up the real CostRecord for this aggregated row.
+                        // If there isn't one (e.g. the row was synthesized from
+                        // Product data), disable the buttons.
+                        const realCost = costs.find(
+                          (c) => c.styleNumber === cost.styleNumber && c.season === cost.season,
+                        );
+                        const disabled = !realCost;
+                        return (
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (realCost) setEditingCost(realCost);
+                              }}
+                              disabled={disabled}
+                              title={disabled ? 'No cost record to edit (synthesized from product data)' : 'Edit landed / margin'}
+                              aria-label={`Edit ${cost.styleNumber}`}
+                              className="p-1.5 rounded hover:bg-cyan-500/10 text-text-muted hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (realCost) setHistoryCost(realCost);
+                              }}
+                              disabled={disabled}
+                              title={disabled ? 'No cost record to view history for' : 'View edit history'}
+                              aria-label={`History for ${cost.styleNumber}`}
+                              className="p-1.5 rounded hover:bg-amber-500/10 text-text-muted hover:text-amber-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -1312,6 +1364,25 @@ export default function CostsView({
             ))}
           </div>
         </div>
+      )}
+
+      {editingCost && (
+        <CostEditModal
+          cost={editingCost}
+          onClose={() => setEditingCost(null)}
+          onSaved={(updated) => {
+            onCostUpdated?.(updated);
+            setEditingCost(null);
+          }}
+        />
+      )}
+      {historyCost && (
+        <CostHistoryModal
+          costId={historyCost.id}
+          styleNumber={historyCost.styleNumber}
+          season={historyCost.season}
+          onClose={() => setHistoryCost(null)}
+        />
       )}
     </div>
   );

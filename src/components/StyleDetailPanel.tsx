@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { X, TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Clock, Edit3, History } from 'lucide-react';
 import { formatCurrencyShort } from '@/utils/format';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
+import CostEditModal from '@/components/CostEditModal';
+import CostHistoryModal from '@/components/CostHistoryModal';
 
 interface StyleDetailPanelProps {
   styleNumber: string;
@@ -14,6 +16,7 @@ interface StyleDetailPanelProps {
   pricing: PricingRecord[];
   costs: CostRecord[];
   onClose: () => void;
+  onCostUpdated?: (updated: CostRecord) => void;
 }
 
 export default function StyleDetailPanel({
@@ -23,7 +26,10 @@ export default function StyleDetailPanel({
   pricing,
   costs,
   onClose,
+  onCostUpdated,
 }: StyleDetailPanelProps) {
+  const [editing, setEditing] = useState(false);
+  const [viewingHistory, setViewingHistory] = useState(false);
   // Get style info
   const styleInfo = useMemo(() => {
     const product = products.find((p) => p.styleNumber === styleNumber);
@@ -147,6 +153,9 @@ export default function StyleDetailPanel({
       factory: styleCost?.factory,
       coo: styleCost?.countryOfOrigin,
       fallbackSeason,
+      // The actual CostRecord row used (only set when no fallback); this is
+      // what the Edit button targets by id.
+      costRecord: fallbackSeason ? null : (styleCost ?? null),
     };
   }, [costs, products, styleNumber, pricingBySeason]);
 
@@ -281,7 +290,29 @@ export default function StyleDetailPanel({
 
           {/* Cost/Margin */}
           <div className="bg-surface-secondary rounded-xl p-5">
-            <h4 className="font-semibold text-text-primary mb-4">Cost / Margin</h4>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-text-primary">Cost / Margin</h4>
+              {costInfo?.costRecord && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setEditing(true)}
+                    title="Edit landed / margin"
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setViewingHistory(true)}
+                    title="View edit history"
+                    className="p-1 text-text-muted hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                    aria-label="View edit history"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
             {costInfo ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -346,6 +377,25 @@ export default function StyleDetailPanel({
           animation: slide-up 0.3s ease-out;
         }
       `}</style>
+
+      {editing && costInfo?.costRecord && (
+        <CostEditModal
+          cost={costInfo.costRecord}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            onCostUpdated?.(updated);
+            setEditing(false);
+          }}
+        />
+      )}
+      {viewingHistory && costInfo?.costRecord && (
+        <CostHistoryModal
+          costId={costInfo.costRecord.id}
+          styleNumber={costInfo.costRecord.styleNumber}
+          season={costInfo.costRecord.season}
+          onClose={() => setViewingHistory(false)}
+        />
+      )}
     </div>
   );
 }
