@@ -1,20 +1,8 @@
 /**
  * KÜHL SP26 Style Stories — Data Layer
  *
- * Currently uses a static array. Designed for easy migration to Supabase.
- *
- * ── Future Supabase query ──────────────────────────────────────────
- *
- *   import { createClient } from '@supabase/supabase-js'
- *   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
- *
- *   const { data, error } = await supabase
- *     .from('style_stories')
- *     .select('*')
- *     .eq('season', 'SP26')
- *     .order('sort_order', { ascending: true })
- *
- * ───────────────────────────────────────────────────────────────────
+ * Currently uses a static array. If migrating to a database, add a
+ * `style_stories` table and query via Prisma (see prisma/schema.prisma).
  */
 
 // ── Types ──────────────────────────────────────────────────────────

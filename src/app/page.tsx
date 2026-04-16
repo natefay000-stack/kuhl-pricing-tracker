@@ -718,22 +718,9 @@ export default function Home() {
       return false;
     };
 
-    // ── Helper: load invoices from snapshot file or DB API ──
+    // ── Helper: load invoices from DB API or snapshot file ──
     const loadInvoicesFromAnySource = async () => {
-      // Try 1: Static snapshot file
-      try {
-        const res = await fetch('/data-invoices.json');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            console.log(`Invoices loaded from snapshot: ${data.length}`);
-            setInvoices(data);
-            return;
-          }
-        }
-      } catch { /* fall through */ }
-
-      // Try 2: Database API
+      // Try 1: Database API (primary — always has data even if build snapshot is empty)
       try {
         const res = await fetch('/api/data/invoices');
         if (res.ok) {
@@ -741,6 +728,19 @@ export default function Home() {
           if (result.invoices && result.invoices.length > 0) {
             console.log(`Invoices loaded from DB API: ${result.invoices.length}`);
             setInvoices(result.invoices);
+            return;
+          }
+        }
+      } catch { /* fall through */ }
+
+      // Try 2: Static snapshot file (fallback if API is down)
+      try {
+        const res = await fetch('/data-invoices.json');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            console.log(`Invoices loaded from snapshot: ${data.length}`);
+            setInvoices(data);
             return;
           }
         }
