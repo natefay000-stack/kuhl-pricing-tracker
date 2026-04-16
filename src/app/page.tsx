@@ -718,20 +718,36 @@ export default function Home() {
       return false;
     };
 
-    // ── Helper: load invoices from DB API or snapshot file ──
+    // ── Helper: load invoices from DB API (paginated) or snapshot file ──
+    // Invoice dataset is ~120k rows, which exceeds Vercel's 4.5 MB serverless
+    // response limit. The API returns pages of ~4k rows; we loop until done
+    // and progressively update state so the UI can start rendering partway.
     const loadInvoicesFromAnySource = async () => {
-      // Try 1: Database API (primary — always has data even if build snapshot is empty)
+      // Try 1: Database API, paginated
       try {
-        const res = await fetch('/api/data/invoices');
-        if (res.ok) {
+        const pageSize = 4000;
+        let page = 1;
+        const all: InvoiceRecord[] = [];
+        let hasMore = true;
+        while (hasMore) {
+          const res = await fetch(`/api/data/invoices?page=${page}&pageSize=${pageSize}`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const result = await res.json();
-          if (result.invoices && result.invoices.length > 0) {
-            console.log(`Invoices loaded from DB API: ${result.invoices.length}`);
-            setInvoices(result.invoices);
-            return;
-          }
+          const batch: InvoiceRecord[] = result.invoices ?? [];
+          all.push(...batch);
+          hasMore = Boolean(result.hasMore);
+          // Progressive render: push what we have so the UI is interactive ASAP
+          setInvoices([...all]);
+          if (batch.length === 0) break;
+          page += 1;
         }
-      } catch { /* fall through */ }
+        if (all.length > 0) {
+          console.log(`Invoices loaded from DB API: ${all.length}`);
+          return;
+        }
+      } catch (err) {
+        console.warn('DB API invoice load failed, trying snapshot:', err);
+      }
 
       // Try 2: Static snapshot file (fallback if API is down)
       try {
