@@ -3,13 +3,23 @@
 import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
 import { isRelevantSeason, parseSeasonCode } from '@/utils/season';
 import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
 import { cleanStyleNumber, getBaseStyleNumber, isVariantDescription, getCombineKey } from '@/utils/combineStyles';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
+import {
+  PRIMARY_CHANNELS,
+  CHANNEL_LABELS,
+  CHANNEL_COLORS,
+  computeBasisMetrics,
+  computeNaturalMix,
+  projectWeightedMargin,
+  type BasisMetrics,
+} from '@/utils/marginScenario';
+import MarginScenarioPanel from '@/components/MarginScenarioPanel';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
 
@@ -162,6 +172,29 @@ export default function SeasonView({
     const recentSeasons = Array.from(allSeasons).filter((s) => isRelevantSeason(s));
     return sortSeasons(recentSeasons);
   }, [products, sales, pricing, costs]);
+
+  // Seasons with actual sales data (used to decide which columns are forecasts)
+  const seasonsWithSales = useMemo(() => {
+    const s = new Set<string>();
+    sales.forEach((r) => r.season && s.add(r.season));
+    return s;
+  }, [sales]);
+
+  // ── Scenario state for projecting forecast-season margins ──
+  // Only meaningful when metric === 'margin' and a forecast season is in view.
+  const [scenarioBasisSeason, setScenarioBasisSeason] = useState<string | null>(null);
+  const [scenarioMixOverride, setScenarioMixOverride] = useState<Record<string, number> | null>(null);
+
+  const basisMetrics: BasisMetrics = useMemo(
+    () => computeBasisMetrics(sales, products, scenarioBasisSeason),
+    [sales, products, scenarioBasisSeason],
+  );
+  const naturalMix = useMemo(() => computeNaturalMix(basisMetrics), [basisMetrics]);
+  const effectiveMix = useMemo(
+    () => scenarioMixOverride ?? naturalMix,
+    [scenarioMixOverride, naturalMix],
+  );
+  const scenarioActive = metric === 'margin' && scenarioBasisSeason !== null;
 
   // Get unique designers
   const designers = useMemo(() => {
@@ -538,9 +571,32 @@ export default function SeasonView({
               source = `fallback:${costData.fallbackSeason}`;
             }
             break;
-          case 'margin':
-            // Calculate margin from wholesale and landed cost
-            if (pricingData?.wholesale && pricingData.wholesale > 0 && costData?.landed) {
+          case 'margin': {
+            const isForecast = scenarioActive && !seasonsWithSales.has(season);
+            if (
+              isForecast &&
+              pricingData?.wholesale &&
+              pricingData.wholesale > 0 &&
+              costData?.landed &&
+              costData.landed > 0
+            ) {
+              // Project weighted margin from basis season's channel ratios + user mix
+              const projected = projectWeightedMargin({
+                msrp: pricingData.msrp ?? 0,
+                wholesale: pricingData.wholesale,
+                landed: costData.landed,
+                basisMetrics,
+                effectiveMix,
+              });
+              if (projected && projected.syntheticAvgNetPrice > 0) {
+                value = projected.weightedMargin;
+                source = `projected:${scenarioBasisSeason}`;
+              } else {
+                // Fall back to baseline margin if projection not computable
+                value = ((pricingData.wholesale - costData.landed) / pricingData.wholesale) * 100;
+                source = `${pricingData.source}/${costData.source}`;
+              }
+            } else if (pricingData?.wholesale && pricingData.wholesale > 0 && costData?.landed) {
               value = ((pricingData.wholesale - costData.landed) / pricingData.wholesale) * 100;
               source = `${pricingData.source}/${costData.source}`;
             } else if (salesData && salesData.revenue > 0 && costData?.landed) {
@@ -553,6 +609,7 @@ export default function SeasonView({
               source = `${source}|fallback:${costData.fallbackSeason}`;
             }
             break;
+          }
         }
 
         seasonData[season] = value;
@@ -595,7 +652,19 @@ export default function SeasonView({
         seasonIsNew,
       };
     });
-  }, [filteredStyles, seasons, metric, dataLookups, combineStyles]);
+  }, [
+    filteredStyles,
+    seasons,
+    metric,
+    dataLookups,
+    combineStyles,
+    // Scenario inputs (only used when metric === 'margin' on forecast columns)
+    scenarioActive,
+    scenarioBasisSeason,
+    seasonsWithSales,
+    basisMetrics,
+    effectiveMix,
+  ]);
 
   // Filter to show only styles with data for the CURRENT METRIC in displayed seasons
   const relevantPivotData = useMemo(() => {
@@ -787,10 +856,33 @@ export default function SeasonView({
           if (!costData?.landed || costData.landed <= 0) return;
           if (hasData) stylesWithCost++;
 
+          const isForecast = scenarioActive && !seasonsWithSales.has(season);
+
           if (salesData && salesData.revenue > 0 && salesData.units > 0) {
             // Use actual revenue and actual cost (landed × units)
             totalRevenue += salesData.revenue;
             totalLandedCost += costData.landed * salesData.units;
+          } else if (
+            isForecast &&
+            pricingData?.wholesale &&
+            pricingData.wholesale > 0
+          ) {
+            // No sales yet — project this style's contribution using the
+            // chosen basis season's per-channel ratios + user mix.
+            const projected = projectWeightedMargin({
+              msrp: pricingData.msrp ?? 0,
+              wholesale: pricingData.wholesale,
+              landed: costData.landed,
+              basisMetrics,
+              effectiveMix,
+            });
+            if (projected && projected.syntheticAvgNetPrice > 0) {
+              totalRevenue += projected.syntheticAvgNetPrice;
+              totalLandedCost += costData.landed;
+            } else {
+              totalRevenue += pricingData.wholesale;
+              totalLandedCost += costData.landed;
+            }
           } else if (pricingData?.wholesale && pricingData.wholesale > 0) {
             // No sales data — use wholesale as a proxy (weight = 1 unit)
             totalRevenue += pricingData.wholesale;
@@ -827,7 +919,17 @@ export default function SeasonView({
     }
 
     return { seasonTotals, totalDeltas, blendedTotals, blendedDeltas, coverageBySeason };
-  }, [relevantPivotData, seasons, metric, dataLookups]);
+  }, [
+    relevantPivotData,
+    seasons,
+    metric,
+    dataLookups,
+    // Scenario inputs (only used when projecting forecast-season blended totals)
+    scenarioActive,
+    seasonsWithSales,
+    basisMetrics,
+    effectiveMix,
+  ]);
 
   // Seasons to display (filtered if seasons are selected)
   const displaySeasons = useMemo(() => {
@@ -836,6 +938,34 @@ export default function SeasonView({
     }
     return seasons;
   }, [seasons, selectedSeasons]);
+
+  // ── Forecast column plumbing (needs displaySeasons) ──
+  const displayedForecastSeasons = useMemo(
+    () => displaySeasons.filter((s) => !seasonsWithSales.has(s)),
+    [displaySeasons, seasonsWithSales],
+  );
+  const hasForecastColumn = displayedForecastSeasons.length > 0;
+
+  // Basis candidates = past seasons that have real sales, most recent first.
+  const availableBasisSeasons = useMemo(() => {
+    return sortSeasons(Array.from(seasonsWithSales).filter((s) => isRelevantSeason(s))).reverse();
+  }, [seasonsWithSales]);
+
+  // Auto-pick a default basis when a forecast column + margin metric enters
+  // view; clear it out otherwise.
+  useEffect(() => {
+    const relevant = metric === 'margin' && hasForecastColumn;
+    if (!relevant) {
+      if (scenarioBasisSeason !== null) setScenarioBasisSeason(null);
+      if (scenarioMixOverride !== null) setScenarioMixOverride(null);
+      return;
+    }
+    if (scenarioBasisSeason === null && availableBasisSeasons.length > 0) {
+      setScenarioBasisSeason(availableBasisSeasons[0]);
+      setScenarioMixOverride(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metric, hasForecastColumn, availableBasisSeasons]);
 
   // Color data for expanded styles — lazily computed only for expanded rows
   // Merges product records AND sales records to build complete season presence
@@ -1248,6 +1378,32 @@ export default function SeasonView({
         </div>
       </div>
 
+      {/* Scenario Panel (for projecting weighted margins on forecast seasons) */}
+      {scenarioActive && scenarioBasisSeason && (
+        <MarginScenarioPanel
+          futureSeason={
+            displayedForecastSeasons.length === 1
+              ? displayedForecastSeasons[0]
+              : `${displayedForecastSeasons.length} forecast seasons`
+          }
+          availableBasisSeasons={availableBasisSeasons}
+          basisSeason={scenarioBasisSeason}
+          onBasisChange={(s) => {
+            setScenarioBasisSeason(s);
+            setScenarioMixOverride(null);
+          }}
+          basisMetrics={basisMetrics}
+          primaryChannels={[...PRIMARY_CHANNELS]}
+          channelLabels={CHANNEL_LABELS}
+          channelColors={CHANNEL_COLORS}
+          mix={effectiveMix}
+          naturalMix={naturalMix}
+          isOverridden={scenarioMixOverride !== null}
+          onMixChange={setScenarioMixOverride}
+          onReset={() => setScenarioMixOverride(null)}
+        />
+      )}
+
       {/* Pivot Table */}
       <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -1276,13 +1432,18 @@ export default function SeasonView({
                     : badge.label === 'PRE-BOOK' ? 'PRE'
                     : badge.label === 'PLANNING' ? 'PLAN'
                     : badge.label;
+                  const isProjected = scenarioActive && !seasonsWithSales.has(season);
                   return (
                     <th
                       key={season}
                       className={`px-3 py-3 text-right text-sm font-bold text-text-secondary uppercase tracking-wide cursor-pointer hover:text-text-primary min-w-[100px] border-l border-border-primary ${isCurrent ? 'bg-cyan-500/10 ring-1 ring-inset ring-cyan-500/30' : 'bg-surface-tertiary'}`}
                       onClick={() => handleSort(season)}
+                      title={isProjected ? `Margin projected using ${scenarioBasisSeason} channel mix` : undefined}
                     >
                       <div className="flex items-center justify-end gap-1.5">
+                        {isProjected && (
+                          <Sparkles className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                        )}
                         <span className="font-mono text-base">{season}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${badge.color}`}>
                           {shortLabel}
