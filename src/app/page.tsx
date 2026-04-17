@@ -2051,6 +2051,7 @@ export default function Home() {
                 products={products}
                 sales={dateFilteredSales}
                 costs={costs}
+                pricing={pricing}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}

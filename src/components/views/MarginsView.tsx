@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Product, SalesRecord, CostRecord, normalizeCategory } from '@/types/product';
+import { Product, SalesRecord, CostRecord, PricingRecord, normalizeCategory } from '@/types/product';
 import { isRelevantSeason } from '@/utils/season';
-import { matchesSeason } from '@/lib/store';
+import { matchesSeason, sortSeasons } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
 import {
   DollarSign,
@@ -23,16 +23,19 @@ import {
   X,
   Download,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
+import MarginScenarioPanel, { ChannelMetric } from '@/components/MarginScenarioPanel';
 
 interface MarginsViewProps {
   products: Product[];
   sales: SalesRecord[];
   costs: CostRecord[];
+  pricing: PricingRecord[];
   selectedSeason: string;
   selectedDivision: string;
   selectedCategory: string;
@@ -75,6 +78,8 @@ interface StyleChannelMargin {
   weightedMargin: number;
   marginDelta: number;
   channelMix: Record<string, { revenue: number; units: number; pct: number; margin: number; avgNetPrice: number }>;
+  isProjected?: boolean; // true when weightedMargin is derived from a forecast scenario (no actual sales)
+  projectedBasisSeason?: string;
 }
 
 interface CategoryMargin {
@@ -244,6 +249,7 @@ export default function MarginsView({
   products,
   sales,
   costs,
+  pricing,
   selectedSeason,
   selectedDivision,
   selectedCategory,
@@ -278,12 +284,130 @@ export default function MarginsView({
   const [showTopN, setShowTopN] = useState<number>(10);
   const [tableDisplayLimit, setTableDisplayLimit] = useState(50);
 
-  // Get available seasons for filter
-  const availableSeasons = useMemo(() => {
-    const seasons = new Set<string>();
-    sales.forEach(s => s.season && seasons.add(s.season));
-    return Array.from(seasons).sort().filter(s => isRelevantSeason(s));
+  // Seasons that have actual sales data (used as basis candidates + for
+  // deciding whether a season is "forecast" vs historical).
+  const seasonsWithSales = useMemo(() => {
+    const s = new Set<string>();
+    sales.forEach((r) => r.season && s.add(r.season));
+    return s;
   }, [sales]);
+
+  const availableSeasons = useMemo(() => {
+    return Array.from(seasonsWithSales).sort().filter((s) => isRelevantSeason(s));
+  }, [seasonsWithSales]);
+
+  // Union of seasons across sales, pricing, costs, and products. This is
+  // what the season pills use, so future seasons (27SP) with pricing/costs
+  // but no sales still appear and can be projected.
+  const allSeasons = useMemo(() => {
+    const set = new Set<string>();
+    sales.forEach((r) => r.season && set.add(r.season));
+    pricing.forEach((p) => p.season && set.add(p.season));
+    costs.forEach((c) => c.season && set.add(c.season));
+    products.forEach((p) => p.season && set.add(p.season));
+    const arr = Array.from(set).filter((s) => isRelevantSeason(s));
+    return sortSeasons(arr);
+  }, [sales, pricing, costs, products]);
+
+  const isForecastSeason = (season: string) =>
+    season !== 'all' && !seasonsWithSales.has(season) && allSeasons.includes(season);
+
+  // ── Scenario state (only meaningful when a forecast season is picked) ──
+  const [scenarioBasisSeason, setScenarioBasisSeason] = useState<string | null>(null);
+  const [scenarioMixOverride, setScenarioMixOverride] = useState<Record<string, number> | null>(null);
+
+  // Retail-facing channels use MSRP as reference price; wholesale channels use wholesale price
+  const RETAIL_CHANNELS = useMemo(() => new Set(['EC', 'KUHL_STORES']), []);
+
+  // Is the currently-selected style-level season a forecast (no sales)?
+  const isCurrentForecast = useMemo(
+    () => isForecastSeason(styleLevelSeasonFilter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [styleLevelSeasonFilter, seasonsWithSales, allSeasons],
+  );
+
+  // Available basis candidates: seasons with sales, most recent first.
+  const availableBasisSeasons = useMemo(() => {
+    return sortSeasons(Array.from(seasonsWithSales).filter((s) => isRelevantSeason(s))).reverse();
+  }, [seasonsWithSales]);
+
+  // Reset scenario when leaving/entering forecast mode or changing future season.
+  useEffect(() => {
+    if (!isCurrentForecast) {
+      if (scenarioBasisSeason !== null) setScenarioBasisSeason(null);
+      if (scenarioMixOverride !== null) setScenarioMixOverride(null);
+      return;
+    }
+    // Pick default basis = most recent past season with sales (if not already set).
+    if (scenarioBasisSeason === null && availableBasisSeasons.length > 0) {
+      setScenarioBasisSeason(availableBasisSeasons[0]);
+    }
+    // Clear any old override when basis changes
+    setScenarioMixOverride(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleLevelSeasonFilter, isCurrentForecast, availableBasisSeasons]);
+
+  // Aggregate per-channel metrics for the basis season (seasons-wide, not per style).
+  // listPriceRatio = avgNetPrice / avgListPrice — what fraction of list we
+  // actually realize in each channel. We'll apply this to future-season
+  // list prices to project per-channel net prices.
+  const basisMetrics = useMemo<Record<string, ChannelMetric>>(() => {
+    const out: Record<string, ChannelMetric> = {};
+    if (!scenarioBasisSeason) return out;
+
+    const perChannel = new Map<string, { units: number; revenue: number; totalList: number }>();
+    sales.forEach((record) => {
+      if (record.season !== scenarioBasisSeason) return;
+      const channel = normalizeCustomerType(record.customerType);
+      const units = record.unitsBooked || 0;
+      if (units <= 0) return;
+
+      const priceInfo = products.find((p) => p.styleNumber === record.styleNumber);
+      const msrp = priceInfo?.msrp ?? 0;
+      const wholesale = priceInfo?.price ?? record.wholesalePrice ?? 0;
+      const listPrice = RETAIL_CHANNELS.has(channel) ? msrp : wholesale;
+      if (listPrice <= 0) return;
+
+      if (!perChannel.has(channel)) perChannel.set(channel, { units: 0, revenue: 0, totalList: 0 });
+      const entry = perChannel.get(channel)!;
+      entry.units += units;
+      entry.revenue += record.revenue || 0;
+      entry.totalList += units * listPrice;
+    });
+
+    PRIMARY_CHANNELS.forEach((c) => {
+      const d = perChannel.get(c);
+      if (!d || d.units === 0) {
+        out[c] = { units: 0, revenue: 0, avgNetPrice: 0, listPriceRatio: 0 };
+        return;
+      }
+      const avgNetPrice = d.revenue / d.units;
+      const avgList = d.totalList / d.units;
+      out[c] = {
+        units: d.units,
+        revenue: d.revenue,
+        avgNetPrice,
+        listPriceRatio: avgList > 0 ? avgNetPrice / avgList : 0,
+      };
+    });
+    return out;
+  }, [scenarioBasisSeason, sales, products, RETAIL_CHANNELS]);
+
+  // Natural channel mix from basis season (by units).
+  const naturalMix = useMemo<Record<string, number>>(() => {
+    const total = PRIMARY_CHANNELS.reduce((s, c) => s + (basisMetrics[c]?.units ?? 0), 0);
+    const mix: Record<string, number> = {};
+    PRIMARY_CHANNELS.forEach((c) => {
+      mix[c] = total > 0 ? ((basisMetrics[c]?.units ?? 0) / total) * 100 : 0;
+    });
+    return mix;
+  }, [basisMetrics]);
+
+  // The mix actually used for projection: the user's override, or the natural one.
+  const effectiveMix = useMemo<Record<string, number>>(
+    () => scenarioMixOverride ?? naturalMix,
+    [scenarioMixOverride, naturalMix],
+  );
 
   // Build cost lookup from costs data — with prior-season fallback
   const costFallbackLookup = useMemo(() => {
@@ -322,9 +446,6 @@ export default function MarginsView({
     });
     return lookup;
   }, [products]);
-
-  // Retail-facing channels use MSRP as reference price; wholesale channels use wholesale price
-  const RETAIL_CHANNELS = new Set(['EC', 'KUHL_STORES']);
 
   // Channel Performance Analysis - True Margin by Channel
   const channelPerformance = useMemo(() => {
@@ -416,7 +537,161 @@ export default function MarginsView({
   }, [filteredSales, getCost, wholesalePriceLookup, selectedDivision, selectedCategory]);
 
   // Style-Level Margin Analysis with Channel Mix
-  const styleChannelMargins = useMemo(() => {
+  const styleChannelMargins = useMemo<StyleChannelMargin[]>(() => {
+    // ── FORECAST BRANCH ──
+    // No sales for the selected season — project per-style weighted margin
+    // using the basis season's per-channel net-to-list ratios applied to
+    // the future season's list prices, weighted by the user's mix.
+    if (
+      isCurrentForecast &&
+      styleLevelSeasonFilter !== 'all' &&
+      scenarioBasisSeason &&
+      Object.values(basisMetrics).some((m) => m.units > 0)
+    ) {
+      const futureSeason = styleLevelSeasonFilter;
+
+      // Gather the set of (styleNumber) that have pricing or cost records in the future season.
+      const futureStyles = new Map<string, { msrp: number; wholesale: number; landed: number; styleDesc: string; categoryDesc: string; divisionDesc: string; msrpSource: string; wholesaleSource: string; costSource: string; costFallbackSeason?: string }>();
+
+      const addStyle = (styleNumber: string) => {
+        if (futureStyles.has(styleNumber)) return;
+        const p = products.find((pp) => pp.styleNumber === styleNumber && pp.season === futureSeason)
+          || products.find((pp) => pp.styleNumber === styleNumber);
+        const pricingRec = pricing.find((pr) => pr.styleNumber === styleNumber && pr.season === futureSeason);
+        const costRec = costs.find((cc) => cc.styleNumber === styleNumber && cc.season === futureSeason);
+
+        // MSRP: prefer line list for this season, then pricing, then any product record
+        let msrp = 0;
+        let msrpSource: 'linelist' | 'pricebyseason' | 'none' = 'none';
+        if (p?.msrp) { msrp = p.msrp; msrpSource = 'linelist'; }
+        else if (pricingRec?.msrp) { msrp = pricingRec.msrp; msrpSource = 'pricebyseason'; }
+
+        // Wholesale
+        let wholesale = 0;
+        let wholesaleSource: 'linelist' | 'pricebyseason' | 'none' = 'none';
+        if (p?.price) { wholesale = p.price; wholesaleSource = 'linelist'; }
+        else if (pricingRec?.price) { wholesale = pricingRec.price; wholesaleSource = 'pricebyseason'; }
+
+        // Landed: prefer the exact future-season cost, else fall back to prior-season lookup
+        let landed = 0;
+        let costSource: 'landed' | 'linelist' | 'none' = 'none';
+        let costFallbackSeason: string | undefined;
+        if (costRec?.landed && costRec.landed > 0) {
+          landed = costRec.landed;
+          costSource = 'landed';
+        } else {
+          const result = getCost(styleNumber, futureSeason);
+          if (result.cost > 0) {
+            landed = result.cost;
+            costSource = 'landed';
+            if (result.source === 'fallback') costFallbackSeason = result.fallbackSeason;
+          } else if (p?.cost) {
+            landed = p.cost;
+            costSource = 'linelist';
+          }
+        }
+
+        futureStyles.set(styleNumber, {
+          msrp,
+          wholesale,
+          landed,
+          styleDesc: p?.styleDesc || '',
+          categoryDesc: normalizeCategory(p?.categoryDesc ?? '') || '',
+          divisionDesc: p?.divisionDesc || '',
+          msrpSource,
+          wholesaleSource,
+          costSource,
+          costFallbackSeason,
+        });
+      };
+
+      pricing.forEach((pr) => { if (pr.season === futureSeason && pr.styleNumber) addStyle(pr.styleNumber); });
+      costs.forEach((cc) => { if (cc.season === futureSeason && cc.styleNumber) addStyle(cc.styleNumber); });
+      products.forEach((pp) => { if (pp.season === futureSeason && pp.styleNumber) addStyle(pp.styleNumber); });
+
+      const mixTotal = PRIMARY_CHANNELS.reduce((s, c) => s + (effectiveMix[c] ?? 0), 0);
+
+      const results: StyleChannelMargin[] = Array.from(futureStyles.entries()).map(([styleNumber, info]) => {
+        // Synthetic per-channel net price for this style in the future season.
+        const synthNet: Record<string, number> = {};
+        PRIMARY_CHANNELS.forEach((c) => {
+          const ratio = basisMetrics[c]?.listPriceRatio ?? 0;
+          const list = RETAIL_CHANNELS.has(c) ? info.msrp : info.wholesale;
+          synthNet[c] = list > 0 && ratio > 0 ? list * ratio : 0;
+        });
+
+        // Weighted avg using effective mix (normalized to sum=1)
+        let syntheticAvgNetPrice = 0;
+        if (mixTotal > 0) {
+          syntheticAvgNetPrice = PRIMARY_CHANNELS.reduce((sum, c) => {
+            const weight = (effectiveMix[c] ?? 0) / mixTotal;
+            return sum + synthNet[c] * weight;
+          }, 0);
+        }
+
+        const baselineMargin = info.wholesale > 0 && info.landed > 0
+          ? ((info.wholesale - info.landed) / info.wholesale) * 100
+          : 0;
+
+        const weightedMargin = syntheticAvgNetPrice > 0 && info.landed > 0
+          ? ((syntheticAvgNetPrice - info.landed) / syntheticAvgNetPrice) * 100
+          : 0;
+
+        const channelMix: Record<string, { revenue: number; units: number; pct: number; margin: number; avgNetPrice: number }> = {};
+        PRIMARY_CHANNELS.forEach((c) => {
+          const weightPct = mixTotal > 0 ? ((effectiveMix[c] ?? 0) / mixTotal) * 100 : 0;
+          const chAvgNet = synthNet[c];
+          const chMargin = chAvgNet > 0 && info.landed > 0
+            ? ((chAvgNet - info.landed) / chAvgNet) * 100
+            : 0;
+          channelMix[c] = {
+            revenue: 0,
+            units: 0,
+            pct: weightPct,
+            margin: chMargin,
+            avgNetPrice: chAvgNet,
+          };
+        });
+
+        let costWarning: 'none' | 'above-wholesale' | 'above-msrp' | 'missing' = 'none';
+        if (info.landed === 0) costWarning = 'missing';
+        else if (info.msrp > 0 && info.landed > info.msrp) costWarning = 'above-msrp';
+        else if (info.wholesale > 0 && info.landed > info.wholesale) costWarning = 'above-wholesale';
+
+        return {
+          styleNumber,
+          styleDesc: info.styleDesc,
+          categoryDesc: info.categoryDesc,
+          divisionDesc: info.divisionDesc,
+          msrp: info.msrp,
+          wholesalePrice: info.wholesale,
+          landedCost: info.landed,
+          msrpSource: info.msrpSource,
+          wholesaleSource: info.wholesaleSource,
+          costSource: info.costSource,
+          costWarning,
+          costFallbackSeason: info.costFallbackSeason,
+          baselineMargin,
+          totalRevenue: 0,
+          totalUnits: 0,
+          avgNetPrice: syntheticAvgNetPrice,
+          weightedMargin,
+          marginDelta: weightedMargin - baselineMargin,
+          channelMix,
+          isProjected: true,
+          projectedBasisSeason: scenarioBasisSeason,
+        };
+      });
+
+      // Apply division/category/search filters (totalRevenue is 0 for all projected rows)
+      return results.filter((s) => {
+        if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
+        if (selectedCategory && s.categoryDesc && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
+        return s.weightedMargin !== 0 || s.baselineMargin !== 0;
+      });
+    }
+
+    // ── HISTORICAL BRANCH (original logic) ──
     const byStyle = new Map<string, {
       styleNumber: string;
       styleDesc: string;
@@ -575,7 +850,22 @@ export default function MarginsView({
     });
 
     return results.filter(s => s.totalRevenue > 0);
-  }, [filteredSales, getCost, products, selectedDivision, selectedCategory, styleLevelSeasonFilter]);
+  }, [
+    filteredSales,
+    getCost,
+    products,
+    selectedDivision,
+    selectedCategory,
+    styleLevelSeasonFilter,
+    // Forecast-branch deps
+    isCurrentForecast,
+    scenarioBasisSeason,
+    basisMetrics,
+    effectiveMix,
+    pricing,
+    costs,
+    RETAIL_CHANNELS,
+  ]);
 
   // Customer breakdown for drill-down - with filters
   const customerBreakdown = useMemo(() => {
@@ -1383,9 +1673,9 @@ export default function MarginsView({
                 </div>
               </div>
               {/* Season Filter Pills */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <span className="text-xs text-text-muted font-medium">Season:</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={() => setStyleLevelSeasonFilter('all')}
                     className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
@@ -1396,21 +1686,51 @@ export default function MarginsView({
                   >
                     All Seasons
                   </button>
-                  {availableSeasons.map(season => (
-                    <button
-                      key={season}
-                      onClick={() => setStyleLevelSeasonFilter(season)}
-                      className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
-                        styleLevelSeasonFilter === season
-                          ? 'bg-cyan-600 text-white'
-                          : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {season}
-                    </button>
-                  ))}
+                  {allSeasons.map(season => {
+                    const isForecast = !seasonsWithSales.has(season);
+                    const active = styleLevelSeasonFilter === season;
+                    return (
+                      <button
+                        key={season}
+                        onClick={() => setStyleLevelSeasonFilter(season)}
+                        className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                          active
+                            ? 'bg-cyan-600 text-white'
+                            : isForecast
+                            ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20'
+                            : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-gray-700'
+                        }`}
+                        title={isForecast ? 'No sales yet — projected scenario' : undefined}
+                      >
+                        {isForecast && <Sparkles className="w-3 h-3" />}
+                        {season}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* Scenario Panel (only for forecast seasons) */}
+              {isCurrentForecast && scenarioBasisSeason && (
+                <MarginScenarioPanel
+                  futureSeason={styleLevelSeasonFilter}
+                  availableBasisSeasons={availableBasisSeasons}
+                  basisSeason={scenarioBasisSeason}
+                  onBasisChange={(s) => {
+                    setScenarioBasisSeason(s);
+                    setScenarioMixOverride(null);
+                  }}
+                  basisMetrics={basisMetrics}
+                  primaryChannels={PRIMARY_CHANNELS}
+                  channelLabels={CHANNEL_LABELS}
+                  channelColors={CHANNEL_COLORS}
+                  mix={effectiveMix}
+                  naturalMix={naturalMix}
+                  isOverridden={scenarioMixOverride !== null}
+                  onMixChange={setScenarioMixOverride}
+                  onReset={() => setScenarioMixOverride(null)}
+                />
+              )}
               {/* Channel Mix Legend */}
               <div className="flex items-center gap-4 mb-3 text-xs">
                 <span className="text-text-muted font-medium">Channel Mix:</span>
@@ -1642,7 +1962,17 @@ export default function MarginsView({
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className={`font-mono font-bold px-2 py-1 rounded ${getMarginColor(style.weightedMargin)}`}>
+                            <span
+                              className={`inline-flex items-center gap-1 font-mono font-bold px-2 py-1 rounded ${getMarginColor(style.weightedMargin)}`}
+                              title={
+                                style.isProjected
+                                  ? `Projected using ${style.projectedBasisSeason} channel mix + net-to-list ratios`
+                                  : undefined
+                              }
+                            >
+                              {style.isProjected && (
+                                <Sparkles className="w-3 h-3 opacity-70" />
+                              )}
                               {formatPercent(style.weightedMargin)}
                             </span>
                           </td>

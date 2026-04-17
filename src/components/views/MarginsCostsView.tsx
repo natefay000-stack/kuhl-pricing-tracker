@@ -74,6 +74,7 @@ export default function MarginsCostsView({
           products={products}
           sales={sales}
           costs={costs}
+          pricing={pricing}
           selectedSeason={selectedSeason}
           selectedDivision={selectedDivision}
           selectedCategory={selectedCategory}
