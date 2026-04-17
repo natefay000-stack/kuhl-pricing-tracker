@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { ArrowUpDown, Search, X, ChevronLeft, ChevronRight, Sparkles, Download } from 'lucide-react';
 import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCostLabel, SeasonStatus } from '@/lib/season-utils';
 import { isRelevantSeason, parseSeasonCode } from '@/utils/season';
 import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
@@ -20,6 +20,7 @@ import {
   type BasisMetrics,
 } from '@/utils/marginScenario';
 import MarginScenarioPanel from '@/components/MarginScenarioPanel';
+import { exportCostingMargins } from '@/utils/exportCostingMargins';
 
 type MetricType = 'sales' | 'units' | 'msrp' | 'cost' | 'margin';
 
@@ -1357,6 +1358,28 @@ export default function SeasonView({
             title="Combine style variants (R/X/T suffixes, tall, plus)"
           >
             Combine Styles
+          </button>
+          <div className="w-px bg-gray-300 mx-1" />
+          <button
+            onClick={() => {
+              exportCostingMargins({
+                products,
+                pricing,
+                costs,
+                sales,
+                seasonFilter: selectedSeasons.length > 0 ? selectedSeasons : undefined,
+                divisionFilter: selectedDivision || undefined,
+                categoryFilter: selectedCategory || undefined,
+                scenario: scenarioActive && scenarioBasisSeason
+                  ? { basisSeason: scenarioBasisSeason, effectiveMix }
+                  : undefined,
+              });
+            }}
+            title="Export Costing + Margins workbook (Detail + Style Summary + Season Totals + Scenario)"
+            className="flex items-center gap-2 px-5 py-2.5 text-base font-bold rounded-lg transition-colors text-text-secondary hover:bg-surface-tertiary"
+          >
+            <Download className="w-4 h-4" />
+            Export
           </button>
         </div>
 
