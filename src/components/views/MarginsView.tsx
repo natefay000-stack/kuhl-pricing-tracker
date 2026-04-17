@@ -26,6 +26,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
+import { exportCostingMargins } from '@/utils/exportCostingMargins';
 import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
@@ -1283,13 +1284,39 @@ export default function MarginsView({
             Traditional View
           </button>
           </div>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
-          >
-            <Download className="w-5 h-5" />
-            Export Data
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+              title="Export current table to a single-sheet xlsx"
+            >
+              <Download className="w-5 h-5" />
+              Export Data
+            </button>
+            <button
+              onClick={() => {
+                exportCostingMargins({
+                  products,
+                  pricing,
+                  costs,
+                  sales,
+                  seasonFilter:
+                    styleLevelSeasonFilter !== 'all' ? [styleLevelSeasonFilter] : undefined,
+                  divisionFilter: selectedDivision || undefined,
+                  categoryFilter: selectedCategory || undefined,
+                  scenario:
+                    isCurrentForecast && scenarioBasisSeason
+                      ? { basisSeason: scenarioBasisSeason, effectiveMix }
+                      : undefined,
+                });
+              }}
+              title="Export full Costing + Margins workbook (Detail / Style Summary / Season Totals / Scenario)"
+              className="flex items-center gap-2 px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white text-base font-bold rounded-xl transition-colors shadow-lg"
+            >
+              <Download className="w-5 h-5" />
+              Costing + Margins
+            </button>
+          </div>
         </div>
       </div>
 
