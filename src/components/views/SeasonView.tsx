@@ -181,6 +181,15 @@ export default function SeasonView({
     return s;
   }, [sales]);
 
+  // Prior-season cost fallback is disabled for PLANNING and PRE-BOOK seasons.
+  // For those seasons, the user has explicitly asked that costing come from
+  // the Landed Sheet only — showing a carried-forward prior cost would
+  // imply we have costing we don't actually have.
+  const canUseCostFallback = useCallback((season: string): boolean => {
+    const status = getSeasonStatus(season);
+    return status !== 'PLANNING' && status !== 'PRE-BOOK';
+  }, []);
+
   // ── Scenario state for projecting forecast-season margins ──
   // Only meaningful when metric === 'margin' and a forecast season is in view.
   const [scenarioBasisSeason, setScenarioBasisSeason] = useState<string | null>(null);
@@ -536,8 +545,10 @@ export default function SeasonView({
         const pricingData = dataLookups.pricingByStyleSeason.get(key);
         let costData = dataLookups.costsByStyleSeason.get(key);
 
-        // Prior-season fallback: if this season has no cost, try the most recent prior season
-        if (!costData || !costData.landed || costData.landed <= 0) {
+        // Prior-season fallback: if this season has no cost, try the most
+        // recent prior season — BUT only for historical/shipping seasons.
+        // PLANNING / PRE-BOOK must source from the Landed Sheet or nothing.
+        if ((!costData || !costData.landed || costData.landed <= 0) && canUseCostFallback(season)) {
           const fallback = dataLookups.fallbackLookup.getCostWithFallback(lookupKey, season);
           if (fallback.source === 'fallback' && fallback.cost > 0) {
             costData = {
@@ -659,6 +670,7 @@ export default function SeasonView({
     metric,
     dataLookups,
     combineStyles,
+    canUseCostFallback,
     // Scenario inputs (only used when metric === 'margin' on forecast columns)
     scenarioActive,
     scenarioBasisSeason,
@@ -841,8 +853,9 @@ export default function SeasonView({
           const pricingData = dataLookups.pricingByStyleSeason.get(key);
           let costData = dataLookups.costsByStyleSeason.get(key);
 
-          // Apply prior-season fallback if no exact match
-          if (!costData?.landed || costData.landed <= 0) {
+          // Apply prior-season fallback if no exact match — but not for
+          // PLANNING / PRE-BOOK seasons (Landed Sheet only).
+          if ((!costData?.landed || costData.landed <= 0) && canUseCostFallback(season)) {
             const fallback = dataLookups.fallbackLookup.getCostWithFallback(row.styleNumber, season);
             if (fallback.source === 'fallback' && fallback.cost > 0) {
               costData = { landed: fallback.cost, fob: 0, source: 'fallback', fallbackSeason: fallback.fallbackSeason };
@@ -925,6 +938,7 @@ export default function SeasonView({
     seasons,
     metric,
     dataLookups,
+    canUseCostFallback,
     // Scenario inputs (only used when projecting forecast-season blended totals)
     scenarioActive,
     seasonsWithSales,

@@ -29,6 +29,16 @@ import { buildCostFallbackLookup } from '@/utils/costFallback';
 import { getSeasonStatus, getSeasonStatusBadge } from '@/lib/season-utils';
 import { sortSeasons } from '@/lib/store';
 
+/**
+ * Prior-season cost fallback is blocked for PLANNING + PRE-BOOK seasons:
+ * future-season costing must come from the Landed Sheet (or line-list),
+ * never carried forward from an older season.
+ */
+function canUseCostFallback(season: string): boolean {
+  const status = getSeasonStatus(season);
+  return status !== 'PLANNING' && status !== 'PRE-BOOK';
+}
+
 // ── Cell formats ─────────────────────────────────────────────────────────────
 const FMT_CURRENCY = '"$"#,##0.00;[Red]\\("$"#,##0.00\\);"—"';
 const FMT_INT = '#,##0;[Red]-#,##0;"—"';
@@ -195,12 +205,18 @@ export function exportCostingMargins(args: CostingExportArgs): void {
     let costSource = costExact ? 'landed_cost' : '';
     let costFallbackSeason: string | undefined;
     if (!landed || landed <= 0) {
-      const result = fallbackLookup.getCostWithFallback(p.styleNumber, p.season);
-      if (result.cost > 0) {
-        landed = result.cost;
-        costSource = result.source === 'fallback' ? `fallback:${result.fallbackSeason}` : (costSource || 'landed_cost');
-        if (result.source === 'fallback') costFallbackSeason = result.fallbackSeason;
+      if (canUseCostFallback(p.season)) {
+        const result = fallbackLookup.getCostWithFallback(p.styleNumber, p.season);
+        if (result.cost > 0) {
+          landed = result.cost;
+          costSource = result.source === 'fallback' ? `fallback:${result.fallbackSeason}` : (costSource || 'landed_cost');
+          if (result.source === 'fallback') costFallbackSeason = result.fallbackSeason;
+        } else if (p.cost && p.cost > 0) {
+          landed = p.cost;
+          costSource = 'linelist';
+        }
       } else if (p.cost && p.cost > 0) {
+        // Forecast season — only line-list fallback allowed, no prior-season carryover.
         landed = p.cost;
         costSource = 'linelist';
       }
@@ -288,9 +304,13 @@ export function exportCostingMargins(args: CostingExportArgs): void {
     const costExact = costByKey.get(`${styleNumber}-${season}`);
     let landed = costExact?.landed ?? 0;
     if (!landed || landed <= 0) {
-      const result = fallbackLookup.getCostWithFallback(styleNumber, season);
-      if (result.cost > 0) landed = result.cost;
-      else if (productSample.cost && productSample.cost > 0) landed = productSample.cost;
+      if (canUseCostFallback(season)) {
+        const result = fallbackLookup.getCostWithFallback(styleNumber, season);
+        if (result.cost > 0) landed = result.cost;
+        else if (productSample.cost && productSample.cost > 0) landed = productSample.cost;
+      } else if (productSample.cost && productSample.cost > 0) {
+        landed = productSample.cost;
+      }
     }
 
     const pricingExact = pricingByKey.get(`${styleNumber}-${season}`);
@@ -370,9 +390,13 @@ export function exportCostingMargins(args: CostingExportArgs): void {
       const costExact = costByKey.get(`${styleNumber}-${season}`);
       let landed = costExact?.landed ?? 0;
       if (!landed || landed <= 0) {
-        const result = fallbackLookup.getCostWithFallback(styleNumber, season);
-        if (result.cost > 0) landed = result.cost;
-        else if (sample.cost && sample.cost > 0) landed = sample.cost;
+        if (canUseCostFallback(season)) {
+          const result = fallbackLookup.getCostWithFallback(styleNumber, season);
+          if (result.cost > 0) landed = result.cost;
+          else if (sample.cost && sample.cost > 0) landed = sample.cost;
+        } else if (sample.cost && sample.cost > 0) {
+          landed = sample.cost;
+        }
       }
       if (landed > 0) {
         landedSum += landed;

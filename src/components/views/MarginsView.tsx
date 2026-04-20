@@ -573,23 +573,20 @@ export default function MarginsView({
         if (p?.price) { wholesale = p.price; wholesaleSource = 'linelist'; }
         else if (pricingRec?.price) { wholesale = pricingRec.price; wholesaleSource = 'pricebyseason'; }
 
-        // Landed: prefer the exact future-season cost, else fall back to prior-season lookup
+        // Landed: for forecast seasons (PLANNING / PRE-BOOK), require the
+        // exact Landed Sheet cost. Do NOT fall back to a prior season —
+        // that would imply costing we don't actually have. If Landed is
+        // missing we fall through to line-list cost only, and if that's
+        // also missing the row is excluded.
         let landed = 0;
         let costSource: 'landed' | 'linelist' | 'none' = 'none';
-        let costFallbackSeason: string | undefined;
+        const costFallbackSeason: string | undefined = undefined;
         if (costRec?.landed && costRec.landed > 0) {
           landed = costRec.landed;
           costSource = 'landed';
-        } else {
-          const result = getCost(styleNumber, futureSeason);
-          if (result.cost > 0) {
-            landed = result.cost;
-            costSource = 'landed';
-            if (result.source === 'fallback') costFallbackSeason = result.fallbackSeason;
-          } else if (p?.cost) {
-            landed = p.cost;
-            costSource = 'linelist';
-          }
+        } else if (p?.cost) {
+          landed = p.cost;
+          costSource = 'linelist';
         }
 
         futureStyles.set(styleNumber, {
