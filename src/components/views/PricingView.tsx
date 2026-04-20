@@ -11,10 +11,14 @@ import {
   Percent,
   DollarSign,
   Download,
+  Edit3,
+  History,
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatDelta, formatNumber, formatPercent, getMarginColor, getMarginBg } from '@/utils/format';
+import PriceEditModal from '@/components/PriceEditModal';
+import PricingHistoryModal from '@/components/PricingHistoryModal';
 
 interface PricingViewProps {
   products: Product[];
@@ -26,6 +30,7 @@ interface PricingViewProps {
   selectedCategory: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
+  onPricingUpdated?: (updated: PricingRecord) => void;
 }
 
 type PriceSource = 'pricing' | 'products' | 'sales';
@@ -80,7 +85,12 @@ export default function PricingView({
   selectedCategory,
   searchQuery: globalSearchQuery,
   onStyleClick,
+  onPricingUpdated,
 }: PricingViewProps) {
+  // Edit / history modal state (pricing record targeted by the action)
+  const [editingPrice, setEditingPrice] = useState<PricingRecord | null>(null);
+  const [historyPrice, setHistoryPrice] = useState<PricingRecord | null>(null);
+
   // Available seasons from ALL data sources
   const availableSeasons = useMemo(() => {
     const seasons = new Set<string>();
@@ -776,8 +786,52 @@ export default function PricingView({
                       <span className="text-text-faint text-base">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 border-l border-border-primary">
-                    <ChevronRight className="w-5 h-5 text-text-faint" />
+                  <td className="px-2 py-4 border-l border-border-primary">
+                    {(() => {
+                      // Look up the actual Pricing record for this style at the "to" season.
+                      // Only a real Pricing row can be edited (styles sourced from line-list
+                      // fallback have no Pricing row yet).
+                      const realPricing = pricing.find(
+                        (p) => p.styleNumber === style.styleNumber && p.season === toSeason,
+                      );
+                      const disabled = !realPricing;
+                      return (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (realPricing) setEditingPrice(realPricing);
+                            }}
+                            disabled={disabled}
+                            title={
+                              disabled
+                                ? `No Pricing row for ${toSeason} — edit via xlsx import`
+                                : 'Edit wholesale / MSRP'
+                            }
+                            aria-label={`Edit price for ${style.styleNumber}`}
+                            className="p-1.5 rounded hover:bg-emerald-500/10 text-text-muted hover:text-emerald-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (realPricing) setHistoryPrice(realPricing);
+                            }}
+                            disabled={disabled}
+                            title={
+                              disabled
+                                ? 'No Pricing row to view history for'
+                                : 'View price edit history'
+                            }
+                            aria-label={`Price history for ${style.styleNumber}`}
+                            className="p-1.5 rounded hover:bg-amber-500/10 text-text-muted hover:text-amber-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -827,6 +881,25 @@ export default function PricingView({
           </div>
         </div>
       </div>
+
+      {editingPrice && (
+        <PriceEditModal
+          pricing={editingPrice}
+          onClose={() => setEditingPrice(null)}
+          onSaved={(updated) => {
+            onPricingUpdated?.(updated);
+            setEditingPrice(null);
+          }}
+        />
+      )}
+      {historyPrice && (
+        <PricingHistoryModal
+          pricingId={historyPrice.id}
+          styleNumber={historyPrice.styleNumber}
+          season={historyPrice.season}
+          onClose={() => setHistoryPrice(null)}
+        />
+      )}
     </div>
   );
 }

@@ -220,6 +220,25 @@ model Cost {
   @@index([styleNumber])
 }
 
+// Audit log for inline pricing edits (price, msrp) made through the UI.
+// Same pattern as CostEdit — free-text editedBy since there's no auth.
+model PricingEdit {
+  id          String   @id @default(cuid())
+  pricingId   String
+  styleNumber String
+  season      String
+  field       String   // "price" or "msrp"
+  oldValue    Float?
+  newValue    Float?
+  editedBy    String
+  note        String?
+  editedAt    DateTime @default(now())
+
+  @@index([pricingId])
+  @@index([styleNumber, season])
+  @@index([editedAt])
+}
+
 // Audit log for inline cost edits (landed, margin) made through the UI.
 // There is no auth system, so `editedBy` is a free-text name the user types,
 // matching the existing ImportLog.importedBy pattern.

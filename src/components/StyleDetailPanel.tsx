@@ -8,6 +8,8 @@ import { formatCurrencyShort } from '@/utils/format';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import CostEditModal from '@/components/CostEditModal';
 import CostHistoryModal from '@/components/CostHistoryModal';
+import PriceEditModal from '@/components/PriceEditModal';
+import PricingHistoryModal from '@/components/PricingHistoryModal';
 
 interface StyleDetailPanelProps {
   styleNumber: string;
@@ -17,6 +19,7 @@ interface StyleDetailPanelProps {
   costs: CostRecord[];
   onClose: () => void;
   onCostUpdated?: (updated: CostRecord) => void;
+  onPricingUpdated?: (updated: PricingRecord) => void;
 }
 
 export default function StyleDetailPanel({
@@ -27,9 +30,12 @@ export default function StyleDetailPanel({
   costs,
   onClose,
   onCostUpdated,
+  onPricingUpdated,
 }: StyleDetailPanelProps) {
   const [editing, setEditing] = useState(false);
   const [viewingHistory, setViewingHistory] = useState(false);
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [viewingPriceHistory, setViewingPriceHistory] = useState(false);
   // Get style info
   const styleInfo = useMemo(() => {
     const product = products.find((p) => p.styleNumber === styleNumber);
@@ -57,6 +63,15 @@ export default function StyleDetailPanel({
         change,
       };
     });
+  }, [pricing, styleNumber]);
+
+  // Most recent Pricing row for this style — what the Edit Price button targets.
+  const latestPricingRecord = useMemo(() => {
+    const stylePricing = pricing.filter((p) => p.styleNumber === styleNumber);
+    if (stylePricing.length === 0) return null;
+    const seasons = sortSeasons(stylePricing.map((p) => p.season));
+    const latest = seasons[seasons.length - 1];
+    return stylePricing.find((p) => p.season === latest) ?? null;
   }, [pricing, styleNumber]);
 
   // Get sales by channel
@@ -213,7 +228,29 @@ export default function StyleDetailPanel({
         <div className="p-6 grid grid-cols-2 gap-6">
           {/* Pricing by Season */}
           <div className="bg-surface-secondary rounded-xl p-5">
-            <h4 className="font-semibold text-text-primary mb-4">Pricing by Season</h4>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-text-primary">Pricing by Season</h4>
+              {latestPricingRecord && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setEditingPrice(true)}
+                    title={`Edit wholesale / MSRP (${latestPricingRecord.season})`}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setViewingPriceHistory(true)}
+                    title="View price edit history"
+                    className="p-1 text-text-muted hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                    aria-label="View price edit history"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="space-y-3">
               {pricingBySeason.length > 0 ? (
                 pricingBySeason.map((p, index) => (
@@ -394,6 +431,25 @@ export default function StyleDetailPanel({
           styleNumber={costInfo.costRecord.styleNumber}
           season={costInfo.costRecord.season}
           onClose={() => setViewingHistory(false)}
+        />
+      )}
+
+      {editingPrice && latestPricingRecord && (
+        <PriceEditModal
+          pricing={latestPricingRecord}
+          onClose={() => setEditingPrice(false)}
+          onSaved={(updated) => {
+            onPricingUpdated?.(updated);
+            setEditingPrice(false);
+          }}
+        />
+      )}
+      {viewingPriceHistory && latestPricingRecord && (
+        <PricingHistoryModal
+          pricingId={latestPricingRecord.id}
+          styleNumber={latestPricingRecord.styleNumber}
+          season={latestPricingRecord.season}
+          onClose={() => setViewingPriceHistory(false)}
         />
       )}
     </div>

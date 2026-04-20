@@ -1024,6 +1024,15 @@ export default function Home() {
     });
   };
 
+  // Same pattern for inline pricing edits.
+  const handlePricingUpdated = (updated: PricingRecord) => {
+    setPricing((prev) => {
+      const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+      setCachedCore({ products, pricing: next, costs, inventory });
+      return next;
+    });
+  };
+
   // Handle sales-only import (all seasons at once)
   const handleSalesOnlyImport = async (data: {
     sales: Record<string, unknown>[];
@@ -2026,6 +2035,7 @@ export default function Home() {
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
+                onPricingUpdated={handlePricingUpdated}
               />
             </ErrorBoundary>
           )}
@@ -2174,6 +2184,7 @@ export default function Home() {
           costs={costs}
           onClose={() => setSelectedStyleNumber(null)}
           onCostUpdated={handleCostUpdated}
+          onPricingUpdated={handlePricingUpdated}
         />
       )}
 
