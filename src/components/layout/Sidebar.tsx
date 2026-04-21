@@ -28,10 +28,11 @@ import {
   MapPin,
   FolderOpen,
   Grid3x3,
+  Flame,
   type LucideIcon,
 } from 'lucide-react';
 
-export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
+export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'pullback' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -90,6 +91,7 @@ const navGroups: NavGroup[] = [
       { id: 'stylecolor', label: 'Style/Color', icon: Palette, emoji: '🎨' },
       { id: 'invopnseason', label: 'Inv-Opn Season', icon: ClipboardList, emoji: '📦' },
       { id: 'geoheatmap', label: 'Geo Heat Map', icon: MapPin, emoji: '📍' },
+      { id: 'pullback', label: 'Pullback', icon: Flame, emoji: '🔥' },
     ],
   },
   {

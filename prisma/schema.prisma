@@ -220,6 +220,51 @@ model Cost {
   @@index([styleNumber])
 }
 
+// ATS (Available To Sell) inventory snapshot, aggregated to style × color.
+// Imported via xlsx. Each import replaces all rows for a new snapshot.
+model AtsInventory {
+  id                     String   @id @default(cuid())
+  styleNumber            String
+  color                  String
+  styleDesc              String?
+  colorDesc              String?
+  gender                 String?
+  category               String?
+  styleSegment           String?
+  blockCode              String?
+  classification         String?  // ALL, WEB, SMU, RUN, ATS, DON, CLOS, 30, 50, 70, etc.
+  wholesale              Float    @default(0)
+  msrp                   Float    @default(0)
+  styleVendor            String?
+  warehouse              String?
+  unitsATS               Float    @default(0)
+  unitsOnHand            Float    @default(0)
+  unitsAtOnce            Float    @default(0)
+  snapshotDate           DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([styleNumber, color])
+  @@index([classification])
+  @@index([styleNumber])
+}
+
+// Decision audit — who decided what action to take on a style × color
+// after reviewing it in the Pullback view. Free-text decidedBy since
+// there's no auth system (same pattern as CostEdit / PricingEdit).
+model AtsDecision {
+  id           String   @id @default(cuid())
+  styleNumber  String
+  color        String
+  action       String   // PULL_FROM_SITE, CANCEL_ORDERS, LIQUIDATE, KEEP, OTHER
+  decidedBy    String
+  note         String?
+  decidedAt    DateTime @default(now())
+
+  @@index([styleNumber, color])
+  @@index([decidedAt])
+}
+
 // Audit log for inline pricing edits (price, msrp) made through the UI.
 // Same pattern as CostEdit — free-text editedBy since there's no auth.
 model PricingEdit {
