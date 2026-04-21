@@ -129,7 +129,14 @@ interface RowMetrics {
   topCustomer: string | null;
 }
 
-type EnrichedRow = AtsRow & { m: RowMetrics; landed: number; recommendation: DecisionAction; recReason: string };
+type EnrichedRow = AtsRow & {
+  m: RowMetrics;
+  landed: number;
+  /** True when `landed` was estimated (wholesale × 0.5) because no Cost row exists for this style. */
+  landedIsEstimated: boolean;
+  recommendation: DecisionAction;
+  recReason: string;
+};
 
 interface PullbackViewProps {
   sales: SalesRecord[];
@@ -353,7 +360,17 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
       const k = `${r.styleNumber}|${r.color}`;
       const a = invoiceAgg.get(k);
       const mix = salesMix.get(r.styleNumber);
-      const landed = landedByKey.get(r.styleNumber) ?? 0;
+      // Landed cost: prefer the real Cost-table value; if missing, estimate
+      // as wholesale × 0.5 (industry-standard ~50% margin) and flag it so
+      // the UI can show an asterisk. Lets OH $ surface for styles that
+      // never made it through the Landed Sheet (typical for older seasons).
+      const realLanded = landedByKey.get(r.styleNumber) ?? 0;
+      let landed = realLanded;
+      let landedIsEstimated = false;
+      if (landed <= 0 && r.wholesale > 0) {
+        landed = r.wholesale * 0.5;
+        landedIsEstimated = true;
+      }
 
       const unitsLast180d = a?.unitsLast180d ?? 0;
       const unitsLast90d = a?.unitsLast90d ?? 0;
@@ -466,7 +483,7 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
         }
       }
 
-      return { ...r, m, landed, recommendation, recReason };
+      return { ...r, m, landed, landedIsEstimated, recommendation, recReason };
     });
   }, [ats, invoiceAgg, salesMix, landedByKey]);
 
@@ -941,7 +958,12 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
                   <th className="px-3 py-2 text-right">Last sold</th>
                   <th className="px-3 py-2 text-right">Avg Net</th>
                   <th className="px-3 py-2 text-right">Return %</th>
-                  <th className="px-3 py-2 text-right">OH $</th>
+                  <th
+                    className="px-3 py-2 text-right"
+                    title="On-hand value at landed cost. * indicates an estimate (50% of wholesale) because no landed cost is on file."
+                  >
+                    OH $
+                  </th>
                   <th className="px-3 py-2 text-right">Risk $</th>
                   <th className="px-3 py-2 text-left">Channel</th>
                   <th className="px-3 py-2 text-left w-[260px]">Recommendation</th>
@@ -1017,8 +1039,26 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
                       }`}>
                         {r.m.returnRate > 0 ? (r.m.returnRate * 100).toFixed(1) + '%' : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-text-primary">
-                        {r.m.ohAtLanded > 0 ? fmtCurrencyShort(r.m.ohAtLanded) : '—'}
+                      <td
+                        className="px-3 py-2 text-right font-mono text-text-primary"
+                        title={
+                          r.landedIsEstimated
+                            ? `Estimated at 50% of wholesale — no landed cost on file for style ${r.styleNumber}`
+                            : r.landed > 0
+                            ? `${fmtNumber(r.unitsOnHand)} OH × ${fmtCurrency(r.landed)} landed`
+                            : undefined
+                        }
+                      >
+                        {r.m.ohAtLanded > 0 ? (
+                          <span>
+                            {fmtCurrencyShort(r.m.ohAtLanded)}
+                            {r.landedIsEstimated && (
+                              <span className="text-amber-500 ml-0.5" aria-hidden="true">*</span>
+                            )}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className={`px-3 py-2 text-right font-mono ${r.m.revenueAtRisk > 0 ? 'text-red-500 font-semibold' : 'text-text-muted'}`}>
                         {r.m.revenueAtRisk > 0 ? fmtCurrencyShort(r.m.revenueAtRisk) : '—'}
