@@ -30,6 +30,7 @@ import {
   X,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import MultiSelect from '@/components/MultiSelect';
 
 const EDITED_BY_KEY = 'kuhl-edited-by';
 
@@ -111,9 +112,9 @@ export default function PullbackView({ sales, onStyleClick }: PullbackViewProps)
   // ── UI state ──
   const [section, setSection] = useState<SectionKey>('urgent');
   const [search, setSearch] = useState('');
-  const [filterGender, setFilterGender] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterClass, setFilterClass] = useState('');
+  const [filterGender, setFilterGender] = useState<string[]>([]);
+  const [filterCategory, setFilterCategory] = useState<string[]>([]);
+  const [filterClass, setFilterClass] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [uploading, setUploading] = useState(false);
@@ -186,9 +187,9 @@ export default function PullbackView({ sales, onStyleClick }: PullbackViewProps)
 
   // ── Section filtering ──
   const matchesFilters = (r: AtsRow): boolean => {
-    if (filterGender && r.gender !== filterGender) return false;
-    if (filterCategory && r.category !== filterCategory) return false;
-    if (filterClass && r.classification !== filterClass) return false;
+    if (filterGender.length > 0 && (!r.gender || !filterGender.includes(r.gender))) return false;
+    if (filterCategory.length > 0 && (!r.category || !filterCategory.includes(r.category))) return false;
+    if (filterClass.length > 0 && (!r.classification || !filterClass.includes(r.classification))) return false;
     if (search) {
       const q = search.toLowerCase();
       if (
@@ -531,46 +532,37 @@ export default function PullbackView({ sales, onStyleClick }: PullbackViewProps)
             className="px-3 py-2 text-sm border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 w-[220px]"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-secondary uppercase tracking-wide">Gender</label>
-          <select
-            value={filterGender}
-            onChange={(e) => setFilterGender(e.target.value)}
-            className="px-3 py-2 text-sm border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[130px]"
-          >
-            <option value="">All</option>
-            {genders.map((g) => (<option key={g} value={g}>{g}</option>))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-secondary uppercase tracking-wide">Category</label>
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 text-sm border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[150px]"
-          >
-            <option value="">All</option>
-            {categories.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-secondary uppercase tracking-wide">Classification</label>
-          <select
-            value={filterClass}
-            onChange={(e) => setFilterClass(e.target.value)}
-            className="px-3 py-2 text-sm border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[130px]"
-          >
-            <option value="">All</option>
-            {classifications.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </select>
-        </div>
-        {(search || filterGender || filterCategory || filterClass) && (
+        <MultiSelect
+          label="Gender"
+          placeholder="All genders"
+          options={genders}
+          values={filterGender}
+          onChange={setFilterGender}
+          widthClass="w-[160px]"
+        />
+        <MultiSelect
+          label="Category"
+          placeholder="All categories"
+          options={categories}
+          values={filterCategory}
+          onChange={setFilterCategory}
+          widthClass="w-[180px]"
+        />
+        <MultiSelect
+          label="Classification"
+          placeholder="All"
+          options={classifications}
+          values={filterClass}
+          onChange={setFilterClass}
+          widthClass="w-[160px]"
+        />
+        {(search || filterGender.length > 0 || filterCategory.length > 0 || filterClass.length > 0) && (
           <button
             onClick={() => {
               setSearch('');
-              setFilterGender('');
-              setFilterCategory('');
-              setFilterClass('');
+              setFilterGender([]);
+              setFilterCategory([]);
+              setFilterClass([]);
             }}
             className="flex items-center gap-1 px-3 py-2 text-sm font-semibold text-cyan-600 hover:bg-hover-accent rounded-lg"
           >
