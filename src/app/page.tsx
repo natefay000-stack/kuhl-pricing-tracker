@@ -18,6 +18,7 @@ import retryDynamic from '@/lib/retryDynamic';
 const ExecutiveDashboardView = retryDynamic(() => import('@/components/views/ExecutiveDashboardView'));
 const DashboardView = retryDynamic(() => import('@/components/views/DashboardView'));
 const SeasonView = retryDynamic(() => import('@/components/views/SeasonView'));
+const GridView = retryDynamic(() => import('@/components/views/GridView'));
 const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
 const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
@@ -1887,6 +1888,23 @@ export default function Home() {
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'grid' && (
+            <ErrorBoundary viewName="Grid">
+              <GridView
+                products={products}
+                pricing={pricing}
+                costs={costs}
+                sales={dateFilteredSales}
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                searchQuery={searchQuery}
+                onStyleClick={handleStyleClick}
+                onPricingUpdated={handlePricingUpdated}
+                onCostUpdated={handleCostUpdated}
               />
             </ErrorBoundary>
           )}

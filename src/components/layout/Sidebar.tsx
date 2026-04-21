@@ -27,10 +27,11 @@ import {
   BarChart3,
   MapPin,
   FolderOpen,
+  Grid3x3,
   type LucideIcon,
 } from 'lucide-react';
 
-export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
+export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'geoheatmap';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -73,6 +74,7 @@ const navGroups: NavGroup[] = [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, emoji: '📊' },
       { id: 'season', label: 'Season View', icon: Calendar, emoji: '📅' },
       { id: 'seasoncomp', label: 'Season Comp', icon: GitCompare, emoji: '🔀' },
+      { id: 'grid', label: 'Grid', icon: Grid3x3, emoji: '⊞' },
     ],
   },
   {
