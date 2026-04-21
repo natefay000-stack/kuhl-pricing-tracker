@@ -1899,6 +1899,7 @@ export default function Home() {
                 pricing={pricing}
                 costs={costs}
                 sales={dateFilteredSales}
+                selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
