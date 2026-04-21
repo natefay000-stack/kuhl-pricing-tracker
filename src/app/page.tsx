@@ -1915,6 +1915,8 @@ export default function Home() {
             <ErrorBoundary viewName="Pullback">
               <PullbackView
                 sales={dateFilteredSales}
+                invoices={invoices}
+                costs={costs}
                 onStyleClick={handleStyleClick}
               />
             </ErrorBoundary>
