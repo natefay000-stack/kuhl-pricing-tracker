@@ -2201,6 +2201,9 @@ export default function Home() {
           sales={sales}
           pricing={pricing}
           costs={costs}
+          selectedSeason={selectedSeason}
+          selectedDivision={selectedDivision}
+          selectedCategory={selectedCategory}
           onClose={() => setSelectedStyleNumber(null)}
           onCostUpdated={handleCostUpdated}
           onPricingUpdated={handlePricingUpdated}
