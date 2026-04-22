@@ -1398,7 +1398,7 @@ export default function SeasonView({
         </div>
 
         {/* Source Legend - Priority: pricebyseason > Sales > Line List */}
-        <div className="flex items-center gap-4 text-sm text-text-muted">
+        <div className="flex items-center gap-4 text-sm text-text-muted flex-wrap">
           <span className="font-semibold">MSRP/Price Source:</span>
           <span className="flex items-center gap-1">
             <span className="text-emerald-500">●</span> pricebyseason
@@ -1412,6 +1412,20 @@ export default function SeasonView({
           <span className="flex items-center gap-1">
             <span className="text-purple-500">■</span> Landed Sheet
           </span>
+          {metric === 'margin' && (
+            <>
+              <span className="ml-4 font-semibold">Margin formula:</span>
+              <span className="flex items-center gap-1" title="(wholesale − landed) / wholesale — shown on every historical cell without a badge.">
+                <span className="text-text-muted">baseline</span>
+              </span>
+              <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-400" title="Projected from the scenario panel — forecast seasons only.">
+                projected
+              </span>
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400" title="Sales-weighted: (revenue − landed × units) / revenue.">
+                sales-wtd
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -1551,6 +1565,28 @@ export default function SeasonView({
                         const fallbackSeason = fallbackMatch ? fallbackMatch[1] : null;
                         const baseSource = source?.replace(/\|?fallback:[^|]+/, '').replace(/fallback:[^|]+/, '') || '';
 
+                        // Margin-specific: which formula was used to compute this cell?
+                        //   "projected:<basis>" → scenario-based weighted margin (forecast col + scenario active)
+                        //   "sales/*"            → sales-weighted (revenue / units vs landed)
+                        //   else                 → baseline (wholesale − landed) / wholesale
+                        // We only show a badge for non-baseline cells so the historical cols stay uncluttered.
+                        const projectedMatch = metric === 'margin' ? source?.match(/^projected:([^|]+)/) : null;
+                        const projectedBasis = projectedMatch ? projectedMatch[1] : null;
+                        const isSalesWeighted = metric === 'margin' && /^sales(\/|$)/.test(source ?? '');
+                        const formulaBadge = projectedBasis
+                          ? {
+                              label: `projected · ${projectedBasis}`,
+                              className: 'text-cyan-600 dark:text-cyan-400',
+                              title: `Projected using ${projectedBasis} per-channel pricing ratios applied to ${season} prices + costs (scenario panel).`,
+                            }
+                          : isSalesWeighted
+                          ? {
+                              label: 'sales-wtd',
+                              className: 'text-amber-600 dark:text-amber-400',
+                              title: 'Margin weighted by actual sales: (revenue − landed × units) / revenue.',
+                            }
+                          : null;
+
                         // Source indicator: ● pricebyseason, ○ linelist, ◇ sales, ■ landed_sheet
                         const getSourceIndicator = (src: string) => {
                           if (src === 'pricebyseason') return { symbol: '●', color: 'text-emerald-500', title: 'Source: pricebyseason' };
@@ -1594,6 +1630,14 @@ export default function SeasonView({
                                     title={`vs ${prior}`}
                                   >
                                     {fmtDelta(delta)}
+                                  </span>
+                                )}
+                                {formulaBadge && (
+                                  <span
+                                    className={`text-[10px] font-medium tracking-wide ${formulaBadge.className}`}
+                                    title={formulaBadge.title}
+                                  >
+                                    {formulaBadge.label}
                                   </span>
                                 )}
                               </div>
