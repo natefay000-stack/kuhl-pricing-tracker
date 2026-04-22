@@ -17,7 +17,7 @@ import {
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatDelta, formatNumber, formatPercent, getMarginColor, getMarginBg } from '@/utils/format';
-import PriceEditModal from '@/components/PriceEditModal';
+import StyleEditModal from '@/components/StyleEditModal';
 import PricingHistoryModal from '@/components/PricingHistoryModal';
 
 interface PricingViewProps {
@@ -31,6 +31,7 @@ interface PricingViewProps {
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
   onPricingUpdated?: (updated: PricingRecord) => void;
+  onCostUpdated?: (updated: CostRecord) => void;
 }
 
 type PriceSource = 'pricing' | 'products' | 'sales';
@@ -86,6 +87,7 @@ export default function PricingView({
   searchQuery: globalSearchQuery,
   onStyleClick,
   onPricingUpdated,
+  onCostUpdated,
 }: PricingViewProps) {
   // Edit / history modal state (pricing record targeted by the action)
   const [editingPrice, setEditingPrice] = useState<PricingRecord | null>(null);
@@ -883,11 +885,17 @@ export default function PricingView({
       </div>
 
       {editingPrice && (
-        <PriceEditModal
+        <StyleEditModal
           pricing={editingPrice}
+          cost={
+            costs.find(
+              (c) => c.styleNumber === editingPrice.styleNumber && c.season === editingPrice.season,
+            ) ?? null
+          }
           onClose={() => setEditingPrice(null)}
-          onSaved={(updated) => {
-            onPricingUpdated?.(updated);
+          onSaved={(updates) => {
+            if (updates.pricing) onPricingUpdated?.(updates.pricing);
+            if (updates.cost) onCostUpdated?.(updates.cost);
             setEditingPrice(null);
           }}
         />

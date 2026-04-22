@@ -1015,7 +1015,7 @@ export default function Home() {
     setSelectedStyleNumber(styleNumber);
   };
 
-  // Called by CostEditModal after a successful save. Replace the matching
+  // Called by StyleEditModal after a successful save. Replace the matching
   // cost in local state (no full re-fetch) and sync to localStorage.
   const handleCostUpdated = (updated: CostRecord) => {
     setCosts((prev) => {
@@ -2035,6 +2035,7 @@ export default function Home() {
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
                 onCostUpdated={handleCostUpdated}
+                onPricingUpdated={handlePricingUpdated}
               />
             </ErrorBoundary>
           )}
@@ -2067,6 +2068,7 @@ export default function Home() {
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
                 onPricingUpdated={handlePricingUpdated}
+                onCostUpdated={handleCostUpdated}
               />
             </ErrorBoundary>
           )}

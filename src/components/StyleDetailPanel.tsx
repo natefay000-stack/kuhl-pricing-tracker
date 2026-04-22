@@ -20,9 +20,8 @@ import {
 import { formatCurrencyShort } from '@/utils/format';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import { matchesDivision } from '@/utils/divisionMap';
-import CostEditModal from '@/components/CostEditModal';
+import StyleEditModal from '@/components/StyleEditModal';
 import CostHistoryModal from '@/components/CostHistoryModal';
-import PriceEditModal from '@/components/PriceEditModal';
 import PricingHistoryModal from '@/components/PricingHistoryModal';
 
 interface StyleDetailPanelProps {
@@ -105,10 +104,9 @@ export default function StyleDetailPanel({
   onCostUpdated,
   onPricingUpdated,
 }: StyleDetailPanelProps) {
-  // Modal state
+  // Modal state — single unified edit modal for MSRP/Wholesale/Landed/Margin
   const [editing, setEditing] = useState(false);
   const [viewingHistory, setViewingHistory] = useState(false);
-  const [editingPrice, setEditingPrice] = useState(false);
   const [viewingPriceHistory, setViewingPriceHistory] = useState(false);
 
   // Panel-level season filter. 'all' defers to the parent view's global
@@ -680,8 +678,8 @@ export default function StyleDetailPanel({
               {latestPricingRecord && (
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => setEditingPrice(true)}
-                    title={`Edit wholesale / MSRP (${latestPricingRecord.season})`}
+                    onClick={() => setEditing(true)}
+                    title="Edit MSRP / Wholesale / Landed / Margin"
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 rounded transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
@@ -744,11 +742,11 @@ export default function StyleDetailPanel({
                 <Package className="w-4 h-4 text-cyan-400" />
                 Cost / Margin
               </h4>
-              {costInfo?.costRecord && (
+              {(costInfo?.costRecord || latestPricingRecord) && (
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setEditing(true)}
-                    title="Edit landed / margin"
+                    title="Edit MSRP / Wholesale / Landed / Margin"
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
@@ -756,7 +754,7 @@ export default function StyleDetailPanel({
                   </button>
                   <button
                     onClick={() => setViewingHistory(true)}
-                    title="View edit history"
+                    title="View cost edit history"
                     className="p-1 text-text-muted hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
                   >
                     <History className="w-3.5 h-3.5" />
@@ -1093,12 +1091,14 @@ export default function StyleDetailPanel({
         }
       `}</style>
 
-      {editing && costInfo?.costRecord && (
-        <CostEditModal
-          cost={costInfo.costRecord}
+      {editing && (costInfo?.costRecord || latestPricingRecord) && (
+        <StyleEditModal
+          cost={costInfo?.costRecord ?? null}
+          pricing={latestPricingRecord}
           onClose={() => setEditing(false)}
-          onSaved={(updated) => {
-            onCostUpdated?.(updated);
+          onSaved={(updates) => {
+            if (updates.cost) onCostUpdated?.(updates.cost);
+            if (updates.pricing) onPricingUpdated?.(updates.pricing);
             setEditing(false);
           }}
         />
@@ -1109,17 +1109,6 @@ export default function StyleDetailPanel({
           styleNumber={costInfo.costRecord.styleNumber}
           season={costInfo.costRecord.season}
           onClose={() => setViewingHistory(false)}
-        />
-      )}
-
-      {editingPrice && latestPricingRecord && (
-        <PriceEditModal
-          pricing={latestPricingRecord}
-          onClose={() => setEditingPrice(false)}
-          onSaved={(updated) => {
-            onPricingUpdated?.(updated);
-            setEditingPrice(false);
-          }}
         />
       )}
       {viewingPriceHistory && latestPricingRecord && (

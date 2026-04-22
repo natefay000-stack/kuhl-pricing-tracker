@@ -29,7 +29,7 @@ import {
   Edit3,
   History,
 } from 'lucide-react';
-import CostEditModal from '@/components/CostEditModal';
+import StyleEditModal from '@/components/StyleEditModal';
 import CostHistoryModal from '@/components/CostHistoryModal';
 
 interface CostsViewProps {
@@ -43,6 +43,7 @@ interface CostsViewProps {
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
   onCostUpdated?: (updated: CostRecord) => void;
+  onPricingUpdated?: (updated: PricingRecord) => void;
 }
 
 type SortField = 'styleNumber' | 'styleName' | 'revenue' | 'units' | 'factory' | 'coo' | 'fob' | 'landed' | 'wholesale' | 'msrp' | 'margin' | 'designTeam';
@@ -77,6 +78,7 @@ export default function CostsView({
   searchQuery: globalSearchQuery,
   onStyleClick,
   onCostUpdated,
+  onPricingUpdated,
 }: CostsViewProps) {
   // Edit / history modal state
   const [editingCost, setEditingCost] = useState<CostRecord | null>(null);
@@ -1367,11 +1369,17 @@ export default function CostsView({
       )}
 
       {editingCost && (
-        <CostEditModal
+        <StyleEditModal
           cost={editingCost}
+          pricing={
+            pricing.find(
+              (p) => p.styleNumber === editingCost.styleNumber && p.season === editingCost.season,
+            ) ?? null
+          }
           onClose={() => setEditingCost(null)}
-          onSaved={(updated) => {
-            onCostUpdated?.(updated);
+          onSaved={(updates) => {
+            if (updates.cost) onCostUpdated?.(updates.cost);
+            if (updates.pricing) onPricingUpdated?.(updates.pricing);
             setEditingCost(null);
           }}
         />
