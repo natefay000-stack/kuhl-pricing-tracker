@@ -119,6 +119,11 @@ export default function GridView({
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
   const [localGenderFilter, setLocalGenderFilter] = useState<string>('');
   const [localCategoryFilter, setLocalCategoryFilter] = useState<string>('');
+  // Default-on: skip styles that have no MSRP / Wholesale / Landed across any
+  // of the displayed season columns. Keeps the grid scannable — off-season
+  // and carry-over styles don't clutter the view when you're reviewing a
+  // handful of seasons.
+  const [hideEmptyRows, setHideEmptyRows] = useState<boolean>(true);
 
   // ── Editor name ──
   const [editorName, setEditorName] = useState<string>(() => {
@@ -273,6 +278,24 @@ export default function GridView({
     const styleNumQ = styleNumberFilter.trim().toLowerCase();
     const styleNameQ = styleNameFilter.trim().toLowerCase();
 
+    // When hide-empty is on, a row only survives if at least one
+    // displayed season has a populated MSRP / wholesale / landed value.
+    const rowHasAnyData = (sn: string): boolean => {
+      for (const season of displaySeasons) {
+        const pr = pricingBySS.get(`${sn}-${season}`);
+        if (pr && ((pr.msrp ?? 0) > 0 || (pr.price ?? 0) > 0)) return true;
+        const c = costBySS.get(`${sn}-${season}`);
+        if (c && (c.landed ?? 0) > 0) return true;
+        // Fallback: if the Product record is in this exact season, count
+        // its line-list price/cost as data too (matches getCell behavior).
+        const p = productByStyle.get(sn);
+        if (p && p.season === season && ((p.price ?? 0) > 0 || (p.msrp ?? 0) > 0 || (p.cost ?? 0) > 0)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     return Array.from(set)
       .filter((sn) => {
         const p = productByStyle.get(sn);
@@ -301,6 +324,8 @@ export default function GridView({
         }
         if (styleNumQ && !sn.toLowerCase().includes(styleNumQ)) return false;
         if (styleNameQ && !(p?.styleDesc ?? '').toLowerCase().includes(styleNameQ)) return false;
+        // Hide empty rows (last check — cheapest to run after everything else)
+        if (hideEmptyRows && !rowHasAnyData(sn)) return false;
         return true;
       })
       .sort((a, b) => a.localeCompare(b));
@@ -309,6 +334,9 @@ export default function GridView({
     pricing,
     costs,
     productByStyle,
+    pricingBySS,
+    costBySS,
+    displaySeasons,
     selectedDivision,
     selectedCategory,
     selectedDesigner,
@@ -318,6 +346,7 @@ export default function GridView({
     globalSearchQuery,
     styleNumberFilter,
     styleNameFilter,
+    hideEmptyRows,
   ]);
 
   const hasFilters =
@@ -956,6 +985,20 @@ export default function GridView({
               {categories.map((c) => (<option key={c} value={c}>{c}</option>))}
             </select>
           </div>
+
+          {/* Hide-empty-rows toggle */}
+          <label
+            className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold rounded-lg cursor-pointer select-none border-2 border-border-primary hover:bg-hover-accent"
+            title="Hide style rows that have no MSRP / Wholesale / Landed data in any of the displayed season columns."
+          >
+            <input
+              type="checkbox"
+              checked={hideEmptyRows}
+              onChange={(e) => setHideEmptyRows(e.target.checked)}
+              className="w-4 h-4 accent-cyan-600"
+            />
+            <span className="text-text-secondary">Hide empty rows</span>
+          </label>
 
           {/* Clear Filters */}
           {hasFilters && (
