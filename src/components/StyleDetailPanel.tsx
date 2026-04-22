@@ -111,24 +111,54 @@ export default function StyleDetailPanel({
   const [editingPrice, setEditingPrice] = useState(false);
   const [viewingPriceHistory, setViewingPriceHistory] = useState(false);
 
+  // Panel-level season filter. 'all' defers to the parent view's global
+  // selectedSeason. Picking a pill overrides that to a single season so
+  // the user can scope any of the sales-driven aggregations without
+  // leaving the panel.
+  const [panelSeason, setPanelSeason] = useState<string>('all');
+
   // Style metadata (first Product match for this style)
   const styleInfo = useMemo(() => {
     return products.find((p) => p.styleNumber === styleNumber) ?? null;
   }, [products, styleNumber]);
 
+  // Seasons this style has appeared in, derived from raw sales ignoring
+  // any filters — used to populate the panel's pill row.
+  const styleSeasons = useMemo(() => {
+    const seen = new Set<string>();
+    for (const s of sales) {
+      if (s.styleNumber === styleNumber && s.season) seen.add(s.season);
+    }
+    return sortSeasons(Array.from(seen));
+  }, [sales, styleNumber]);
+
+  // Reset the panel season when switching styles so we don't carry a stale
+  // pick from the previous detail view.
+  useEffect(() => {
+    setPanelSeason('all');
+  }, [styleNumber]);
+
   // ── Filter-aware sales set ──
   // Sales aggregations (channel, customer, color, geography) respect
   // selectedSeason / selectedDivision / selectedCategory. Pricing + Cost
   // tables stay full-history since they're catalog-level reference data.
+  //
+  // `panelSeason` is an explicit in-panel override: when set to a specific
+  // season it overrides the parent's global selectedSeason for the panel
+  // only. 'all' means "defer to whatever the parent view had selected".
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.styleNumber !== styleNumber) return false;
-      if (selectedSeason && !matchesSeason(s.season, selectedSeason)) return false;
+      if (panelSeason !== 'all') {
+        if (s.season !== panelSeason) return false;
+      } else if (selectedSeason && !matchesSeason(s.season, selectedSeason)) {
+        return false;
+      }
       if (selectedDivision && !matchesDivision(s.divisionDesc ?? '', selectedDivision)) return false;
       if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
       return true;
     });
-  }, [sales, styleNumber, selectedSeason, selectedDivision, selectedCategory]);
+  }, [sales, styleNumber, selectedSeason, selectedDivision, selectedCategory, panelSeason]);
 
   // ── Pricing by Season ──
   const pricingBySeason = useMemo(() => {
@@ -490,6 +520,49 @@ export default function StyleDetailPanel({
             <span className="text-xs text-text-muted ml-2">
               ({formatCurrencyShort(filteredSalesTotals.revenue)} · {formatNumber(filteredSalesTotals.units)} units)
             </span>
+          </div>
+        )}
+
+        {/* Panel-level season pills */}
+        {styleSeasons.length > 0 && (
+          <div className="px-6 pt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs uppercase tracking-wide text-text-muted font-semibold">
+              Season
+            </span>
+            <button
+              onClick={() => setPanelSeason('all')}
+              className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                panelSeason === 'all'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-surface-tertiary text-text-secondary hover:bg-gray-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              All
+            </button>
+            {styleSeasons.map((s) => {
+              const active = panelSeason === s;
+              const isSpring = s.endsWith('SP');
+              return (
+                <button
+                  key={s}
+                  onClick={() => setPanelSeason(s)}
+                  className={`px-3 py-1 text-xs font-mono font-semibold rounded-full transition-colors ${
+                    active
+                      ? isSpring ? 'bg-emerald-500 text-white' : 'bg-orange-500 text-white'
+                      : isSpring
+                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 hover:bg-emerald-100'
+                      : 'bg-orange-50 dark:bg-orange-950 text-orange-700 hover:bg-orange-100'
+                  }`}
+                >
+                  {s}
+                </button>
+              );
+            })}
+            {panelSeason !== 'all' && (
+              <span className="text-[11px] text-text-muted ml-1">
+                (overrides parent filter — click All to reset)
+              </span>
+            )}
           </div>
         )}
 
