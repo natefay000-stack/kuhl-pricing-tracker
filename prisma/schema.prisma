@@ -220,6 +220,23 @@ model Cost {
   @@index([styleNumber])
 }
 
+// kuhl.com site status per style — populated by the sync endpoint when
+// credentials are configured (STRAPI_API_TOKEN or KUHL_API_KEY env vars).
+// Inert and stays empty until config is provided.
+model KuhlSiteStatus {
+  id             String   @id @default(cuid())
+  styleNumber    String   @unique
+  isLive         Boolean?
+  siteUrl        String?
+  currentPrice   Float?
+  currentMsrp    Float?
+  source         String?  // "strapi" | "api" | "error"
+  errorMessage   String?
+  lastCheckedAt  DateTime @default(now())
+
+  @@index([isLive])
+}
+
 // ATS (Available To Sell) inventory snapshot, aggregated to style × color.
 // Imported via xlsx. Each import replaces all rows for a new snapshot.
 model AtsInventory {

@@ -42,6 +42,11 @@ import {
   X,
   Sparkles,
   Skull,
+  Globe,
+  RefreshCw,
+  EyeOff,
+  Eye,
+  HelpCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import MultiSelect from '@/components/MultiSelect';
@@ -105,6 +110,30 @@ interface Decision {
   decidedBy: string;
   note: string | null;
   decidedAt: string;
+}
+
+interface KuhlSiteStatus {
+  id: string;
+  styleNumber: string;
+  isLive: boolean | null;
+  siteUrl: string | null;
+  currentPrice: number | null;
+  currentMsrp: number | null;
+  source: string | null;
+  errorMessage: string | null;
+  lastCheckedAt: string;
+}
+
+interface SyncReport {
+  configured: boolean;
+  source: 'strapi' | 'api' | 'none';
+  fetched: number;
+  live: number;
+  hidden: number;
+  notFound: number;
+  errors: number;
+  tookMs: number;
+  message: string;
 }
 
 interface RowMetrics {
@@ -179,8 +208,14 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
   // ── Data fetch ──
   const [ats, setAts] = useState<AtsRow[] | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [siteStatuses, setSiteStatuses] = useState<KuhlSiteStatus[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [snapshotDate, setSnapshotDate] = useState<string | null>(null);
+
+  // ── kuhl.com sync state ──
+  const [syncing, setSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // ── UI state ──
   const [section, setSection] = useState<SectionKey>('urgent');
@@ -208,20 +243,43 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
   const refresh = useCallback(async () => {
     setLoadError(null);
     try {
-      const [atsRes, decRes] = await Promise.all([
+      const [atsRes, decRes, siteRes] = await Promise.all([
         fetch('/api/data/ats'),
         fetch('/api/data/ats-decisions'),
+        fetch('/api/data/kuhl-site-status'),
       ]);
       const atsJson = await atsRes.json();
       const decJson = await decRes.json();
+      const siteJson = await siteRes.json().catch(() => ({ statuses: [] }));
       if (!atsRes.ok) throw new Error(atsJson.error || `HTTP ${atsRes.status}`);
       if (!decRes.ok) throw new Error(decJson.error || `HTTP ${decRes.status}`);
       setAts(atsJson.ats ?? []);
       setDecisions(decJson.decisions ?? []);
+      setSiteStatuses(siteJson.statuses ?? []);
       setSnapshotDate(atsJson.snapshotDate ?? null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       setAts([]);
+    }
+  }, []);
+
+  const runSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncReport(null);
+    try {
+      const res = await fetch('/api/data/sync-kuhl-site', { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || j.message || `HTTP ${res.status}`);
+      setSyncReport(j as SyncReport);
+      // Refresh statuses from DB after sync
+      const statusRes = await fetch('/api/data/kuhl-site-status');
+      const statusJson = await statusRes.json().catch(() => ({ statuses: [] }));
+      setSiteStatuses(statusJson.statuses ?? []);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncing(false);
     }
   }, []);
 
@@ -238,6 +296,20 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
     }
     return m;
   }, [decisions]);
+
+  // Latest kuhl.com status per styleNumber
+  const siteStatusByStyle = useMemo(() => {
+    const m = new Map<string, KuhlSiteStatus>();
+    for (const s of siteStatuses) m.set(s.styleNumber, s);
+    return m;
+  }, [siteStatuses]);
+
+  const lastSyncedAt = useMemo(() => {
+    if (siteStatuses.length === 0) return null;
+    return siteStatuses.reduce<string | null>((latest, s) => {
+      return !latest || s.lastCheckedAt > latest ? s.lastCheckedAt : latest;
+    }, null);
+  }, [siteStatuses]);
 
   const landedByKey = useMemo(() => {
     // Best available landed cost per style (use any season — prefer most recent)
@@ -755,6 +827,11 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
               Last ATS snapshot: {new Date(snapshotDate).toLocaleString()} · sales window: last {SALES_WINDOW_DAYS} days
             </p>
           )}
+          {lastSyncedAt && (
+            <p className="text-xs text-text-faint">
+              Last kuhl.com sync: {new Date(lastSyncedAt).toLocaleString()}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -777,6 +854,15 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
             {uploading ? 'Importing…' : 'Import ATS'}
           </button>
           <button
+            onClick={runSync}
+            disabled={syncing}
+            title="Pull current live/hidden status from kuhl.com. Read-only."
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+            {syncing ? 'Syncing…' : 'Sync kuhl.com'}
+          </button>
+          <button
             onClick={handleExport}
             disabled={sectionRows.length === 0}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 transition-colors"
@@ -797,6 +883,29 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
         <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-400 flex items-center gap-2">
           <Check className="w-4 h-4" />
           {uploadSuccess}
+        </div>
+      )}
+      {syncError && (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" />
+          Sync failed: {syncError}
+        </div>
+      )}
+      {syncReport && !syncReport.configured && (
+        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm text-blue-500 flex items-center gap-2">
+          <Globe className="w-4 h-4" />
+          kuhl.com sync isn't configured yet. Paste a Strapi API token into Vercel env vars
+          (<code className="font-mono text-xs">STRAPI_API_BASE</code> +{' '}
+          <code className="font-mono text-xs">STRAPI_API_TOKEN</code>) and click Sync again.
+        </div>
+      )}
+      {syncReport && syncReport.configured && (
+        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm text-blue-500 flex items-center gap-2">
+          <Check className="w-4 h-4" />
+          Synced {syncReport.fetched} entries from {syncReport.source} · {syncReport.live} live · {syncReport.hidden} hidden · {syncReport.notFound} not on site · {syncReport.tookMs}ms
+          {syncReport.message && syncReport.errors > 0 && (
+            <span className="ml-2 text-red-400">· {syncReport.message}</span>
+          )}
         </div>
       )}
 
@@ -951,6 +1060,12 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
                   <th className="px-3 py-2 text-left">Color</th>
                   <th className="px-3 py-2 text-left">Description</th>
                   <th className="px-3 py-2 text-left">Class</th>
+                  <th
+                    className="px-3 py-2 text-center"
+                    title="Live / hidden status on kuhl.com (from the last sync)"
+                  >
+                    On site
+                  </th>
                   <th className="px-3 py-2 text-right">ATS</th>
                   <th className="px-3 py-2 text-right">OH</th>
                   <th className="px-3 py-2 text-right">WOS</th>
@@ -1001,6 +1116,55 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
                         <span className="inline-block px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted font-mono">
                           {r.classification ?? '—'}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {(() => {
+                          const s = siteStatusByStyle.get(r.styleNumber);
+                          if (!s) {
+                            return (
+                              <span
+                                title="Not synced yet — click Sync kuhl.com"
+                                className="inline-flex items-center text-text-faint"
+                              >
+                                <HelpCircle className="w-4 h-4" />
+                              </span>
+                            );
+                          }
+                          if (s.isLive === true) {
+                            const href = s.siteUrl ?? null;
+                            const badge = (
+                              <span
+                                title={`Live on kuhl.com${s.currentPrice ? ` · $${s.currentPrice.toFixed(2)}` : ''}`}
+                                className="inline-flex items-center gap-1 text-emerald-500"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </span>
+                            );
+                            return href ? (
+                              <a href={href} target="_blank" rel="noreferrer">{badge}</a>
+                            ) : (
+                              badge
+                            );
+                          }
+                          if (s.isLive === false) {
+                            return (
+                              <span
+                                title="Hidden / unpublished on kuhl.com"
+                                className="inline-flex items-center gap-1 text-amber-500"
+                              >
+                                <EyeOff className="w-4 h-4" />
+                              </span>
+                            );
+                          }
+                          return (
+                            <span
+                              title={s.errorMessage ?? 'Not found in kuhl.com CMS'}
+                              className="inline-flex items-center gap-1 text-text-muted"
+                            >
+                              <HelpCircle className="w-4 h-4" />
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className={`px-3 py-2 text-right font-mono ${atsNegative ? 'text-red-500 font-bold' : 'text-text-primary'}`}>
                         {fmtNumber(r.unitsATS)}
