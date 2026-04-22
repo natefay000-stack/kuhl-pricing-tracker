@@ -230,6 +230,12 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // kuhl.com report upload (separate from ATS)
+  const [siteUploading, setSiteUploading] = useState(false);
+  const [siteUploadSuccess, setSiteUploadSuccess] = useState<string | null>(null);
+  const [siteUploadError, setSiteUploadError] = useState<string | null>(null);
+  const siteFileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Decision modal state
   const [decidingRow, setDecidingRow] = useState<EnrichedRow | null>(null);
   const [decisionAction, setDecisionAction] = useState<DecisionAction>('PULL_FROM_SITE');
@@ -262,6 +268,31 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
       setAts([]);
     }
   }, []);
+
+  // Upload the kuhl.com Style Report xlsx
+  const handleSiteUpload = async (file: File) => {
+    setSiteUploading(true);
+    setSiteUploadError(null);
+    setSiteUploadSuccess(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/data/import-kuhl-site', { method: 'POST', body: fd });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || j.message || `HTTP ${res.status}`);
+      setSiteUploadSuccess(
+        `Imported ${j.reportedStyles} live styles · ${j.hidden} hidden · ${j.notOnSite} not on site.`,
+      );
+      // Refresh KuhlSiteStatus from DB
+      const statusRes = await fetch('/api/data/kuhl-site-status');
+      const statusJson = await statusRes.json().catch(() => ({ statuses: [] }));
+      setSiteStatuses(statusJson.statuses ?? []);
+    } catch (err) {
+      setSiteUploadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSiteUploading(false);
+    }
+  };
 
   const runSync = useCallback(async () => {
     setSyncing(true);
@@ -845,6 +876,17 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
               e.target.value = '';
             }}
           />
+          <input
+            ref={siteFileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleSiteUpload(f);
+              e.target.value = '';
+            }}
+          />
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -854,13 +896,22 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
             {uploading ? 'Importing…' : 'Import ATS'}
           </button>
           <button
-            onClick={runSync}
-            disabled={syncing}
-            title="Pull current live/hidden status from kuhl.com. Read-only."
+            onClick={() => siteFileInputRef.current?.click()}
+            disabled={siteUploading}
+            title="Import a kuhl.com Style Report xlsx to set live/hidden status for every style."
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg disabled:opacity-50 transition-colors"
           >
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-            {syncing ? 'Syncing…' : 'Sync kuhl.com'}
+            {siteUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+            {siteUploading ? 'Importing…' : 'Import kuhl.com report'}
+          </button>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            title="Pull live/hidden status directly from the kuhl.com Strapi CMS (requires STRAPI_API_TOKEN in Vercel env)."
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-surface-tertiary hover:bg-gray-300 dark:hover:bg-gray-700 text-text-secondary rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {syncing ? 'Syncing…' : 'API sync'}
           </button>
           <button
             onClick={handleExport}
@@ -883,6 +934,18 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
         <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm text-emerald-400 flex items-center gap-2">
           <Check className="w-4 h-4" />
           {uploadSuccess}
+        </div>
+      )}
+      {siteUploadError && (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" />
+          kuhl.com report failed: {siteUploadError}
+        </div>
+      )}
+      {siteUploadSuccess && (
+        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm text-blue-500 flex items-center gap-2">
+          <Check className="w-4 h-4" />
+          {siteUploadSuccess}
         </div>
       )}
       {syncError && (
