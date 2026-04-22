@@ -254,23 +254,36 @@ export default function StyleDetailPanel({
   }, [costs, products, styleNumber, pricingBySeason]);
 
   // ── Sales by channel (filter-aware, enhanced) ──
+  // Also tracks Kultur-specific subtotals so we can compute a
+  // retail-adjusted margin: units sold to "KUHL Kultur *" customers are
+  // booked at wholesale in our sales data, but they'll eventually sell
+  // through at MSRP in KUHL's own stores. The adjusted margin re-values
+  // those units at MSRP and leaves the rest of the channel alone.
   const salesByChannel = useMemo(() => {
-    const grouped = new Map<string, { revenue: number; units: number }>();
+    const grouped = new Map<
+      string,
+      { revenue: number; units: number; kulturRevenue: number; kulturUnits: number }
+    >();
     filteredSales.forEach((s) => {
-      // Break out comma-separated aggregates the same way other views do
       const raw = (s.customerType ?? 'Other').toString().toUpperCase();
       const channels = raw.includes(',')
         ? raw.split(',').map((x) => x.trim()).filter(Boolean)
         : [raw];
-      // Attribute to the first known channel only (avoids double counting)
       const ch = channels[0] || 'Other';
-      const e = grouped.get(ch) ?? { revenue: 0, units: 0 };
-      e.revenue += s.revenue || 0;
-      e.units += s.unitsBooked || 0;
+      const e = grouped.get(ch) ?? { revenue: 0, units: 0, kulturRevenue: 0, kulturUnits: 0 };
+      const rev = s.revenue || 0;
+      const units = s.unitsBooked || 0;
+      e.revenue += rev;
+      e.units += units;
+      if (/^kuhl\s+kultur/i.test(s.customer ?? '')) {
+        e.kulturRevenue += rev;
+        e.kulturUnits += units;
+      }
       grouped.set(ch, e);
     });
     const totalRev = Array.from(grouped.values()).reduce((x, c) => x + c.revenue, 0);
     const landedForMargin = costInfo?.cost ?? 0;
+    const msrpForMargin = costInfo?.msrp ?? 0;
 
     return Array.from(grouped.entries())
       .map(([channel, data]) => {
@@ -279,12 +292,26 @@ export default function StyleDetailPanel({
           avgNetPrice > 0 && landedForMargin > 0
             ? ((avgNetPrice - landedForMargin) / avgNetPrice) * 100
             : null;
+
+        // Retail-adjusted: re-value Kultur units at full MSRP
+        let adjustedMargin: number | null = null;
+        if (data.kulturUnits > 0 && msrpForMargin > 0 && landedForMargin > 0) {
+          const otherRevenue = data.revenue - data.kulturRevenue;
+          const effectiveRev = otherRevenue + data.kulturUnits * msrpForMargin;
+          const effectiveCost = data.units * landedForMargin;
+          if (effectiveRev > 0) {
+            adjustedMargin = ((effectiveRev - effectiveCost) / effectiveRev) * 100;
+          }
+        }
+
         return {
           channel,
           revenue: data.revenue,
           units: data.units,
           avgNetPrice,
           margin,
+          adjustedMargin,
+          kulturUnits: data.kulturUnits,
           share: totalRev > 0 ? (data.revenue / totalRev) * 100 : 0,
         };
       })
@@ -848,6 +875,12 @@ export default function StyleDetailPanel({
                     <th className="text-right py-1.5 font-semibold">%</th>
                     <th className="text-right py-1.5 font-semibold">Net</th>
                     <th className="text-right py-1.5 font-semibold">Margin</th>
+                    <th
+                      className="text-right py-1.5 font-semibold"
+                      title="Retail-adjusted margin — KUHL Kultur units re-valued at MSRP (they're booked at wholesale in our sales data but sell through at retail in KUHL's own stores)."
+                    >
+                      Retail Adj
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -868,6 +901,24 @@ export default function StyleDetailPanel({
                           : 'text-red-500'
                       }`}>
                         {formatPct(c.margin)}
+                      </td>
+                      <td
+                        className={`py-1.5 text-right font-mono font-semibold ${
+                          c.adjustedMargin == null
+                            ? 'text-text-faint'
+                            : c.adjustedMargin >= 60
+                            ? 'text-emerald-500'
+                            : c.adjustedMargin >= 45
+                            ? 'text-amber-500'
+                            : 'text-red-500'
+                        }`}
+                        title={
+                          c.kulturUnits > 0
+                            ? `${formatNumber(c.kulturUnits)} Kultur units re-valued at MSRP $${(costInfo?.msrp ?? 0).toFixed(2)}`
+                            : 'No KUHL Kultur units in this channel — booked margin already reflects reality.'
+                        }
+                      >
+                        {c.adjustedMargin == null ? '—' : formatPct(c.adjustedMargin)}
                       </td>
                     </tr>
                   ))}
