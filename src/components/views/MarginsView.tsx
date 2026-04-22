@@ -109,6 +109,9 @@ interface ChannelPerformance {
   avgWholesalePrice: number;
   avgLanded: number;
   trueMargin: number;
+  /** Retail-adjusted margin — KUHL Kultur units re-valued at MSRP. null when no adjustment applies. */
+  adjustedMargin: number | null;
+  kulturUnits: number;
   avgDiscount: number;
   revenuePct: number;
 }
@@ -450,7 +453,21 @@ export default function MarginsView({
 
   // Channel Performance Analysis - True Margin by Channel
   const channelPerformance = useMemo(() => {
-    const byChannel = new Map<string, { revenue: number; units: number; totalCost: number; totalWholesale: number; totalListPrice: number; stylesWithCost: number }>();
+    const byChannel = new Map<string, {
+      revenue: number;
+      units: number;
+      totalCost: number;
+      totalWholesale: number;
+      totalListPrice: number;
+      stylesWithCost: number;
+      // Kultur-only buckets used to retail-adjust margins: units sold to
+      // KUHL Kultur * customers are booked at wholesale but sell through
+      // at MSRP in KUHL's own stores, so we re-value them when computing
+      // the "adjusted" margin.
+      kulturUnits: number;
+      kulturRevenue: number;
+      kulturMsrpValue: number; // sum of units × msrp for Kultur rows
+    }>();
 
     filteredSales.forEach(record => {
       // Apply division/category filters
@@ -464,11 +481,20 @@ export default function MarginsView({
       const priceInfo = wholesalePriceLookup.get(record.styleNumber);
       const wholesalePrice = priceInfo?.wholesale || 0;
       const msrp = priceInfo?.msrp || 0;
-      // Reference list price: MSRP for retail channels, wholesale for wholesale channels
       const listPrice = RETAIL_CHANNELS.has(channel) ? msrp : wholesalePrice;
 
       if (!byChannel.has(channel)) {
-        byChannel.set(channel, { revenue: 0, units: 0, totalCost: 0, totalWholesale: 0, totalListPrice: 0, stylesWithCost: 0 });
+        byChannel.set(channel, {
+          revenue: 0,
+          units: 0,
+          totalCost: 0,
+          totalWholesale: 0,
+          totalListPrice: 0,
+          stylesWithCost: 0,
+          kulturUnits: 0,
+          kulturRevenue: 0,
+          kulturMsrpValue: 0,
+        });
       }
 
       const entry = byChannel.get(channel)!;
@@ -478,21 +504,40 @@ export default function MarginsView({
       entry.totalWholesale += units * wholesalePrice;
       entry.totalListPrice += units * listPrice;
       if (landedCost > 0) entry.stylesWithCost++;
+
+      if (/^kuhl\s+kultur/i.test(record.customer ?? '') && units > 0 && msrp > 0) {
+        entry.kulturUnits += units;
+        entry.kulturRevenue += record.revenue || 0;
+        entry.kulturMsrpValue += units * msrp;
+      }
     });
 
     const totalRevenue = Array.from(byChannel.values()).reduce((sum, c) => sum + c.revenue, 0);
 
     const results: ChannelPerformance[] = PRIMARY_CHANNELS.map(channel => {
-      const data = byChannel.get(channel) || { revenue: 0, units: 0, totalCost: 0, totalWholesale: 0, totalListPrice: 0, stylesWithCost: 0 };
+      const data = byChannel.get(channel) || {
+        revenue: 0, units: 0, totalCost: 0, totalWholesale: 0, totalListPrice: 0,
+        stylesWithCost: 0, kulturUnits: 0, kulturRevenue: 0, kulturMsrpValue: 0,
+      };
       const avgNetPrice = data.units > 0 ? data.revenue / data.units : 0;
       const avgLanded = data.units > 0 ? data.totalCost / data.units : 0;
       const avgWholesalePrice = data.units > 0 ? data.totalWholesale / data.units : 0;
       const avgListPrice = data.units > 0 ? data.totalListPrice / data.units : 0;
-      // True Margin = (Net Unit Price - Landed Cost) / Net Unit Price × 100
       const trueMargin = avgNetPrice > 0 ? ((avgNetPrice - avgLanded) / avgNetPrice) * 100 : 0;
-      // Avg Discount = (List Price - Net Price) / List Price × 100
-      // Positive = selling below list, Negative = selling above list (premium)
       const avgDiscount = avgListPrice > 0 ? ((avgListPrice - avgNetPrice) / avgListPrice) * 100 : 0;
+
+      // Retail-adjusted margin (only when Kultur units exist in this channel):
+      //   effectiveRev   = otherRevenue + kulturMsrpValue
+      //   effectiveCost  = totalUnits × avgLanded
+      let adjustedMargin: number | null = null;
+      if (data.kulturUnits > 0 && avgLanded > 0) {
+        const otherRevenue = data.revenue - data.kulturRevenue;
+        const effectiveRev = otherRevenue + data.kulturMsrpValue;
+        const effectiveCost = data.units * avgLanded;
+        if (effectiveRev > 0) {
+          adjustedMargin = ((effectiveRev - effectiveCost) / effectiveRev) * 100;
+        }
+      }
 
       return {
         channel,
@@ -503,12 +548,14 @@ export default function MarginsView({
         avgWholesalePrice,
         avgLanded,
         trueMargin,
+        adjustedMargin,
+        kulturUnits: data.kulturUnits,
         avgDiscount,
         revenuePct: totalRevenue > 0 ? (data.revenue / totalRevenue) * 100 : 0,
       };
     });
 
-    // Add blended total
+    // Blended totals (aggregate Kultur adjustments across all channels)
     const totalUnits = results.reduce((sum, c) => sum + c.units, 0);
     const totalCost = results.reduce((sum, c) => sum + (c.avgLanded * c.units), 0);
     const totalWholesale = results.reduce((sum, c) => sum + (c.avgWholesalePrice * c.units), 0);
@@ -516,12 +563,25 @@ export default function MarginsView({
       const data = byChannel.get(c.channel);
       return sum + (data?.totalListPrice || 0);
     }, 0);
+    const totalKulturUnits = Array.from(byChannel.values()).reduce((s, d) => s + d.kulturUnits, 0);
+    const totalKulturRevenue = Array.from(byChannel.values()).reduce((s, d) => s + d.kulturRevenue, 0);
+    const totalKulturMsrpValue = Array.from(byChannel.values()).reduce((s, d) => s + d.kulturMsrpValue, 0);
     const blendedAvgNetPrice = totalUnits > 0 ? totalRevenue / totalUnits : 0;
     const blendedAvgLanded = totalUnits > 0 ? totalCost / totalUnits : 0;
     const blendedAvgWholesale = totalUnits > 0 ? totalWholesale / totalUnits : 0;
     const blendedAvgListPrice = totalUnits > 0 ? totalListPrice / totalUnits : 0;
     const blendedMargin = blendedAvgNetPrice > 0 ? ((blendedAvgNetPrice - blendedAvgLanded) / blendedAvgNetPrice) * 100 : 0;
     const blendedDiscount = blendedAvgListPrice > 0 ? ((blendedAvgListPrice - blendedAvgNetPrice) / blendedAvgListPrice) * 100 : 0;
+
+    let blendedAdjustedMargin: number | null = null;
+    if (totalKulturUnits > 0 && blendedAvgLanded > 0) {
+      const otherRev = totalRevenue - totalKulturRevenue;
+      const effectiveRev = otherRev + totalKulturMsrpValue;
+      const effectiveCost = totalUnits * blendedAvgLanded;
+      if (effectiveRev > 0) {
+        blendedAdjustedMargin = ((effectiveRev - effectiveCost) / effectiveRev) * 100;
+      }
+    }
 
     return {
       channels: results,
@@ -532,6 +592,8 @@ export default function MarginsView({
         avgWholesalePrice: blendedAvgWholesale,
         avgLanded: blendedAvgLanded,
         trueMargin: blendedMargin,
+        adjustedMargin: blendedAdjustedMargin,
+        kulturUnits: totalKulturUnits,
         avgDiscount: blendedDiscount,
       },
     };
@@ -1364,6 +1426,15 @@ export default function MarginsView({
                   <p className={`text-2xl font-bold font-mono ${channel.trueMargin >= TARGET_MARGIN ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     {formatPercent(channel.trueMargin)}
                   </p>
+                  {channel.adjustedMargin !== null && channel.kulturUnits > 0 && (
+                    <p
+                      className="text-[11px] text-cyan-600 dark:text-cyan-400 font-mono mt-0.5 flex items-center gap-1"
+                      title={`Retail-adjusted: ${formatNumber(channel.kulturUnits)} KUHL Kultur units re-valued at MSRP`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      Retail: {formatPercent(channel.adjustedMargin)}
+                    </p>
+                  )}
                   <p className="text-xs text-text-muted mt-1">
                     {formatCurrencyShort(channel.revenue)} · {channel.revenuePct.toFixed(0)}%
                   </p>
@@ -1385,6 +1456,16 @@ export default function MarginsView({
               <p className={`text-2xl font-bold font-mono ${channelPerformance.blended.trueMargin >= TARGET_MARGIN ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {formatPercent(channelPerformance.blended.trueMargin)}
               </p>
+              {channelPerformance.blended.adjustedMargin !== null &&
+                channelPerformance.blended.kulturUnits > 0 && (
+                  <p
+                    className="text-[11px] text-cyan-600 dark:text-cyan-400 font-mono mt-0.5 flex items-center gap-1"
+                    title={`Retail-adjusted: ${formatNumber(channelPerformance.blended.kulturUnits)} KUHL Kultur units re-valued at MSRP`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Retail: {formatPercent(channelPerformance.blended.adjustedMargin)}
+                  </p>
+                )}
               <p className="text-xs text-text-faint mt-1">
                 {formatCurrencyShort(channelPerformance.blended.revenue)} total
               </p>
