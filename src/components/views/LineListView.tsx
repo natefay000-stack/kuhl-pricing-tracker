@@ -4,12 +4,15 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isFutureSeason } from '@/utils/season';
-import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X, Plus, Tag, Check, Minus, RotateCcw } from 'lucide-react';
+import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge } from '@/lib/season-utils';
+import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X, Plus, Tag, Check, Minus, RotateCcw, Edit3, FileText } from 'lucide-react';
 import { useCatalogs } from '@/hooks/useCatalogs';
 import { BUILT_IN_CATALOGS } from '@/lib/catalogs';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatPercent } from '@/utils/format';
+import MultiSelect from '@/components/MultiSelect';
+import StyleEditModal from '@/components/StyleEditModal';
 
 // Gender detection from division description
 function getGenderFromDivision(divisionDesc: string): 'Men' | 'Women' | 'Unisex' {
@@ -30,6 +33,8 @@ interface LineListViewProps {
   selectedCategory?: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
+  onCostUpdated?: (updated: CostRecord) => void;
+  onPricingUpdated?: (updated: PricingRecord) => void;
 }
 
 type QuickFilter = 'all' | 'new' | 'carryover' | 'topSellers' | 'smu' | 'kore' | 'map' | 'dropped';
@@ -135,6 +140,8 @@ export default function LineListView({
   selectedCategory: globalCategory = '',
   searchQuery: globalSearchQuery,
   onStyleClick,
+  onCostUpdated,
+  onPricingUpdated,
 }: LineListViewProps) {
   // Get unique seasons
   const seasons = useMemo(() => {
@@ -145,12 +152,14 @@ export default function LineListView({
 
   // State
   const [selectedSeason, setSelectedSeason] = useState<string>(seasons[seasons.length - 1] || '');
-  const [divisionFilter, setDivisionFilter] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
-  const [designerFilter, setDesignerFilter] = useState<string>('');
-  const [productLineFilter, setProductLineFilter] = useState<string>('');
+  const [divisionFilter, setDivisionFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [designerFilter, setDesignerFilter] = useState<string[]>([]);
+  const [productLineFilter, setProductLineFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  // Inline edit modal — opens StyleEditModal with the matching Pricing + Cost rows.
+  const [editingStyleSeason, setEditingStyleSeason] = useState<{ styleNumber: string; season: string } | null>(null);
 
   // Sync global search → local search
   useEffect(() => {
@@ -180,11 +189,24 @@ export default function LineListView({
   }, [globalSeason, seasons]);
 
   useEffect(() => {
-    if (globalDivision !== divisionFilter) setDivisionFilter(globalDivision);
+    // Wrap the global single-string filter into the local array shape.
+    if (globalDivision) {
+      if (divisionFilter.length !== 1 || divisionFilter[0] !== globalDivision) {
+        setDivisionFilter([globalDivision]);
+      }
+    } else if (divisionFilter.length > 0 && !globalDivision) {
+      // Don't clobber local user picks when no global filter is set.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalDivision]);
 
   useEffect(() => {
-    if (globalCategory !== categoryFilter) setCategoryFilter(globalCategory);
+    if (globalCategory) {
+      if (categoryFilter.length !== 1 || categoryFilter[0] !== globalCategory) {
+        setCategoryFilter([globalCategory]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalCategory]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
@@ -319,11 +341,11 @@ export default function LineListView({
       ? products
       : products.filter((p) => p.season === selectedSeason);
 
-    // Apply filters
-    if (divisionFilter) data = data.filter((d) => d.divisionDesc === divisionFilter);
-    if (categoryFilter) data = data.filter((d) => normalizeCategory(d.categoryDesc) === categoryFilter);
-    if (designerFilter) data = data.filter((d) => d.designerName === designerFilter);
-    if (productLineFilter) data = data.filter((d) => d.productLine === productLineFilter);
+    // Apply filters (multi-select: empty array = no filter, otherwise OR within the field)
+    if (divisionFilter.length > 0) data = data.filter((d) => divisionFilter.includes(d.divisionDesc));
+    if (categoryFilter.length > 0) data = data.filter((d) => categoryFilter.includes(normalizeCategory(d.categoryDesc)));
+    if (designerFilter.length > 0) data = data.filter((d) => designerFilter.includes(d.designerName));
+    if (productLineFilter.length > 0) data = data.filter((d) => productLineFilter.includes(d.productLine));
 
     // Hide styles with no sales (only for historical seasons)
     if (hideNoSales && !isSelectedSeasonFuture) {
@@ -378,6 +400,7 @@ export default function LineListView({
         smu: false,
         kore: false,
         mapProtected: false,
+        isDropped: false,
       };
     });
 
@@ -574,30 +597,35 @@ export default function LineListView({
     return Array.from(categoryMap.values()).sort((a, b) => b.totalStyles - a.totalStyles);
   }, [products, selectedSeason, previousSeasonStyles]);
 
+  // Single primary division for the gender-aware category cards. When the
+  // user picks more than one division (or none), we don't try to infer a
+  // gender; the cards revert to total counts.
+  const primaryDivision = divisionFilter.length === 1 ? divisionFilter[0] : '';
+
   // Get visible categories based on division filter
   const visibleCategories = useMemo(() => {
-    if (!divisionFilter) return categoryStats;
+    if (!primaryDivision) return categoryStats;
 
-    const genderFilter = getGenderFromDivision(divisionFilter);
+    const genderFilter = getGenderFromDivision(primaryDivision);
     return categoryStats.filter((cat) => {
       if (genderFilter === 'Men') return cat.menStyles > 0;
       if (genderFilter === 'Women') return cat.womenStyles > 0;
       return true;
     });
-  }, [categoryStats, divisionFilter]);
+  }, [categoryStats, primaryDivision]);
 
   // Get style count for a category based on current division filter
   const getCategoryStyleCount = (cat: typeof categoryStats[0]) => {
-    if (!divisionFilter) return cat.totalStyles;
-    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (!primaryDivision) return cat.totalStyles;
+    const genderFilter = getGenderFromDivision(primaryDivision);
     if (genderFilter === 'Men') return cat.menStyles;
     if (genderFilter === 'Women') return cat.womenStyles;
     return cat.totalStyles;
   };
 
   const getCategoryNewCount = (cat: typeof categoryStats[0]) => {
-    if (!divisionFilter) return cat.totalNew;
-    const genderFilter = getGenderFromDivision(divisionFilter);
+    if (!primaryDivision) return cat.totalNew;
+    const genderFilter = getGenderFromDivision(primaryDivision);
     if (genderFilter === 'Men') return cat.menNew;
     if (genderFilter === 'Women') return cat.womenNew;
     return cat.totalNew;
@@ -612,7 +640,7 @@ export default function LineListView({
       newCount += getCategoryNewCount(cat);
     });
     return { styles, new: newCount };
-  }, [visibleCategories, divisionFilter]);
+  }, [visibleCategories, primaryDivision]);
 
   // Visible columns
   const visibleColumns = useMemo(() => {
@@ -674,6 +702,36 @@ export default function LineListView({
   };
 
   const getCellValue = (row: EnrichedProduct & { colorCount?: number }, key: string): React.ReactNode => {
+    // Style number renders with status chips (NEW / CARRYOVER / DROPPED / DISC).
+    if (key === 'styleNumber') {
+      const styleDisc = (row as unknown as Record<string, unknown>).styleDisc;
+      const isDisc = styleDisc === 'Y' || styleDisc === true;
+      return (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span>{row.styleNumber}</span>
+          {row.isDropped && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
+              DROPPED
+            </span>
+          )}
+          {isDisc && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+              DISC
+            </span>
+          )}
+          {row.isNew && !row.isDropped && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300">
+              NEW
+            </span>
+          )}
+          {row.isCarryOver && !row.isNew && !row.isDropped && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-surface-tertiary text-text-muted">
+              C/O
+            </span>
+          )}
+        </div>
+      );
+    }
     // Handle rolled-up color columns
     if (rollUpStyles && key === 'color') {
       const count = row.colorCount || 1;
@@ -815,21 +873,42 @@ export default function LineListView({
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header — mirrors Season View */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-4xl font-display font-bold text-text-primary">Line List</h2>
           <p className="text-base text-text-muted mt-2">
-            Internal product database for {selectedSeason}
+            Internal product database — {selectedSeason} · {stats.styles} styles · {stats.skus} SKUs
           </p>
         </div>
-        <button
-          onClick={exportToExcel}
-          className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Export Excel
-        </button>
+        <div className="flex items-center gap-3">
+          {(() => {
+            const currentSeason = getCurrentShippingSeason();
+            const status = getSeasonStatus(currentSeason);
+            const badge = getSeasonStatusBadge(status);
+            return (
+              <div className="text-right">
+                <div className="text-sm text-text-muted">Current Shipping Season</div>
+                <div className="flex items-center justify-end gap-2 mt-1">
+                  <span className="text-2xl font-mono font-bold text-text-primary">{currentSeason}</span>
+                  <span className={`text-sm px-2 py-1 rounded ${badge.color}`}>
+                    {badge.icon} {badge.label}
+                  </span>
+                </div>
+                <div className="text-xs text-text-faint mt-1">
+                  {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+            );
+          })()}
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Data Sources Legend */}
@@ -856,68 +935,45 @@ export default function LineListView({
             </select>
           </div>
 
-          {/* Division */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Division</label>
-            <select
-              value={divisionFilter}
-              onChange={(e) => {
-                setDivisionFilter(e.target.value);
-                setCategoryFilter(''); // Reset category when division changes
-              }}
-              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
-            >
-              <option value="">All</option>
-              {divisions.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Division"
+            placeholder="All divisions"
+            options={divisions}
+            values={divisionFilter}
+            onChange={(next) => {
+              setDivisionFilter(next);
+              setCategoryFilter([]);
+              setCurrentPage(1);
+            }}
+            widthClass="w-[180px]"
+          />
 
-          {/* Category */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Category</label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[120px]"
-            >
-              <option value="">All</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Category"
+            placeholder="All categories"
+            options={categories}
+            values={categoryFilter}
+            onChange={(next) => { setCategoryFilter(next); setCurrentPage(1); }}
+            widthClass="w-[180px]"
+          />
 
-          {/* Designer */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Designer</label>
-            <select
-              value={designerFilter}
-              onChange={(e) => setDesignerFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
-            >
-              <option value="">All</option>
-              {designers.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Designer"
+            placeholder="All designers"
+            options={designers}
+            values={designerFilter}
+            onChange={(next) => { setDesignerFilter(next); setCurrentPage(1); }}
+            widthClass="w-[180px]"
+          />
 
-          {/* Product Line */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide">Product Line</label>
-            <select
-              value={productLineFilter}
-              onChange={(e) => setProductLineFilter(e.target.value)}
-              className="px-4 py-2.5 text-base border-2 border-border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[140px]"
-            >
-              <option value="">All</option>
-              {productLines.map((pl) => (
-                <option key={pl} value={pl}>{pl}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Product Line"
+            placeholder="All product lines"
+            options={productLines}
+            values={productLineFilter}
+            onChange={(next) => { setProductLineFilter(next); setCurrentPage(1); }}
+            widthClass="w-[180px]"
+          />
 
           {/* Search */}
           <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
@@ -1160,15 +1216,15 @@ export default function LineListView({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-text-muted uppercase tracking-wide">Categories</span>
-            {divisionFilter && (
+            {primaryDivision && (
               <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-                {getGenderFromDivision(divisionFilter)}&apos;s
+                {getGenderFromDivision(primaryDivision)}&apos;s
               </span>
             )}
           </div>
-          {categoryFilter && (
+          {categoryFilter.length > 0 && (
             <button
-              onClick={() => setCategoryFilter('')}
+              onClick={() => setCategoryFilter([])}
               className="text-xs text-text-muted hover:text-text-secondary flex items-center gap-1"
             >
               <X className="w-3 h-3" />
@@ -1180,35 +1236,39 @@ export default function LineListView({
         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-3">
           {/* All Categories Card */}
           <button
-            onClick={() => setCategoryFilter('')}
+            onClick={() => setCategoryFilter([])}
             className={`relative p-4 rounded-xl border-2 transition-all text-center ${
-              !categoryFilter
+              categoryFilter.length === 0
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
                 : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
             }`}
           >
-            <div className={`text-2xl font-bold ${!categoryFilter ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
+            <div className={`text-2xl font-bold ${categoryFilter.length === 0 ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
               {allCategoryTotals.styles}
             </div>
             <div className="text-xs text-text-muted uppercase tracking-wide mt-1">All</div>
-            <div className={`text-xs mt-2 ${!categoryFilter ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-500'}`}>
+            <div className={`text-xs mt-2 ${categoryFilter.length === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-500'}`}>
               +{allCategoryTotals.new} new
             </div>
-            {!categoryFilter && (
+            {categoryFilter.length === 0 && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
             )}
           </button>
 
-          {/* Individual Category Cards */}
+          {/* Individual Category Cards — click to toggle that category in the multi-select. */}
           {visibleCategories.map((cat) => {
             const styleCount = getCategoryStyleCount(cat);
             const newCount = getCategoryNewCount(cat);
-            const isSelected = categoryFilter === cat.name;
+            const isSelected = categoryFilter.includes(cat.name);
 
             return (
               <button
                 key={cat.name}
-                onClick={() => setCategoryFilter(cat.name)}
+                onClick={() =>
+                  setCategoryFilter((prev) =>
+                    prev.includes(cat.name) ? prev.filter((c) => c !== cat.name) : [...prev, cat.name],
+                  )
+                }
                 className={`relative p-4 rounded-xl border-2 transition-all text-center ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
@@ -1301,6 +1361,9 @@ export default function LineListView({
                     </div>
                   </th>
                 ))}
+                <th className="px-2 py-3 text-center text-xs font-bold text-text-muted uppercase tracking-wide" style={{ minWidth: '70px' }}>
+                  Edit
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1317,7 +1380,9 @@ export default function LineListView({
                       key={col.key}
                       className={`px-3 py-3 text-sm ${
                         colIdx < 2 ? 'sticky bg-inherit z-10' : ''
-                      } ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'}`}
+                      } ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'} ${
+                        row.isDropped ? 'opacity-60 line-through' : ''
+                      }`}
                       style={{
                         left: colIdx === 0 ? 0 : colIdx === 1 ? '100px' : undefined,
                       }}
@@ -1325,6 +1390,15 @@ export default function LineListView({
                       {getCellValue(row, col.key)}
                     </td>
                   ))}
+                  <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => setEditingStyleSeason({ styleNumber: row.styleNumber, season: row.season })}
+                      title="Edit MSRP / Wholesale / Landed / Margin"
+                      className="p-1.5 rounded text-text-muted hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1359,6 +1433,31 @@ export default function LineListView({
           </div>
         </div>
       </div>
+
+      {editingStyleSeason && (
+        <StyleEditModal
+          cost={
+            costs.find(
+              (c) =>
+                c.styleNumber === editingStyleSeason.styleNumber &&
+                c.season === editingStyleSeason.season,
+            ) ?? null
+          }
+          pricing={
+            pricing.find(
+              (p) =>
+                p.styleNumber === editingStyleSeason.styleNumber &&
+                p.season === editingStyleSeason.season,
+            ) ?? null
+          }
+          onClose={() => setEditingStyleSeason(null)}
+          onSaved={(updates) => {
+            if (updates.cost) onCostUpdated?.(updates.cost);
+            if (updates.pricing) onPricingUpdated?.(updates.pricing);
+            setEditingStyleSeason(null);
+          }}
+        />
+      )}
     </div>
   );
 }

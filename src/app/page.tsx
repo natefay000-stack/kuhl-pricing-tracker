@@ -2131,6 +2131,8 @@ export default function Home() {
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
+                onCostUpdated={handleCostUpdated}
+                onPricingUpdated={handlePricingUpdated}
               />
             </ErrorBoundary>
           )}
