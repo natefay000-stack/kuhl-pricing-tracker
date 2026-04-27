@@ -144,6 +144,20 @@ const COLUMN_GROUPS: ColumnGroup[] = [
 
 const ITEMS_PER_PAGE = 50;
 
+// When a built-in catalog is selected, the Prior Sales columns are scoped
+// to just the customer types that catalog represents. Match raw values from
+// the sales `customerType` field (case-insensitive).
+//   wholesale → WH (wholesale partners)
+//   rei       → BB (big box / REI)
+//   scheels   → BB
+//   direct    → EC + WD + DTC (e-commerce + KÜHL stores)
+const CATALOG_TO_CUSTOMER_TYPES: Record<string, string[]> = {
+  wholesale: ['WH'],
+  rei: ['BB'],
+  scheels: ['BB'],
+  direct: ['EC', 'WD', 'DTC'],
+};
+
 export default function LineListView({
   products,
   sales,
@@ -349,9 +363,30 @@ export default function LineListView({
   // back to the most recent prior season with sales when same-type doesn't
   // exist. Variants (7428T) inherit the base style's history so tall/plus
   // versions show their parent's prior-season performance.
+  //
+  // When a built-in catalog is selected (wholesale / rei / scheels /
+  // direct), the aggregation is scoped to that catalog's customer types
+  // so the Prior Rev / Prior Units columns reflect only that channel.
   const priorSalesByStyle = useMemo(() => {
     const out = new Map<string, { season: string; revenue: number; units: number }>();
     if (selectedSeason === 'ALL' || !selectedSeason) return out;
+
+    const channelTypes = CATALOG_TO_CUSTOMER_TYPES[selectedCatalog];
+    const channelSet = channelTypes ? new Set(channelTypes.map((c) => c.toUpperCase())) : null;
+
+    // For sales rows that store comma-separated customer types (aggregated
+    // imports), match if any of the parts hits the catalog's channel set.
+    const matchesChannel = (rawType: string | undefined | null): boolean => {
+      if (!channelSet) return true;
+      if (!rawType) return false;
+      const parts = rawType
+        .toString()
+        .toUpperCase()
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean);
+      return parts.some((p) => channelSet.has(p));
+    };
 
     // Build per-(style, season) totals, keyed by base style number too.
     type Tot = { revenue: number; units: number };
@@ -359,6 +394,7 @@ export default function LineListView({
     const byBaseSeason = new Map<string, Tot>();
     sales.forEach((s) => {
       if (!s.styleNumber || !s.season) return;
+      if (!matchesChannel(s.customerType)) return;
       const k = `${s.styleNumber}|${s.season}`;
       const e = byStyleSeason.get(k) ?? { revenue: 0, units: 0 };
       e.revenue += s.revenue || 0;
@@ -409,7 +445,7 @@ export default function LineListView({
       }
     });
     return out;
-  }, [sales, products, seasons, selectedSeason]);
+  }, [sales, products, seasons, selectedSeason, selectedCatalog]);
 
   // Set of style numbers that have ANY sales in seasons chronologically
   // before the selected season. Used so that a style with prior-season
@@ -1829,20 +1865,38 @@ export default function LineListView({
       <div className="bg-surface rounded-xl border-2 border-border-primary p-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-bold text-text-secondary uppercase mr-2">Columns:</span>
-          {COLUMN_GROUPS.map((group) => (
-            <button
-              key={group.id}
-              onClick={() => toggleColumnGroup(group.id)}
-              disabled={group.id === 'core'}
-              className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
-                visibleGroups[group.id]
-                  ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300 border-2 border-cyan-300 dark:border-cyan-700'
-                  : 'bg-surface-tertiary text-text-muted border-2 border-transparent hover:bg-surface-tertiary'
-              } ${group.id === 'core' ? 'cursor-default' : ''}`}
-            >
-              {group.label}
-            </button>
-          ))}
+          {COLUMN_GROUPS.map((group) => {
+            const channelTypes = group.id === 'performance' ? CATALOG_TO_CUSTOMER_TYPES[selectedCatalog] : null;
+            const channelLabel = channelTypes
+              ? channelTypes.length === 1
+                ? channelTypes[0]
+                : `${channelTypes[0]}+${channelTypes.length - 1}`
+              : null;
+            return (
+              <button
+                key={group.id}
+                onClick={() => toggleColumnGroup(group.id)}
+                disabled={group.id === 'core'}
+                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
+                  visibleGroups[group.id]
+                    ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300 border-2 border-cyan-300 dark:border-cyan-700'
+                    : 'bg-surface-tertiary text-text-muted border-2 border-transparent hover:bg-surface-tertiary'
+                } ${group.id === 'core' ? 'cursor-default' : ''}`}
+                title={
+                  group.id === 'performance'
+                    ? channelLabel
+                      ? `Prior Sales scoped to ${channelLabel} channel(s) because the ${selectedCatalog} catalog is selected.`
+                      : 'Prior Sales totals across all channels. Pick a wholesale / rei / direct catalog to scope.'
+                    : undefined
+                }
+              >
+                {group.label}
+                {channelLabel && (
+                  <span className="ml-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-400">· {channelLabel}</span>
+                )}
+              </button>
+            );
+          })}
           <span className="text-sm font-bold text-text-secondary uppercase mx-2 ml-6">View:</span>
           <div className="inline-flex rounded-lg border-2 border-border-primary overflow-hidden">
             <button
