@@ -53,6 +53,10 @@ interface EnrichedProduct extends Product {
   kore: boolean;
   mapProtected: boolean;
   isDropped?: boolean;
+  // Prior-season performance reference
+  priorSeason?: string;
+  priorRevenue?: number;
+  priorUnits?: number;
 }
 
 interface ColumnGroup {
@@ -85,6 +89,15 @@ const COLUMN_GROUPS: ColumnGroup[] = [
       { key: 'cadPrice', label: 'CAD WHSL', width: '85px' },
       { key: 'landed', label: 'Landed', width: '80px' },
       { key: 'margin', label: 'Margin %', width: '80px' },
+    ],
+  },
+  {
+    id: 'performance',
+    label: 'Prior Sales',
+    columns: [
+      { key: 'priorSeason', label: 'Prior', width: '70px' },
+      { key: 'priorRevenue', label: 'Prior Rev', width: '90px' },
+      { key: 'priorUnits', label: 'Prior Units', width: '90px' },
     ],
   },
   {
@@ -172,6 +185,7 @@ export default function LineListView({
   const [visibleGroups, setVisibleGroups] = useState<Record<string, boolean>>({
     core: true,
     pricing: true,
+    performance: true,
     team: false,
     specs: false,
     sourcing: false,
@@ -330,6 +344,73 @@ export default function LineListView({
     );
   }, [products, selectedSeason, seasons]);
 
+  // Per-style reference to the same-type prior season's revenue + units.
+  // For a 26FA row we look at 25FA, for 26SP we look at 25SP, etc. Falls
+  // back to the most recent prior season with sales when same-type doesn't
+  // exist. Variants (7428T) inherit the base style's history so tall/plus
+  // versions show their parent's prior-season performance.
+  const priorSalesByStyle = useMemo(() => {
+    const out = new Map<string, { season: string; revenue: number; units: number }>();
+    if (selectedSeason === 'ALL' || !selectedSeason) return out;
+
+    // Build per-(style, season) totals, keyed by base style number too.
+    type Tot = { revenue: number; units: number };
+    const byStyleSeason = new Map<string, Tot>();
+    const byBaseSeason = new Map<string, Tot>();
+    sales.forEach((s) => {
+      if (!s.styleNumber || !s.season) return;
+      const k = `${s.styleNumber}|${s.season}`;
+      const e = byStyleSeason.get(k) ?? { revenue: 0, units: 0 };
+      e.revenue += s.revenue || 0;
+      e.units += s.unitsBooked || 0;
+      byStyleSeason.set(k, e);
+
+      const bk = `${getBaseStyleNumber(s.styleNumber)}|${s.season}`;
+      const be = byBaseSeason.get(bk) ?? { revenue: 0, units: 0 };
+      be.revenue += s.revenue || 0;
+      be.units += s.unitsBooked || 0;
+      byBaseSeason.set(bk, be);
+    });
+
+    // Determine candidate prior seasons: same-type first (chronologically
+    // closest), then any prior season as fallback.
+    const idx = seasons.indexOf(selectedSeason);
+    if (idx <= 0) return out;
+    const isSpring = selectedSeason.endsWith('SP');
+    const sameTypePrior: string[] = [];
+    const anyPrior: string[] = [];
+    for (let i = idx - 1; i >= 0; i--) {
+      anyPrior.push(seasons[i]);
+      if (seasons[i].endsWith(isSpring ? 'SP' : 'FA')) sameTypePrior.push(seasons[i]);
+    }
+    const priorOrder = [...sameTypePrior, ...anyPrior]; // same-type first, then any
+
+    // For every styleNumber that's been seen, find the first prior season with sales.
+    const allStyles = new Set<string>();
+    sales.forEach((s) => s.styleNumber && allStyles.add(s.styleNumber));
+    products.forEach((p) => p.styleNumber && allStyles.add(p.styleNumber));
+
+    allStyles.forEach((sn) => {
+      const baseSn = getBaseStyleNumber(sn);
+      for (const season of priorOrder) {
+        const exact = byStyleSeason.get(`${sn}|${season}`);
+        if (exact && (exact.revenue > 0 || exact.units > 0)) {
+          out.set(sn, { season, revenue: exact.revenue, units: exact.units });
+          return;
+        }
+        // Inherit from base style if the variant itself didn't sell
+        if (sn !== baseSn) {
+          const baseHit = byBaseSeason.get(`${baseSn}|${season}`);
+          if (baseHit && (baseHit.revenue > 0 || baseHit.units > 0)) {
+            out.set(sn, { season, revenue: baseHit.revenue, units: baseHit.units });
+            return;
+          }
+        }
+      }
+    });
+    return out;
+  }, [sales, products, seasons, selectedSeason]);
+
   // Set of style numbers that have ANY sales in seasons chronologically
   // before the selected season. Used so that a style with prior-season
   // sales history isn't flagged "NEW" — even if it skipped the
@@ -437,6 +518,8 @@ export default function LineListView({
         !stylesWithPriorSeasonSales.has(baseStyle);
       const isCarryOver = item.carryOver === true || (item as unknown as Record<string, unknown>).carryOver === 'Y';
 
+      const priorRef = priorSalesByStyle.get(item.styleNumber);
+
       return {
         ...item,
         msrp,
@@ -452,6 +535,9 @@ export default function LineListView({
         kore: false,
         mapProtected: false,
         isDropped: false,
+        priorSeason: priorRef?.season,
+        priorRevenue: priorRef?.revenue,
+        priorUnits: priorRef?.units,
       };
     });
 
@@ -509,6 +595,7 @@ export default function LineListView({
     isSelectedSeasonFuture,
     stylesWithSales,
     stylesWithPriorSeasonSales,
+    priorSalesByStyle,
     selectedCatalog,
     getStylesInCatalog,
     membershipMap,
@@ -1083,6 +1170,40 @@ export default function LineListView({
     }
     if (key === 'msrp' || key === 'price' || key === 'landed' || key === 'fob') {
       return formatCurrency((row as unknown as Record<string, number>)[key]);
+    }
+    if (key === 'priorSeason') {
+      if (!row.priorSeason) return <span className="text-text-faint text-xs">—</span>;
+      const isSpring = row.priorSeason.endsWith('SP');
+      return (
+        <span
+          className={`inline-block px-1.5 py-0.5 text-[11px] font-mono font-semibold rounded ${
+            isSpring
+              ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400'
+              : 'bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-400'
+          }`}
+        >
+          {row.priorSeason}
+        </span>
+      );
+    }
+    if (key === 'priorRevenue') {
+      const v = row.priorRevenue ?? 0;
+      if (v <= 0) return <span className="text-text-faint">—</span>;
+      // Compact currency
+      const fmt = v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M`
+        : v >= 1_000 ? `$${(v / 1_000).toFixed(1)}K`
+        : `$${Math.round(v)}`;
+      const tone = v >= 100_000 ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+        : v >= 25_000 ? 'text-text-primary'
+        : 'text-text-secondary';
+      return <span className={`font-mono ${tone}`}>{fmt}</span>;
+    }
+    if (key === 'priorUnits') {
+      const v = row.priorUnits ?? 0;
+      if (v <= 0) return <span className="text-text-faint">—</span>;
+      const fmt = v >= 1_000 ? `${(v / 1_000).toFixed(1)}K` : v.toLocaleString();
+      const tone = v >= 1_000 ? 'text-text-primary font-semibold' : 'text-text-secondary';
+      return <span className={`font-mono ${tone}`}>{fmt}</span>;
     }
     if (key === 'cadMsrp' || key === 'cadPrice') {
       const val = (row as unknown as Record<string, number>)[key];
