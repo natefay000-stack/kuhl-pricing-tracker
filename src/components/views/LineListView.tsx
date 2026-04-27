@@ -144,19 +144,39 @@ const COLUMN_GROUPS: ColumnGroup[] = [
 
 const ITEMS_PER_PAGE = 50;
 
-// When a built-in catalog is selected, the Prior Sales columns are scoped
-// to just the customer types that catalog represents. Match raw values from
-// the sales `customerType` field (case-insensitive).
-//   wholesale → WH (wholesale partners)
-//   rei       → BB (big box / REI)
-//   scheels   → BB
-//   direct    → EC + WD + DTC (e-commerce + KÜHL stores)
-const CATALOG_TO_CUSTOMER_TYPES: Record<string, string[]> = {
-  wholesale: ['WH'],
-  rei: ['BB'],
-  scheels: ['BB'],
-  direct: ['EC', 'WD', 'DTC'],
+// When a built-in catalog is selected, Prior Sales is scoped to that
+// catalog's customer types AND/OR customer names.
+//
+//   wholesale → customerType = WH
+//   rei       → customer name contains "REI"
+//   scheels   → customer name contains "Scheels"
+//   direct    → customerType in {EC, WD, DTC}
+//
+// REI and Scheels are matched on customer NAME because they're specific
+// retail accounts within the broader BB (big box) channel — many big-box
+// customers exist beyond those two.
+interface CatalogScope {
+  customerTypes?: string[];
+  customerNamePatterns?: string[]; // case-insensitive substring match against customer
+}
+
+const CATALOG_SCOPE: Record<string, CatalogScope> = {
+  wholesale: { customerTypes: ['WH'] },
+  rei: { customerNamePatterns: ['REI'] },
+  scheels: { customerNamePatterns: ['Scheels'] },
+  direct: { customerTypes: ['EC', 'WD', 'DTC'] },
 };
+
+function getCatalogScopeLabel(scope: CatalogScope | undefined): string | null {
+  if (!scope) return null;
+  if (scope.customerNamePatterns?.length) return scope.customerNamePatterns[0];
+  if (scope.customerTypes?.length) {
+    return scope.customerTypes.length === 1
+      ? scope.customerTypes[0]
+      : `${scope.customerTypes[0]}+${scope.customerTypes.length - 1}`;
+  }
+  return null;
+}
 
 export default function LineListView({
   products,
@@ -371,21 +391,32 @@ export default function LineListView({
     const out = new Map<string, { season: string; revenue: number; units: number }>();
     if (selectedSeason === 'ALL' || !selectedSeason) return out;
 
-    const channelTypes = CATALOG_TO_CUSTOMER_TYPES[selectedCatalog];
-    const channelSet = channelTypes ? new Set(channelTypes.map((c) => c.toUpperCase())) : null;
+    const scope = CATALOG_SCOPE[selectedCatalog];
+    const typeSet = scope?.customerTypes ? new Set(scope.customerTypes.map((c) => c.toUpperCase())) : null;
+    const namePatterns = (scope?.customerNamePatterns ?? []).map((p) => p.toLowerCase());
 
     // For sales rows that store comma-separated customer types (aggregated
-    // imports), match if any of the parts hits the catalog's channel set.
-    const matchesChannel = (rawType: string | undefined | null): boolean => {
-      if (!channelSet) return true;
-      if (!rawType) return false;
-      const parts = rawType
-        .toString()
-        .toUpperCase()
-        .split(',')
-        .map((p) => p.trim())
-        .filter(Boolean);
-      return parts.some((p) => channelSet.has(p));
+    // imports), match if ANY of the parts is in the catalog's type set.
+    // Customer name matching is case-insensitive substring so 'REI' hits
+    // 'REI Co-op', 'Scheels' hits 'Scheels All Sports', etc.
+    const matchesScope = (
+      rawType: string | undefined | null,
+      customerName: string | undefined | null,
+    ): boolean => {
+      if (!scope) return true;
+      // Type-based scope
+      if (typeSet) {
+        if (!rawType) return false;
+        const parts = rawType.toString().toUpperCase().split(',').map((p) => p.trim()).filter(Boolean);
+        if (!parts.some((p) => typeSet.has(p))) return false;
+      }
+      // Name-based scope
+      if (namePatterns.length > 0) {
+        if (!customerName) return false;
+        const cn = customerName.toLowerCase();
+        if (!namePatterns.some((p) => cn.includes(p))) return false;
+      }
+      return true;
     };
 
     // Build per-(style, season) totals, keyed by base style number too.
@@ -394,7 +425,7 @@ export default function LineListView({
     const byBaseSeason = new Map<string, Tot>();
     sales.forEach((s) => {
       if (!s.styleNumber || !s.season) return;
-      if (!matchesChannel(s.customerType)) return;
+      if (!matchesScope(s.customerType, s.customer)) return;
       const k = `${s.styleNumber}|${s.season}`;
       const e = byStyleSeason.get(k) ?? { revenue: 0, units: 0 };
       e.revenue += s.revenue || 0;
@@ -1866,12 +1897,8 @@ export default function LineListView({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-bold text-text-secondary uppercase mr-2">Columns:</span>
           {COLUMN_GROUPS.map((group) => {
-            const channelTypes = group.id === 'performance' ? CATALOG_TO_CUSTOMER_TYPES[selectedCatalog] : null;
-            const channelLabel = channelTypes
-              ? channelTypes.length === 1
-                ? channelTypes[0]
-                : `${channelTypes[0]}+${channelTypes.length - 1}`
-              : null;
+            const scope = group.id === 'performance' ? CATALOG_SCOPE[selectedCatalog] : undefined;
+            const scopeLabel = getCatalogScopeLabel(scope);
             return (
               <button
                 key={group.id}
@@ -1884,15 +1911,15 @@ export default function LineListView({
                 } ${group.id === 'core' ? 'cursor-default' : ''}`}
                 title={
                   group.id === 'performance'
-                    ? channelLabel
-                      ? `Prior Sales scoped to ${channelLabel} channel(s) because the ${selectedCatalog} catalog is selected.`
-                      : 'Prior Sales totals across all channels. Pick a wholesale / rei / direct catalog to scope.'
+                    ? scopeLabel
+                      ? `Prior Sales scoped to ${scopeLabel} (${scope?.customerNamePatterns ? 'customer name' : 'channel'}) because the ${selectedCatalog} catalog is selected.`
+                      : 'Prior Sales totals across all channels. Pick a wholesale / rei / scheels / direct catalog to scope.'
                     : undefined
                 }
               >
                 {group.label}
-                {channelLabel && (
-                  <span className="ml-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-400">· {channelLabel}</span>
+                {scopeLabel && (
+                  <span className="ml-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-400">· {scopeLabel}</span>
                 )}
               </button>
             );
