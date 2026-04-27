@@ -210,7 +210,9 @@ export default function LineListView({
   }, [globalCategory]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hideNoSales, setHideNoSales] = useState<boolean>(false);
+  const [hideNoPricing, setHideNoPricing] = useState<boolean>(false);
   const [rollUpStyles, setRollUpStyles] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('flat');
 
   const {
     catalogs,
@@ -352,6 +354,19 @@ export default function LineListView({
       data = data.filter((d) => stylesWithSales.has(d.styleNumber));
     }
 
+    // Hide rows with no Pricing AND no Cost record for the row's season —
+    // these are catalog placeholders with nothing to review.
+    if (hideNoPricing) {
+      data = data.filter((d) => {
+        const pr = pricingLookup.get(`${d.styleNumber}-${d.season}`);
+        const co = costLookup.get(`${d.styleNumber}-${d.season}`);
+        const hasPrice = !!pr && ((pr.msrp ?? 0) > 0 || (pr.price ?? 0) > 0);
+        const hasCost = !!co && ((co.landed ?? 0) > 0);
+        const hasLineList = (d.msrp ?? 0) > 0 || (d.price ?? 0) > 0 || (d.cost ?? 0) > 0;
+        return hasPrice || hasCost || hasLineList;
+      });
+    }
+
     // Catalog filter
     if (selectedCatalog !== 'master') {
       const catalogStyles = getStylesInCatalog(selectedCatalog);
@@ -454,6 +469,7 @@ export default function LineListView({
     currentSeasonStyles,
     seasons,
     hideNoSales,
+    hideNoPricing,
     isSelectedSeasonFuture,
     stylesWithSales,
     selectedCatalog,
@@ -509,26 +525,84 @@ export default function LineListView({
 
   const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
 
-  // Stats
+  // Stats — line-review-tuned: counts plus deltas vs prior same-type season,
+  // average MSRP, blended margin, and the existing no-sales count.
   const stats = useMemo(() => {
     const seasonProducts = products.filter((p) => p.season === selectedSeason);
     const uniqueStyles = new Set(seasonProducts.map((p) => p.styleNumber));
     const uniqueDesigners = new Set(seasonProducts.map((p) => p.designerName).filter(Boolean));
     const newStyles = Array.from(uniqueStyles).filter((s) => !previousSeasonStyles.has(s));
     const droppedStyles = Array.from(previousSeasonStyles).filter((s) => !currentSeasonStyles.has(s));
-
-    // Count styles with no sales (only meaningful for historical seasons)
+    const carryoverStyles = Array.from(uniqueStyles).filter((s) => previousSeasonStyles.has(s));
     const noSalesStyles = Array.from(uniqueStyles).filter((s) => !stylesWithSales.has(s));
+
+    // Avg MSRP + blended margin across the unique styles in this season
+    let msrpSum = 0;
+    let msrpCount = 0;
+    let revenueWtdMargin = 0;
+    let marginWeight = 0;
+    const seenStyles = new Set<string>();
+    seasonProducts.forEach((p) => {
+      if (seenStyles.has(p.styleNumber)) return;
+      seenStyles.add(p.styleNumber);
+      const pricingData = pricingLookup.get(`${p.styleNumber}-${p.season}`);
+      const costData = costLookup.get(`${p.styleNumber}-${p.season}`);
+      const msrp = pricingData?.msrp || p.msrp || 0;
+      const price = pricingData?.price || p.price || 0;
+      const landed = costData?.landed || p.cost || 0;
+      if (msrp > 0) { msrpSum += msrp; msrpCount++; }
+      if (price > 0 && landed > 0) {
+        revenueWtdMargin += (price - landed); // numerator pieces
+        marginWeight += price;
+      }
+    });
+    const avgMsrp = msrpCount > 0 ? msrpSum / msrpCount : 0;
+    const blendedMargin = marginWeight > 0 ? (revenueWtdMargin / marginWeight) * 100 : 0;
+
+    // Prior same-type season delta on style count + avg MSRP
+    const prevSeason = (() => {
+      // Walk back through seasons to find the most recent same-type
+      const idx = seasons.indexOf(selectedSeason);
+      if (idx <= 0) return '';
+      const isSpring = selectedSeason.endsWith('SP');
+      for (let i = idx - 1; i >= 0; i--) {
+        if (seasons[i].endsWith(isSpring ? 'SP' : 'FA')) return seasons[i];
+      }
+      return '';
+    })();
+    let priorStylesCount = 0;
+    let priorMsrpSum = 0;
+    let priorMsrpCount = 0;
+    if (prevSeason) {
+      const priorSeen = new Set<string>();
+      products.filter((p) => p.season === prevSeason).forEach((p) => {
+        if (priorSeen.has(p.styleNumber)) return;
+        priorSeen.add(p.styleNumber);
+        priorStylesCount++;
+        const priorPricing = pricingLookup.get(`${p.styleNumber}-${p.season}`);
+        const priorMsrp = priorPricing?.msrp || p.msrp || 0;
+        if (priorMsrp > 0) { priorMsrpSum += priorMsrp; priorMsrpCount++; }
+      });
+    }
+    const priorAvgMsrp = priorMsrpCount > 0 ? priorMsrpSum / priorMsrpCount : 0;
+    const stylesDelta = priorStylesCount > 0 ? uniqueStyles.size - priorStylesCount : null;
+    const msrpDelta = priorAvgMsrp > 0 ? avgMsrp - priorAvgMsrp : null;
 
     return {
       styles: uniqueStyles.size,
       skus: seasonProducts.length,
       new: newStyles.length,
       dropped: droppedStyles.length,
+      carryover: carryoverStyles.length,
       designers: uniqueDesigners.size,
       noSales: noSalesStyles.length,
+      avgMsrp,
+      blendedMargin,
+      priorSeason: prevSeason,
+      stylesDelta,
+      msrpDelta,
     };
-  }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles, stylesWithSales]);
+  }, [products, selectedSeason, previousSeasonStyles, currentSeasonStyles, stylesWithSales, pricingLookup, costLookup, seasons]);
 
   // Category stats with gender awareness
   const categoryStats = useMemo(() => {
@@ -660,6 +734,176 @@ export default function LineListView({
   const toggleColumnGroup = (groupId: string) => {
     if (groupId === 'core') return; // Core always visible
     setVisibleGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+
+  // Group sorted rows by category (only used when viewMode === 'grouped')
+  const groupedByCategory = useMemo(() => {
+    const groups = new Map<string, typeof sortedData>();
+    sortedData.forEach((row) => {
+      const cat = normalizeCategory(row.categoryDesc) || 'Uncategorized';
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(row);
+    });
+    return Array.from(groups.entries())
+      .map(([category, rows]) => {
+        const styleCount = new Set(rows.map((r) => r.styleNumber)).size;
+        const newCount = rows.filter((r) => r.isNew).length;
+        // Avg MSRP / blended margin in this group
+        let msrpSum = 0;
+        let msrpCount = 0;
+        let revWtdMargin = 0;
+        let marginWeight = 0;
+        const seenStyles = new Set<string>();
+        rows.forEach((r) => {
+          if (seenStyles.has(r.styleNumber)) return;
+          seenStyles.add(r.styleNumber);
+          if (r.msrp > 0) { msrpSum += r.msrp; msrpCount++; }
+          if (r.price > 0 && r.landed > 0) {
+            revWtdMargin += r.price - r.landed;
+            marginWeight += r.price;
+          }
+        });
+        return {
+          category,
+          rows,
+          styleCount,
+          newCount,
+          avgMsrp: msrpCount > 0 ? msrpSum / msrpCount : 0,
+          blendedMargin: marginWeight > 0 ? (revWtdMargin / marginWeight) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.styleCount - a.styleCount);
+  }, [sortedData]);
+
+  // Tracks which category sections are collapsed in grouped view
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const toggleCategoryCollapse = (cat: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  // PDF export — line-review document grouped by category
+  const exportToPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 36;
+    let y = margin;
+
+    const writeText = (text: string, x: number, yPos: number, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) => {
+      doc.setFontSize(opts.size ?? 10);
+      doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+      const c = opts.color ?? [40, 40, 40];
+      doc.setTextColor(c[0], c[1], c[2]);
+      doc.text(text, x, yPos);
+    };
+
+    const newPageIfNeeded = (lineHeight: number) => {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    // Title block
+    writeText('KÜHL Line List', margin, y, { size: 18, bold: true });
+    writeText(
+      `${selectedSeason} · ${stats.styles} styles · ${stats.skus} SKUs · Avg MSRP $${stats.avgMsrp.toFixed(0)} · Blended margin ${stats.blendedMargin.toFixed(1)}%`,
+      margin,
+      y + 16,
+      { size: 9, color: [120, 120, 120] },
+    );
+    writeText(new Date().toLocaleString(), pageWidth - margin, y, { size: 9, color: [140, 140, 140] });
+    // Right-align the date by computing offset
+    doc.setFontSize(9);
+    const dateStr = new Date().toLocaleString();
+    const dateWidth = doc.getTextWidth(dateStr);
+    doc.text(dateStr, pageWidth - margin - dateWidth, y);
+    y += 36;
+
+    const cols = [
+      { key: 'styleNumber', label: 'Style', width: 60 },
+      { key: 'styleDesc', label: 'Description', width: 150 },
+      { key: 'designerName', label: 'Designer', width: 80 },
+      { key: 'colorDesc', label: 'Color', width: 70 },
+      { key: 'msrp', label: 'MSRP', width: 50, num: true, currency: true },
+      { key: 'price', label: 'WHSL', width: 50, num: true, currency: true },
+      { key: 'landed', label: 'Landed', width: 50, num: true, currency: true },
+      { key: 'margin', label: 'Margin', width: 50, num: true, percent: true },
+      { key: 'flags', label: 'Status', width: 70 },
+    ] as const;
+
+    const drawHeaderRow = () => {
+      doc.setFillColor(245, 245, 248);
+      doc.rect(margin, y - 11, pageWidth - margin * 2, 16, 'F');
+      let x = margin + 4;
+      cols.forEach((c) => {
+        writeText(c.label, x, y, { size: 8, bold: true, color: [80, 80, 80] });
+        x += c.width;
+      });
+      y += 12;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, y - 4, pageWidth - margin, y - 4);
+    };
+
+    const drawDataRow = (row: typeof sortedData[number]) => {
+      let x = margin + 4;
+      cols.forEach((c) => {
+        let txt = '';
+        if (c.key === 'flags') {
+          const flags: string[] = [];
+          if (row.isDropped) flags.push('DROP');
+          if (row.isNew) flags.push('NEW');
+          else if (row.isCarryOver) flags.push('C/O');
+          txt = flags.join(' ');
+        } else if (c.key === 'margin') {
+          txt = row.margin > 0 ? `${row.margin.toFixed(0)}%` : '—';
+        } else if (c.key === 'msrp' || c.key === 'price' || c.key === 'landed') {
+          const v = (row as unknown as Record<string, number>)[c.key];
+          txt = v > 0 ? `$${v.toFixed(0)}` : '—';
+        } else {
+          const v = (row as unknown as Record<string, unknown>)[c.key];
+          txt = v != null ? String(v) : '';
+        }
+        // Truncate
+        const maxChars = Math.floor(c.width / 4.5);
+        if (txt.length > maxChars) txt = txt.slice(0, maxChars - 1) + '…';
+        writeText(txt, x, y, { size: 8 });
+        x += c.width;
+      });
+      y += 12;
+    };
+
+    // Render either grouped sections or one flat table
+    const sourceGroups = viewMode === 'grouped'
+      ? groupedByCategory
+      : [{ category: 'All Styles', rows: sortedData, styleCount: stats.styles, newCount: stats.new, avgMsrp: stats.avgMsrp, blendedMargin: stats.blendedMargin }];
+
+    sourceGroups.forEach((group) => {
+      newPageIfNeeded(40);
+      // Section header
+      doc.setFillColor(220, 230, 245);
+      doc.rect(margin, y - 12, pageWidth - margin * 2, 18, 'F');
+      writeText(group.category, margin + 6, y, { size: 11, bold: true, color: [40, 70, 120] });
+      const summary = `${group.styleCount} styles · +${group.newCount} new · Avg MSRP $${group.avgMsrp.toFixed(0)} · Margin ${group.blendedMargin.toFixed(1)}%`;
+      const summaryWidth = doc.getTextWidth(summary);
+      writeText(summary, pageWidth - margin - summaryWidth - 6, y, { size: 8, color: [80, 80, 80] });
+      y += 14;
+      drawHeaderRow();
+
+      group.rows.forEach((row) => {
+        newPageIfNeeded(14);
+        drawDataRow(row);
+      });
+      y += 10;
+    });
+
+    doc.save(`KUHL_Line_List_${selectedSeason}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const exportToExcel = () => {
@@ -902,11 +1146,19 @@ export default function LineListView({
             );
           })()}
           <button
+            onClick={exportToPDF}
+            title="Print-ready PDF grouped by category — for line review meetings"
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            PDF
+          </button>
+          <button
             onClick={exportToExcel}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
           >
             <Download className="w-4 h-4" />
-            Export
+            Excel
           </button>
         </div>
       </div>
@@ -1026,6 +1278,28 @@ export default function LineListView({
               </label>
             </div>
           )}
+
+          {/* Hide rows with no pricing AND no cost record */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-text-secondary uppercase tracking-wide invisible">x</label>
+            <label
+              className="flex items-center gap-2 px-4 py-2.5 bg-surface-secondary border-2 border-border-primary rounded-lg cursor-pointer hover:bg-surface-tertiary transition-colors"
+              title="Hide rows that have no Pricing or Cost record for the row's season — usually catalog placeholders with nothing to review."
+            >
+              <input
+                type="checkbox"
+                checked={hideNoPricing}
+                onChange={(e) => {
+                  setHideNoPricing(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="w-4 h-4 rounded border-border-strong text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-sm font-medium text-text-secondary whitespace-nowrap">
+                Hide blank rows
+              </span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -1175,40 +1449,68 @@ export default function LineListView({
         </div>
       )}
 
-      {/* Stat Cards */}
-      <div className={`grid gap-4 ${isSelectedSeasonFuture ? 'grid-cols-5' : 'grid-cols-6'}`}>
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-text-primary">{stats.styles.toLocaleString()}</p>
-          <p className="text-sm text-text-muted font-bold uppercase mt-1">Styles</p>
-        </div>
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-text-primary">{stats.skus.toLocaleString()}</p>
-          <p className="text-sm text-text-muted font-bold uppercase mt-1">SKUs</p>
-        </div>
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{stats.new.toLocaleString()}</p>
-          <p className="text-sm text-text-muted font-bold uppercase mt-1">New</p>
-        </div>
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-red-600 dark:text-red-400">{stats.dropped.toLocaleString()}</p>
-          <p className="text-sm text-text-muted font-bold uppercase mt-1">Dropped</p>
-        </div>
-        <div className="bg-surface rounded-xl border-2 border-border-primary p-4 text-center">
-          <p className="text-3xl font-bold font-mono text-text-primary">{stats.designers}</p>
-          <p className="text-sm text-text-muted font-bold uppercase mt-1">Designers</p>
-        </div>
-        {/* No Sales - only show for historical seasons */}
-        {!isSelectedSeasonFuture && (
-          <div className={`rounded-xl border-2 p-4 text-center ${stats.noSales > 0 ? 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-700' : 'bg-surface border-border-primary'}`}>
-            <div className="flex items-center justify-center gap-2">
-              <p className={`text-3xl font-bold font-mono ${stats.noSales > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-text-faint'}`}>
-                {stats.noSales.toLocaleString()}
-              </p>
-              {stats.noSales > 0 && hideNoSales && <EyeOff className="w-5 h-5 text-amber-500" />}
-            </div>
-            <p className="text-sm text-text-muted font-bold uppercase mt-1">No Sales</p>
+      {/* Stat Cards — line-review tuned */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-cyan-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">Styles</div>
+          <div className="mt-1 font-mono font-bold text-2xl text-text-primary">{stats.styles.toLocaleString()}</div>
+          <div className="text-xs text-text-muted mt-1">
+            {stats.skus.toLocaleString()} SKUs
+            {stats.stylesDelta !== null && (
+              <span className={`ml-2 font-semibold ${stats.stylesDelta >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {stats.stylesDelta >= 0 ? '+' : ''}{stats.stylesDelta} vs {stats.priorSeason}
+              </span>
+            )}
           </div>
-        )}
+        </div>
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-emerald-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">New</div>
+          <div className="mt-1 font-mono font-bold text-2xl text-emerald-600 dark:text-emerald-400">{stats.new.toLocaleString()}</div>
+          <div className="text-xs text-text-muted mt-1">
+            {stats.styles > 0 ? `${((stats.new / stats.styles) * 100).toFixed(0)}% of line` : '—'}
+          </div>
+        </div>
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-slate-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">Carryover</div>
+          <div className="mt-1 font-mono font-bold text-2xl text-text-primary">{stats.carryover.toLocaleString()}</div>
+          <div className="text-xs text-text-muted mt-1">
+            {stats.styles > 0 ? `${((stats.carryover / stats.styles) * 100).toFixed(0)}% of line` : '—'}
+          </div>
+        </div>
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-amber-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">Dropped</div>
+          <div className="mt-1 font-mono font-bold text-2xl text-amber-600 dark:text-amber-400">{stats.dropped.toLocaleString()}</div>
+          <div className="text-xs text-text-muted mt-1">vs {stats.priorSeason || '—'}</div>
+        </div>
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-blue-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">Avg MSRP</div>
+          <div className="mt-1 font-mono font-bold text-2xl text-text-primary">
+            {stats.avgMsrp > 0 ? `$${stats.avgMsrp.toFixed(0)}` : '—'}
+          </div>
+          <div className="text-xs text-text-muted mt-1">
+            {stats.msrpDelta !== null && (
+              <span className={`font-semibold ${stats.msrpDelta >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {stats.msrpDelta >= 0 ? '+' : ''}${stats.msrpDelta.toFixed(0)} vs {stats.priorSeason}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="bg-surface-secondary rounded-xl p-4 border-l-4 border-purple-500">
+          <div className="text-xs text-text-muted uppercase tracking-wide">Blended Margin</div>
+          <div className={`mt-1 font-mono font-bold text-2xl ${
+            stats.blendedMargin >= 50 ? 'text-emerald-500'
+              : stats.blendedMargin >= 40 ? 'text-amber-500'
+              : 'text-red-500'
+          }`}>
+            {stats.blendedMargin > 0 ? `${stats.blendedMargin.toFixed(1)}%` : '—'}
+          </div>
+          <div className="text-xs text-text-muted mt-1">
+            {stats.designers} designers
+            {!isSelectedSeasonFuture && stats.noSales > 0 && (
+              <span className="ml-2 text-amber-500">· {stats.noSales} no sales</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Category Cards */}
@@ -1316,9 +1618,9 @@ export default function LineListView({
         </div>
       </div>
 
-      {/* Column Groups */}
+      {/* Column Groups + View Mode */}
       <div className="bg-surface rounded-xl border-2 border-border-primary p-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-bold text-text-secondary uppercase mr-2">Columns:</span>
           {COLUMN_GROUPS.map((group) => (
             <button
@@ -1334,10 +1636,30 @@ export default function LineListView({
               {group.label}
             </button>
           ))}
+          <span className="text-sm font-bold text-text-secondary uppercase mx-2 ml-6">View:</span>
+          <div className="inline-flex rounded-lg border-2 border-border-primary overflow-hidden">
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                viewMode === 'flat' ? 'bg-cyan-600 text-white' : 'bg-surface-tertiary text-text-muted hover:bg-surface-secondary'
+              }`}
+            >
+              Flat
+            </button>
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                viewMode === 'grouped' ? 'bg-cyan-600 text-white' : 'bg-surface-tertiary text-text-muted hover:bg-surface-secondary'
+              }`}
+            >
+              Grouped by Category
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Data Table */}
+      {/* Data Table — Flat */}
+      {viewMode === 'flat' && (
       <div className="bg-surface rounded-xl border-2 border-border-primary shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
@@ -1433,6 +1755,99 @@ export default function LineListView({
           </div>
         </div>
       </div>
+      )}
+
+      {/* Data — Grouped by category */}
+      {viewMode === 'grouped' && (
+        <div className="space-y-3">
+          {groupedByCategory.length === 0 && (
+            <div className="bg-surface rounded-xl border-2 border-border-primary p-6 text-center text-text-muted">
+              No styles match these filters.
+            </div>
+          )}
+          {groupedByCategory.map((group) => {
+            const collapsed = collapsedCategories.has(group.category);
+            return (
+              <div key={group.category} className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
+                <button
+                  onClick={() => toggleCategoryCollapse(group.category)}
+                  className="w-full flex items-center justify-between gap-4 px-5 py-3 bg-surface-tertiary hover:bg-surface-secondary transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <ChevronRight className={`w-4 h-4 text-text-muted transition-transform ${collapsed ? '' : 'rotate-90'}`} />
+                    <span className="text-base font-bold text-text-primary">{group.category}</span>
+                    <span className="text-xs text-text-muted">
+                      {group.styleCount} styles{group.newCount > 0 ? ` · +${group.newCount} new` : ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-text-muted">
+                    <span>Avg MSRP <span className="font-mono font-semibold text-text-primary">${group.avgMsrp.toFixed(0)}</span></span>
+                    <span>Margin <span className={`font-mono font-semibold ${
+                      group.blendedMargin >= 50 ? 'text-emerald-500'
+                        : group.blendedMargin >= 40 ? 'text-amber-500'
+                        : 'text-red-500'
+                    }`}>{group.blendedMargin.toFixed(1)}%</span></span>
+                  </div>
+                </button>
+                {!collapsed && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-surface-secondary border-b border-border-primary">
+                          {visibleColumns.map((col) => (
+                            <th
+                              key={col.key}
+                              onClick={() => handleSort(col.key)}
+                              className="px-3 py-2 text-left text-xs font-bold text-text-muted uppercase tracking-wide cursor-pointer hover:text-text-primary"
+                              style={{ minWidth: col.width }}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                          <th className="px-2 py-2 text-center text-xs font-bold text-text-muted uppercase">Edit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.rows.map((row, rIdx) => (
+                          <tr
+                            key={`${row.styleNumber}-${row.color}-${rIdx}`}
+                            onClick={() => onStyleClick(row.styleNumber)}
+                            className={`border-b border-border-primary cursor-pointer hover:bg-hover-accent ${
+                              rIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary/50'
+                            }`}
+                          >
+                            {visibleColumns.map((col) => (
+                              <td
+                                key={col.key}
+                                className={`px-3 py-2 text-sm ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'} ${
+                                  row.isDropped ? 'opacity-60 line-through' : ''
+                                }`}
+                              >
+                                {getCellValue(row, col.key)}
+                              </td>
+                            ))}
+                            <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() =>
+                                  setEditingStyleSeason({ styleNumber: row.styleNumber, season: row.season })
+                                }
+                                title="Edit MSRP / Wholesale / Landed / Margin"
+                                className="p-1.5 rounded text-text-muted hover:text-cyan-400 hover:bg-cyan-500/10"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {editingStyleSeason && (
         <StyleEditModal
