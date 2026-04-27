@@ -8,6 +8,7 @@ import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge } from 
 import { ArrowUpDown, Download, ChevronLeft, ChevronRight, EyeOff, X, Plus, Tag, Check, Minus, RotateCcw, Edit3, FileText } from 'lucide-react';
 import { useCatalogs } from '@/hooks/useCatalogs';
 import { BUILT_IN_CATALOGS } from '@/lib/catalogs';
+import { getBaseStyleNumber } from '@/utils/combineStyles';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatPercent } from '@/utils/format';
@@ -329,6 +330,32 @@ export default function LineListView({
     );
   }, [products, selectedSeason, seasons]);
 
+  // Set of style numbers that have ANY sales in seasons chronologically
+  // before the selected season. Used so that a style with prior-season
+  // sales history isn't flagged "NEW" — even if it skipped the
+  // immediately-prior season in the line.
+  const stylesWithPriorSeasonSales = useMemo(() => {
+    if (selectedSeason === 'ALL') return new Set<string>();
+    const idx = seasons.indexOf(selectedSeason);
+    if (idx <= 0) return new Set<string>();
+    const priorSeasonSet = new Set(seasons.slice(0, idx));
+    const styleSet = new Set<string>();
+    sales.forEach((s) => {
+      if (
+        s.styleNumber &&
+        s.season &&
+        priorSeasonSet.has(s.season) &&
+        ((s.revenue ?? 0) > 0 || (s.unitsBooked ?? 0) > 0)
+      ) {
+        // Add both the actual style number AND the base (so a tall variant
+        // 7428T inherits prior-season sales of the regular 7428).
+        styleSet.add(s.styleNumber);
+        styleSet.add(getBaseStyleNumber(s.styleNumber));
+      }
+    });
+    return styleSet;
+  }, [sales, seasons, selectedSeason]);
+
   const currentSeasonStyles = useMemo(() => {
     return new Set(
       selectedSeason === 'ALL'
@@ -398,7 +425,16 @@ export default function LineListView({
       const fob = costData?.fob || 0;
       const margin = price > 0 && landed > 0 ? ((price - landed) / price) * 100 : 0;
 
-      const isNew = !previousSeasonStyles.has(item.styleNumber);
+      // A style is NEW only if it doesn't appear in the immediately prior
+      // season's products AND has no sales history in any earlier season.
+      // Variants (7428T) inherit the base style's history so tall/plus
+      // versions of returning styles aren't mis-flagged as new.
+      const baseStyle = getBaseStyleNumber(item.styleNumber);
+      const isNew =
+        !previousSeasonStyles.has(item.styleNumber) &&
+        !previousSeasonStyles.has(baseStyle) &&
+        !stylesWithPriorSeasonSales.has(item.styleNumber) &&
+        !stylesWithPriorSeasonSales.has(baseStyle);
       const isCarryOver = item.carryOver === true || (item as unknown as Record<string, unknown>).carryOver === 'Y';
 
       return {
@@ -472,22 +508,68 @@ export default function LineListView({
     hideNoPricing,
     isSelectedSeasonFuture,
     stylesWithSales,
+    stylesWithPriorSeasonSales,
     selectedCatalog,
     getStylesInCatalog,
     membershipMap,
   ]);
 
+  // Always-on variant rollup: 7428T (Tall) and 7428X (Plus) collapse into
+  // their base 7428 row with a small variant chip showing what's available.
+  // The existing "Roll up styles" toggle additionally collapses colors.
+  const variantsCombinedData = useMemo(() => {
+    type VariantSet = { hasRegular: boolean; hasTall: boolean; hasPlus: boolean };
+    const map = new Map<string, EnrichedProduct & { variants: VariantSet }>();
+    filteredData.forEach((item) => {
+      const cleaned = item.styleNumber.replace(/TES$/i, '');
+      const baseStyle = getBaseStyleNumber(item.styleNumber);
+      const isVariant = cleaned !== baseStyle;
+      const suffix = isVariant ? cleaned.slice(baseStyle.length).toUpperCase() : '';
+      // Group key: base style + color (so each color of a style stays its own row)
+      const key = `${baseStyle}|${item.color ?? ''}`;
+      const existing = map.get(key);
+      const variants: VariantSet = existing?.variants ?? {
+        hasRegular: false,
+        hasTall: false,
+        hasPlus: false,
+      };
+      if (suffix === 'T') variants.hasTall = true;
+      else if (suffix === 'X') variants.hasPlus = true;
+      else variants.hasRegular = true;
+
+      // Prefer the regular (non-variant) row as the canonical record so the
+      // displayed style # and prices match the base style. If no regular
+      // exists, fall back to the first variant we encounter.
+      const isCanonical = !isVariant;
+      if (!existing || isCanonical) {
+        map.set(key, {
+          ...item,
+          styleNumber: baseStyle, // collapse the suffix so 7428T → 7428
+          variants,
+        });
+      } else {
+        existing.variants = variants;
+      }
+    });
+    return Array.from(map.values());
+  }, [filteredData]);
+
   // Roll up to style level (aggregate colors into one row per style)
   const rolledUpData = useMemo(() => {
-    if (!rollUpStyles) return filteredData;
+    if (!rollUpStyles) return variantsCombinedData;
 
-    const styleMap = new Map<string, EnrichedProduct & { colorCount: number }>();
+    const styleMap = new Map<string, (EnrichedProduct & { colorCount: number; variants?: { hasRegular: boolean; hasTall: boolean; hasPlus: boolean } })>();
 
-    filteredData.forEach((item) => {
+    variantsCombinedData.forEach((item) => {
       const existing = styleMap.get(item.styleNumber);
       if (existing) {
-        // Aggregate: increment color count, keep first row's data
+        // Aggregate: increment color count, merge variant flags, keep first row's data
         existing.colorCount++;
+        if (item.variants && existing.variants) {
+          existing.variants.hasRegular ||= item.variants.hasRegular;
+          existing.variants.hasTall ||= item.variants.hasTall;
+          existing.variants.hasPlus ||= item.variants.hasPlus;
+        }
       } else {
         styleMap.set(item.styleNumber, {
           ...item,
@@ -499,13 +581,13 @@ export default function LineListView({
     });
 
     return Array.from(styleMap.values());
-  }, [filteredData, rollUpStyles]);
+  }, [variantsCombinedData, rollUpStyles]);
 
   // Sort data
   const sortedData = useMemo(() => {
     return [...rolledUpData].sort((a, b) => {
-      const aVal = (a as Record<string, unknown>)[sortColumn];
-      const bVal = (b as Record<string, unknown>)[sortColumn];
+      const aVal = (a as unknown as Record<string, unknown>)[sortColumn];
+      const bVal = (b as unknown as Record<string, unknown>)[sortColumn];
 
       if (typeof aVal === 'number' && typeof bVal === 'number') {
         return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
@@ -945,14 +1027,25 @@ export default function LineListView({
     XLSX.writeFile(wb, `KUHL_LineList_${selectedSeason}.xlsx`);
   };
 
-  const getCellValue = (row: EnrichedProduct & { colorCount?: number }, key: string): React.ReactNode => {
-    // Style number renders with status chips (NEW / CARRYOVER / DROPPED / DISC).
+  const getCellValue = (row: EnrichedProduct & { colorCount?: number; variants?: { hasRegular: boolean; hasTall: boolean; hasPlus: boolean } }, key: string): React.ReactNode => {
+    // Style number renders with status chips (NEW / CARRYOVER / DROPPED / DISC) and variant chips (T / X).
     if (key === 'styleNumber') {
       const styleDisc = (row as unknown as Record<string, unknown>).styleDisc;
       const isDisc = styleDisc === 'Y' || styleDisc === true;
+      const variantPill = row.variants && (row.variants.hasTall || row.variants.hasPlus)
+        ? `${row.variants.hasTall ? 'T' : ''}${row.variants.hasPlus ? 'X' : ''}`
+        : '';
       return (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span>{row.styleNumber}</span>
+          {variantPill && (
+            <span
+              className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300"
+              title={`Includes ${row.variants?.hasTall ? 'Tall' : ''}${row.variants?.hasTall && row.variants?.hasPlus ? ' + ' : ''}${row.variants?.hasPlus ? 'Plus' : ''} variant${(row.variants?.hasTall ? 1 : 0) + (row.variants?.hasPlus ? 1 : 0) > 1 ? 's' : ''}`}
+            >
+              +{variantPill}
+            </span>
+          )}
           {row.isDropped && (
             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">
               DROPPED
@@ -1700,7 +1793,7 @@ export default function LineListView({
                   {visibleColumns.map((col, colIdx) => (
                     <td
                       key={col.key}
-                      className={`px-3 py-3 text-sm ${
+                      className={`px-3 py-2.5 text-base ${
                         colIdx < 2 ? 'sticky bg-inherit z-10' : ''
                       } ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'} ${
                         row.isDropped ? 'opacity-60 line-through' : ''
@@ -1819,7 +1912,7 @@ export default function LineListView({
                             {visibleColumns.map((col) => (
                               <td
                                 key={col.key}
-                                className={`px-3 py-2 text-sm ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'} ${
+                                className={`px-3 py-2.5 text-base ${col.key === 'styleNumber' ? 'font-mono font-bold text-text-primary' : 'text-text-secondary'} ${
                                   row.isDropped ? 'opacity-60 line-through' : ''
                                 }`}
                               >
