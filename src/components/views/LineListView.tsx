@@ -1628,29 +1628,26 @@ export default function LineListView({
           )}
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-3">
-          {/* All Categories Card */}
+        <div className="flex flex-wrap gap-2">
+          {/* All Categories pill */}
           <button
             onClick={() => setCategoryFilter([])}
-            className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border-2 transition-all text-sm ${
               categoryFilter.length === 0
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
-                : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
+                : 'border-border-primary bg-surface text-text-secondary hover:border-border-strong'
             }`}
           >
-            <div className={`text-2xl font-bold ${categoryFilter.length === 0 ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
+            <span className="font-semibold uppercase tracking-wide text-[11px]">All</span>
+            <span className={`font-mono font-bold ${categoryFilter.length === 0 ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
               {allCategoryTotals.styles}
-            </div>
-            <div className="text-xs text-text-muted uppercase tracking-wide mt-1">All</div>
-            <div className={`text-xs mt-2 ${categoryFilter.length === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-500'}`}>
-              +{allCategoryTotals.new} new
-            </div>
-            {categoryFilter.length === 0 && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+            </span>
+            {allCategoryTotals.new > 0 && (
+              <span className="text-[11px] text-emerald-500 font-semibold">+{allCategoryTotals.new}</span>
             )}
           </button>
 
-          {/* Individual Category Cards — click to toggle that category in the multi-select. */}
+          {/* Individual Category pills — click to toggle that category in the multi-select. */}
           {visibleCategories.map((cat) => {
             const styleCount = getCategoryStyleCount(cat);
             const newCount = getCategoryNewCount(cat);
@@ -1664,23 +1661,19 @@ export default function LineListView({
                     prev.includes(cat.name) ? prev.filter((c) => c !== cat.name) : [...prev, cat.name],
                   )
                 }
-                className={`relative p-4 rounded-xl border-2 transition-all text-center ${
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border-2 transition-all text-sm ${
                   isSelected
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 shadow-md'
-                    : 'border-border-primary bg-surface hover:border-border-strong hover:shadow-sm'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
+                    : 'border-border-primary bg-surface text-text-secondary hover:border-border-strong'
                 }`}
+                title={cat.name}
               >
-                <div className={`text-2xl font-bold ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
+                <span className="font-semibold uppercase tracking-wide text-[11px] truncate max-w-[140px]">{cat.name}</span>
+                <span className={`font-mono font-bold ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-text-primary'}`}>
                   {styleCount}
-                </div>
-                <div className="text-xs text-text-muted uppercase tracking-wide mt-1 truncate" title={cat.name}>
-                  {cat.name}
-                </div>
-                <div className={`text-xs mt-2 ${newCount > 0 ? 'text-emerald-500' : 'text-text-faint'}`}>
-                  {newCount > 0 ? `+${newCount} new` : '—'}
-                </div>
-                {isSelected && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
+                </span>
+                {newCount > 0 && (
+                  <span className="text-[11px] text-emerald-500 font-semibold">+{newCount}</span>
                 )}
               </button>
             );
