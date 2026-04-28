@@ -14,12 +14,12 @@
  * table. Click again to deselect.
  */
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { InvoiceRecord, Product } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
 import MultiSelect from '@/components/MultiSelect';
-import { Search, Filter, X, Calendar } from 'lucide-react';
+import { Search, Filter, X, Calendar, ChevronRight } from 'lucide-react';
 
 interface InvOpnMonthViewProps {
   invoices: InvoiceRecord[];
@@ -234,6 +234,37 @@ export default function InvOpnMonthView({
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+  ]);
+
+  // ── Color breakdown for the currently expanded style (if any) ──
+  // Recomputed when filters change; ignores the clickedStyle restriction
+  // (we're explicitly scoping to clickedStyle, so we drop that one filter).
+  const expandedStyleColors = useMemo(() => {
+    if (!clickedStyle) return [];
+    const m = new Map<string, { code: string; desc: string; open: number; shipped: number }>();
+    invoices.forEach((inv) => {
+      if (inv.styleNumber !== clickedStyle) return;
+      // Apply every other filter (the styleTable scope skips clickedStyle for us)
+      if (!matchesInvoice(inv, 'forStyleTable')) return;
+      const code = (inv.colorCode ?? '').trim();
+      const desc = (inv.colorDesc ?? '').trim();
+      const key = code || desc || '(no color)';
+      const e = m.get(key) ?? { code, desc: desc || code || '(no color)', open: 0, shipped: 0 };
+      e.open += inv.openAtNet ?? 0;
+      e.shipped += (inv.shippedAtNet ?? 0) - (inv.returnedAtNet ?? 0);
+      if (!e.desc && desc) e.desc = desc;
+      if (!e.code && code) e.code = code;
+      m.set(key, e);
+    });
+    return Array.from(m.values())
+      .filter((r) => r.open !== 0 || r.shipped !== 0)
+      .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    invoices, clickedStyle,
+    monthFilter, seasonFilter, customerTypeFilter, customerFilter,
+    categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
+    clickedCustomer, globalSeason, styleToCategory,
   ]);
 
   // ── Customer breakdown ──
@@ -464,24 +495,60 @@ export default function InvOpnMonthView({
                 {styleRows.slice(0, 200).map((r) => {
                   const isActive = clickedStyle === r.styleNumber;
                   return (
-                    <tr
-                      key={r.styleNumber}
-                      onClick={() => setClickedStyle(isActive ? null : r.styleNumber)}
-                      onDoubleClick={() => onStyleClick?.(r.styleNumber)}
-                      className={`border-b border-border-primary/50 cursor-pointer ${
-                        isActive ? 'bg-cyan-500/10' : 'hover:bg-hover-accent'
-                      }`}
-                      title="Click to cross-filter · Double-click to open style detail"
-                    >
-                      <td className="px-3 py-1.5 font-mono font-semibold text-text-primary">{r.styleNumber}</td>
-                      <td className="px-3 py-1.5 text-text-secondary truncate max-w-[200px]">{r.styleDesc}</td>
-                      <td className={`px-3 py-1.5 text-right font-mono ${r.open === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
-                        {fmtMillions(r.open)}
-                      </td>
-                      <td className={`px-3 py-1.5 text-right font-mono ${r.shipped === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
-                        {fmtMillions(r.shipped)}
-                      </td>
-                    </tr>
+                    <Fragment key={r.styleNumber}>
+                      <tr
+                        onClick={() => setClickedStyle(isActive ? null : r.styleNumber)}
+                        onDoubleClick={() => onStyleClick?.(r.styleNumber)}
+                        className={`border-b border-border-primary/50 cursor-pointer ${
+                          isActive ? 'bg-cyan-500/10' : 'hover:bg-hover-accent'
+                        }`}
+                        title="Click to expand colors + cross-filter · Double-click to open style detail"
+                      >
+                        <td className="px-3 py-1.5 font-mono font-semibold text-text-primary">
+                          <span className="inline-flex items-center gap-1">
+                            <ChevronRight
+                              className={`w-3.5 h-3.5 text-text-muted transition-transform flex-shrink-0 ${
+                                isActive ? 'rotate-90 text-cyan-400' : ''
+                              }`}
+                            />
+                            {r.styleNumber}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-text-secondary truncate max-w-[200px]">{r.styleDesc}</td>
+                        <td className={`px-3 py-1.5 text-right font-mono ${r.open === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
+                          {fmtMillions(r.open)}
+                        </td>
+                        <td className={`px-3 py-1.5 text-right font-mono ${r.shipped === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
+                          {fmtMillions(r.shipped)}
+                        </td>
+                      </tr>
+                      {/* Expanded color breakdown for this style */}
+                      {isActive && (
+                        expandedStyleColors.length === 0 ? (
+                          <tr className="border-b border-border-primary/50 bg-cyan-500/5">
+                            <td colSpan={4} className="px-12 py-2 text-xs text-text-muted italic">
+                              No color-level data for this style under the current filters.
+                            </td>
+                          </tr>
+                        ) : (
+                          expandedStyleColors.map((c) => (
+                            <tr key={`${r.styleNumber}-${c.code || c.desc}`} className="border-b border-border-primary/50 bg-cyan-500/5">
+                              <td className="pl-10 pr-3 py-1.5 text-text-faint text-xs"></td>
+                              <td className="px-3 py-1.5 text-xs text-text-secondary truncate max-w-[200px]">
+                                <span className="font-mono text-text-muted mr-2">{c.code || '—'}</span>
+                                {c.desc}
+                              </td>
+                              <td className={`px-3 py-1.5 text-right font-mono text-xs ${c.open === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
+                                {fmtMillions(c.open)}
+                              </td>
+                              <td className={`px-3 py-1.5 text-right font-mono text-xs ${c.shipped === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
+                                {fmtMillions(c.shipped)}
+                              </td>
+                            </tr>
+                          ))
+                        )
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>
