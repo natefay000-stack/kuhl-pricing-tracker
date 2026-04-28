@@ -56,6 +56,7 @@ export default function InvOpnMonthView({
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [genderFilter, setGenderFilter] = useState<string[]>([]);
   const [orderTypeFilter, setOrderTypeFilter] = useState<string[]>([]);
+  const [colorFilter, setColorFilter] = useState<string[]>([]);
   const [styleSearch, setStyleSearch] = useState('');
 
   // Click-to-cross-filter: when a row is clicked, scope all other panels
@@ -111,6 +112,11 @@ export default function InvOpnMonthView({
     if (orderTypeFilter.length > 0) {
       if (!inv.orderType || !orderTypeFilter.includes(inv.orderType)) return false;
     }
+    // Color (matches against colorDesc; falls back to colorCode if desc is empty)
+    if (colorFilter.length > 0) {
+      const color = (inv.colorDesc ?? '').trim() || (inv.colorCode ?? '').trim();
+      if (!color || !colorFilter.includes(color)) return false;
+    }
     // Category (from styleNumber via product lookup)
     if (categoryFilter.length > 0) {
       const cat = styleToCategory.get(inv.styleNumber ?? '');
@@ -164,6 +170,15 @@ export default function InvOpnMonthView({
     return Array.from(set).sort();
   }, [invoices]);
 
+  const colors = useMemo(() => {
+    const set = new Set<string>();
+    invoices.forEach((i) => {
+      const c = (i.colorDesc ?? '').trim() || (i.colorCode ?? '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [invoices]);
+
   const categories = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => p.categoryDesc && set.add(p.categoryDesc));
@@ -193,7 +208,7 @@ export default function InvOpnMonthView({
   }, [
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
-    categoryFilter, genderFilter, orderTypeFilter, styleSearch,
+    categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, globalSeason, styleToCategory,
   ]);
 
@@ -217,7 +232,7 @@ export default function InvOpnMonthView({
   }, [
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
-    categoryFilter, genderFilter, orderTypeFilter, styleSearch,
+    categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, globalSeason, styleToCategory,
   ]);
 
@@ -240,7 +255,7 @@ export default function InvOpnMonthView({
   }, [
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
-    categoryFilter, genderFilter, orderTypeFilter, styleSearch,
+    categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, globalSeason, styleToCategory,
   ]);
 
@@ -252,6 +267,7 @@ export default function InvOpnMonthView({
     categoryFilter.length > 0 ||
     genderFilter.length > 0 ||
     orderTypeFilter.length > 0 ||
+    colorFilter.length > 0 ||
     styleSearch !== '' ||
     clickedStyle !== null ||
     clickedCustomer !== null;
@@ -264,6 +280,7 @@ export default function InvOpnMonthView({
     setCategoryFilter([]);
     setGenderFilter([]);
     setOrderTypeFilter([]);
+    setColorFilter([]);
     setStyleSearch('');
     setClickedStyle(null);
     setClickedCustomer(null);
@@ -344,6 +361,7 @@ export default function InvOpnMonthView({
         <MultiSelect label="Category" placeholder="All categories" options={categories} values={categoryFilter} onChange={setCategoryFilter} widthClass="w-[170px]" />
         <MultiSelect label="Gender" placeholder="All genders" options={genders} values={genderFilter} onChange={setGenderFilter} widthClass="w-[140px]" />
         <MultiSelect label="Order Type" placeholder="All order types" options={orderTypes} values={orderTypeFilter} onChange={setOrderTypeFilter} widthClass="w-[170px]" />
+        <MultiSelect label="Color" placeholder="All colors" options={colors} values={colorFilter} onChange={setColorFilter} widthClass="w-[170px]" />
         {hasAnyFilter && (
           <button
             onClick={clearAll}
