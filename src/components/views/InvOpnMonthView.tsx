@@ -128,6 +128,41 @@ export default function InvOpnMonthView({
   // (one-way — local state is the source of truth after initial sync)
   // No effect needed: we just use `globalSeason` as a default if seasonFilter is empty.
 
+  // Date bucket resolver (used by both filter-match and pivot). Sales records
+  // often lack invoiceDate for booked-but-not-yet-shipped lines, so we fall
+  // back to accountingPeriod, then to a season-derived month.
+  const resolveBucket = (inv: InvoiceRecord): { y: number; m: number } | null => {
+    if (inv.invoiceDate) {
+      const d = new Date(inv.invoiceDate);
+      if (!isNaN(d.getTime())) return { y: d.getFullYear(), m: d.getMonth() };
+    }
+    if (inv.accountingPeriod) {
+      const ap = inv.accountingPeriod.trim();
+      let mm: number | null = null;
+      let yy: number | null = null;
+      let match = ap.match(/^(\d{1,2})[\/\-](\d{4})$/);
+      if (match) { mm = parseInt(match[1], 10) - 1; yy = parseInt(match[2], 10); }
+      if (!match) {
+        match = ap.match(/^(\d{4})[\/\-](\d{1,2})$/);
+        if (match) { yy = parseInt(match[1], 10); mm = parseInt(match[2], 10) - 1; }
+      }
+      if (!match) {
+        match = ap.match(/^(\d{4})(\d{2})$/);
+        if (match) { yy = parseInt(match[1], 10); mm = parseInt(match[2], 10) - 1; }
+      }
+      if (yy !== null && mm !== null && mm >= 0 && mm <= 11) return { y: yy, m: mm };
+    }
+    if (inv.season) {
+      const match = inv.season.match(/^(\d{2})(SP|FA)$/i);
+      if (match) {
+        const yy = 2000 + parseInt(match[1], 10);
+        const mm = match[2].toUpperCase() === 'SP' ? 2 : 7;
+        return { y: yy, m: mm };
+      }
+    }
+    return null;
+  };
+
   // Helper: does this invoice match the active filters? (Excludes the
   // invoice's own field for click-cross-filtering — see notes inline.)
   type FilterScope = 'all' | 'forPivot' | 'forStyleTable' | 'forCustomerTable';
@@ -135,9 +170,9 @@ export default function InvOpnMonthView({
   const matchesInvoice = (inv: InvoiceRecord, scope: FilterScope): boolean => {
     // Time filters
     if (monthFilter.length > 0) {
-      if (!inv.invoiceDate) return false;
-      const m = new Date(inv.invoiceDate).getMonth();
-      if (!monthFilter.includes(MONTHS_SHORT[m])) return false;
+      const bucket = resolveBucket(inv);
+      if (!bucket) return false;
+      if (!monthFilter.includes(MONTHS_SHORT[bucket.m])) return false;
     }
     // Season filter (local takes priority; fall back to global if local empty)
     const effectiveSeasons = seasonFilter.length > 0 ? seasonFilter : (globalSeason && globalSeason !== '__ALL_SP__' && globalSeason !== '__ALL_FA__' ? [globalSeason] : []);
@@ -237,16 +272,16 @@ export default function InvOpnMonthView({
 
   // ── Year × Month pivot ──
   // Cell value = sum(openAtNet + shippedAtNet − returnedAtNet) for invoices
-  // matching the active filters AND the click-selected style/customer.
+  // matching the active filters. Bucket date resolved via resolveBucket()
+  // (defined above): invoiceDate → accountingPeriod → season-derived.
   const yearMonthGrid = useMemo(() => {
     const grid = new Map<number, number[]>(); // year → [12 month buckets]
     let grandTotal = 0;
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forPivot')) return;
-      if (!inv.invoiceDate) return;
-      const d = new Date(inv.invoiceDate);
-      const y = d.getFullYear();
-      const m = d.getMonth();
+      const bucket = resolveBucket(inv);
+      if (!bucket) return;
+      const { y, m } = bucket;
       if (!grid.has(y)) grid.set(y, new Array(12).fill(0));
       const v = (inv.openAtNet ?? 0) + (inv.shippedAtNet ?? 0) - (inv.returnedAtNet ?? 0);
       grid.get(y)![m] += v;
