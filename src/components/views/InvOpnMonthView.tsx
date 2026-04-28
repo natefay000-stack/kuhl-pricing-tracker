@@ -15,7 +15,7 @@
  */
 
 import { Fragment, useMemo, useState } from 'react';
-import { InvoiceRecord, Product } from '@/types/product';
+import { InvoiceRecord, Product, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
 import MultiSelect from '@/components/MultiSelect';
@@ -23,6 +23,7 @@ import { Search, Filter, X, Calendar, ChevronRight } from 'lucide-react';
 
 interface InvOpnMonthViewProps {
   invoices: InvoiceRecord[];
+  sales?: SalesRecord[];
   products: Product[];
   selectedSeason?: string;
   onStyleClick?: (styleNumber: string) => void;
@@ -43,11 +44,60 @@ const fmtFull = (v: number) => {
 };
 
 export default function InvOpnMonthView({
-  invoices,
+  invoices: invoicesProp,
+  sales = [],
   products,
   selectedSeason: globalSeason = '',
   onStyleClick,
 }: InvOpnMonthViewProps) {
+  // Union sales + invoices into a single record set. Sales records have the
+  // same shape (openAtNet, shippedAtNet, returnedAtNet, invoiceDate, season,
+  // customer…) as invoice records — they're often imported from a different
+  // xlsx file but represent the same booked/shipped activity. We dedupe on
+  // a composite key (invoiceNumber|styleNumber|colorCode|customer) when
+  // available so the same physical line doesn't get double-counted.
+  const invoices: InvoiceRecord[] = useMemo(() => {
+    const out: InvoiceRecord[] = [];
+    const seen = new Set<string>();
+    const push = (r: InvoiceRecord) => {
+      const key = r.invoiceNumber
+        ? `${r.invoiceNumber}|${r.styleNumber}|${r.colorCode ?? ''}|${r.customer ?? ''}`
+        : '';
+      if (key && seen.has(key)) return;
+      if (key) seen.add(key);
+      out.push(r);
+    };
+    invoicesProp.forEach(push);
+    sales.forEach((s) => {
+      push({
+        id: s.id,
+        styleNumber: s.styleNumber,
+        styleDesc: s.styleDesc,
+        colorCode: s.colorCode,
+        colorDesc: s.colorDesc,
+        season: s.season,
+        customer: s.customer,
+        customerType: s.customerType,
+        gender: s.gender,
+        orderType: s.orderType,
+        shipToState: s.shipToState,
+        shipToCity: s.shipToCity,
+        shipToZip: s.shipToZip,
+        billToState: s.billToState,
+        billToCity: s.billToCity,
+        billToZip: s.billToZip,
+        invoiceNumber: s.invoiceNumber,
+        invoiceDate: s.invoiceDate,
+        accountingPeriod: s.accountingPeriod,
+        shippedAtNet: s.shippedAtNet ?? s.shipped ?? 0,
+        returnedAtNet: s.returnedAtNet ?? 0,
+        openAtNet: s.openAtNet ?? 0,
+        unitsShipped: s.unitsShipped,
+        unitsReturned: s.unitsReturned,
+      } as InvoiceRecord);
+    });
+    return out;
+  }, [invoicesProp, sales]);
   // ── Local filter state (multi-select arrays) ──
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [seasonFilter, setSeasonFilter] = useState<string[]>([]);

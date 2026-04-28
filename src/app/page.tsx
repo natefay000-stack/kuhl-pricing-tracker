@@ -1928,6 +1928,7 @@ export default function Home() {
             <ErrorBoundary viewName="Inv-Opn Month">
               <InvOpnMonthView
                 invoices={invoices}
+                sales={sales}
                 products={products}
                 selectedSeason={selectedSeason}
                 onStyleClick={handleStyleClick}
