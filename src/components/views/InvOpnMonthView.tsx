@@ -383,6 +383,28 @@ export default function InvOpnMonthView({
     : (globalSeason && globalSeason !== '__ALL_SP__' && globalSeason !== '__ALL_FA__' ? [globalSeason] : []);
   const missingSeasons = activeSeasonFilters.filter((s) => !allSeasons.includes(s));
 
+  // ── Diagnostic: how are the matching records resolving their date bucket? ──
+  // (Helpful when a year shows up "wrong" — tells you if rows have real
+  // invoiceDates from the report or are being season-fallback'd.)
+  const dateSourceStats = useMemo(() => {
+    let invoiceDate = 0, accountingPeriod = 0, seasonFallback = 0, unbucketable = 0, total = 0;
+    invoices.forEach((inv) => {
+      if (!matchesInvoice(inv, 'forPivot')) return;
+      total++;
+      if (inv.invoiceDate && !isNaN(new Date(inv.invoiceDate).getTime())) { invoiceDate++; return; }
+      if (inv.accountingPeriod && /\d{4}/.test(inv.accountingPeriod)) { accountingPeriod++; return; }
+      if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; return; }
+      unbucketable++;
+    });
+    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    invoices,
+    monthFilter, seasonFilter, customerTypeFilter, customerFilter,
+    categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
+    clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+  ]);
+
   const hasAnyFilter =
     monthFilter.length > 0 ||
     seasonFilter.length > 0 ||
@@ -521,6 +543,19 @@ export default function InvOpnMonthView({
           {fmtFull(yearMonthGrid.grandTotal)} total
         </div>
       </div>
+
+      {/* Diagnostic strip — date source breakdown for currently filtered rows */}
+      {dateSourceStats.total > 0 && (
+        <div className="text-xs text-text-muted bg-surface-secondary rounded-lg px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="font-semibold text-text-secondary">Date sources ({dateSourceStats.total.toLocaleString()} matching rows):</span>
+          <span>📅 Invoice date: <span className="font-mono text-emerald-500">{dateSourceStats.invoiceDate.toLocaleString()}</span></span>
+          <span>🧾 Accounting period: <span className="font-mono text-cyan-500">{dateSourceStats.accountingPeriod.toLocaleString()}</span></span>
+          <span>🌱 Season fallback: <span className="font-mono text-amber-500">{dateSourceStats.seasonFallback.toLocaleString()}</span></span>
+          {dateSourceStats.unbucketable > 0 && (
+            <span>⚠ Unbucketable: <span className="font-mono text-red-500">{dateSourceStats.unbucketable.toLocaleString()}</span></span>
+          )}
+        </div>
+      )}
 
       {/* Year × Month pivot */}
       <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
