@@ -290,6 +290,14 @@ export default function InvOpnMonthView({
     clickedStyle, clickedCustomer, globalSeason, styleToCategory,
   ]);
 
+  // Detect: a season is being filtered for, but no invoice records exist for it.
+  // This happens when the user picks a season globally that's only present in
+  // products/sales but not in invoices.
+  const activeSeasonFilters: string[] = seasonFilter.length > 0
+    ? seasonFilter
+    : (globalSeason && globalSeason !== '__ALL_SP__' && globalSeason !== '__ALL_FA__' ? [globalSeason] : []);
+  const missingSeasons = activeSeasonFilters.filter((s) => !allSeasons.includes(s));
+
   const hasAnyFilter =
     monthFilter.length > 0 ||
     seasonFilter.length > 0 ||
@@ -344,6 +352,28 @@ export default function InvOpnMonthView({
           </p>
         </div>
       </div>
+
+      {/* Empty-state banner: season filter has no matching invoice records */}
+      {missingSeasons.length > 0 && (
+        <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/10 p-4 flex items-start gap-3">
+          <span className="text-amber-500 text-lg flex-shrink-0">⚠</span>
+          <div className="text-sm">
+            <p className="font-semibold text-amber-700 dark:text-amber-300">
+              No invoice data for {missingSeasons.join(', ')}
+            </p>
+            <p className="text-text-muted mt-0.5">
+              The header season filter is set to <span className="font-mono">{missingSeasons.join(', ')}</span>, but the invoice
+              dataset doesn&apos;t contain any rows for it. This view reads the <span className="font-medium">Invoice</span> table only —
+              try a different season from the local filter below, or re-import an invoice file that covers this season.
+            </p>
+            {allSeasons.length > 0 && (
+              <p className="text-xs text-text-faint mt-1">
+                Seasons present in invoices: <span className="font-mono">{allSeasons.join(', ')}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Click-active filter chips */}
       {(clickedStyle || clickedCustomer) && (

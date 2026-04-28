@@ -270,6 +270,7 @@ export default function Home() {
     const all = new Set<string>();
     products.forEach(p => p.season && all.add(p.season));
     sales.forEach(s => s.season && all.add(s.season));
+    invoices.forEach(i => i.season && all.add(i.season));
     // Filter out seasons before 2023 (year prefix < 23)
     return Array.from(all)
       .filter(s => {
@@ -277,7 +278,7 @@ export default function Home() {
         return yearMatch ? parseInt(yearMatch[1], 10) >= 23 : false;
       })
       .sort();
-  }, [products, sales]);
+  }, [products, sales, invoices]);
 
   const divisions = useMemo(() => {
     const DIVISION_CODE_TO_NAME: Record<string, string> = { '01': 'Men', '02': 'Women', '08': 'Unisex' };
