@@ -69,6 +69,20 @@ export default function InvOpnMonthView({
     };
     invoicesProp.forEach(push);
     sales.forEach((s) => {
+      // A Sale row can represent either a shipped invoice line OR a booked-
+      // but-not-yet-shipped order. The "Booked Net" report typically only
+      // populates `revenue` (booked $), while the "Detailed/Invoiced" report
+      // populates shippedAtNet / openAtNet / returnedAtNet. To avoid losing
+      // open orders for future seasons, we infer open$ = revenue when the
+      // detailed open$ field isn't set.
+      const shipped = s.shippedAtNet ?? s.shipped ?? 0;
+      const returned = s.returnedAtNet ?? 0;
+      const explicitOpen = s.openAtNet ?? 0;
+      // If openAtNet wasn't populated AND the row hasn't shipped yet, the
+      // revenue (Booked Net) IS the open amount.
+      const inferredOpen = explicitOpen > 0
+        ? explicitOpen
+        : Math.max(0, (s.revenue ?? 0) - shipped - returned);
       push({
         id: s.id,
         styleNumber: s.styleNumber,
@@ -89,9 +103,9 @@ export default function InvOpnMonthView({
         invoiceNumber: s.invoiceNumber,
         invoiceDate: s.invoiceDate,
         accountingPeriod: s.accountingPeriod,
-        shippedAtNet: s.shippedAtNet ?? s.shipped ?? 0,
-        returnedAtNet: s.returnedAtNet ?? 0,
-        openAtNet: s.openAtNet ?? 0,
+        shippedAtNet: shipped,
+        returnedAtNet: returned,
+        openAtNet: inferredOpen,
         unitsShipped: s.unitsShipped,
         unitsReturned: s.unitsReturned,
       } as InvoiceRecord);
