@@ -287,7 +287,10 @@ export default function InvOpnMonthView({
       grid.get(y)![m] += v;
       grandTotal += v;
     });
-    const years = Array.from(grid.keys()).sort();
+    // Hide empty years (every month bucket = 0)
+    const years = Array.from(grid.keys())
+      .filter((y) => (grid.get(y) ?? []).some((v) => v !== 0))
+      .sort();
     return { years, grid, grandTotal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
