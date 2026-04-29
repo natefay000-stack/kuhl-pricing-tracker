@@ -1,4 +1,4 @@
-@import url('https://api.fontshare.com/v2/css?f[]=supreme@100,200,300,400,500,600,700,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Narrow:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
@@ -6,8 +6,8 @@
 @tailwind utilities;
 
 :root {
-  --font-display: 'Supreme', system-ui, sans-serif;
-  --font-body: 'Supreme', system-ui, sans-serif;
+  --font-display: 'Archivo Narrow', system-ui, sans-serif;
+  --font-body: 'Archivo Narrow', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* ── Semantic color tokens — light mode ─────────────────────── */

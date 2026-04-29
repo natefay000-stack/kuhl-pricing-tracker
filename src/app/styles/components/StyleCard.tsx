@@ -67,7 +67,7 @@ function PricingDrawer({ pricing, channels }: Pick<StyleData, 'pricing' | 'chann
       >
         <span className="flex items-center gap-2">
           <Lock size={14} />
-          <span className="font-medium tracking-wide" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+          <span className="font-medium tracking-wide" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
             Internal Pricing Data
           </span>
         </span>
@@ -88,28 +88,28 @@ function PricingDrawer({ pricing, channels }: Pick<StyleData, 'pricing' | 'chann
             <div className="grid grid-cols-3 gap-3 mb-4">
               {/* MSRP */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   MSRP
                 </div>
                 <div className="text-lg font-semibold text-kuhl-cream">${pricing.msrp}</div>
               </div>
               {/* Wholesale */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   Wholesale
                 </div>
                 <div className="text-lg font-semibold text-kuhl-cream">${pricing.wholesale.toFixed(2)}</div>
               </div>
               {/* COGS */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   COGS
                 </div>
                 <div className="text-lg font-semibold text-kuhl-cream">${pricing.cogs.toFixed(2)}</div>
               </div>
               {/* Margin */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   Margin (WS)
                 </div>
                 <div className="text-lg font-semibold" style={{ color: marginColor(pricing.marginWs) }}>
@@ -118,7 +118,7 @@ function PricingDrawer({ pricing, channels }: Pick<StyleData, 'pricing' | 'chann
               </div>
               {/* vs Target */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   vs Target
                 </div>
                 <div className="text-lg font-semibold" style={{ color: deltaColor(pricing.vsTargetPp) }}>
@@ -132,7 +132,7 @@ function PricingDrawer({ pricing, channels }: Pick<StyleData, 'pricing' | 'chann
               </div>
               {/* vs SP25 */}
               <div className="rounded-md bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                <div className="text-[10px] uppercase tracking-widest text-kuhl-clay mb-1" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                   vs SP25
                 </div>
                 <div className="text-lg font-semibold" style={{ color: deltaColor(pricing.vsSp25Pp) }}>
@@ -177,13 +177,13 @@ export default function StyleCard({ style, index }: StyleCardProps) {
         <div className="flex items-center gap-2">
           <span
             className="rounded px-2 py-1 text-xs font-bold tracking-wider uppercase text-kuhl-sand"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif", background: 'rgba(196,183,166,0.12)' }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif", background: 'rgba(196,183,166,0.12)' }}
           >
             #{style.styleNumber}
           </span>
           <span
             className="rounded px-2 py-1 text-xs font-medium tracking-wide uppercase text-kuhl-clay"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif", background: 'rgba(196,183,166,0.08)' }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif", background: 'rgba(196,183,166,0.08)' }}
           >
             {style.gender}&apos;s
           </span>
@@ -192,14 +192,14 @@ export default function StyleCard({ style, index }: StyleCardProps) {
           {style.isNew && (
             <span
               className="rounded px-2 py-1 text-xs font-bold tracking-wider uppercase"
-              style={{ fontFamily: "'Barlow Condensed', sans-serif", background: 'rgba(250,204,21,0.15)', color: '#facc15' }}
+              style={{ fontFamily: "'Archivo Narrow', sans-serif", background: 'rgba(250,204,21,0.15)', color: '#facc15' }}
             >
               New SP26
             </span>
           )}
           <span
             className="rounded px-2 py-1 text-xs font-medium tracking-wide uppercase"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif", background: catColor.bg, color: catColor.text }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif", background: catColor.bg, color: catColor.text }}
           >
             {style.category}
           </span>
@@ -235,7 +235,7 @@ export default function StyleCard({ style, index }: StyleCardProps) {
               </>
             )}
           </svg>
-          <span className="text-xs tracking-widest uppercase text-kuhl-earth" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+          <span className="text-xs tracking-widest uppercase text-kuhl-earth" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
             Replace with product photo
           </span>
           {/* To use real photos:
@@ -248,7 +248,7 @@ export default function StyleCard({ style, index }: StyleCardProps) {
       {/* Bottom tagline */}
       <p
         className="text-sm italic text-kuhl-sand/70 text-center"
-        style={{ fontFamily: "'Cormorant Garamond', serif" }}
+        style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
       >
         &ldquo;{style.tagline}&rdquo;
       </p>
@@ -262,17 +262,17 @@ export default function StyleCard({ style, index }: StyleCardProps) {
       <div className="mb-6">
         <p
           className="text-xs uppercase tracking-[0.2em] text-kuhl-clay mb-2"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           #{style.styleNumber} &middot; {style.gender}&apos;s {style.productType}
         </p>
         <h2
           className="text-3xl lg:text-4xl font-light text-kuhl-cream mb-1"
-          style={{ fontFamily: "'Cormorant Garamond', serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           {style.name}
         </h2>
-        <p className="text-sm text-kuhl-clay" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+        <p className="text-sm text-kuhl-clay" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
           {style.subtitle}
         </p>
       </div>
@@ -281,17 +281,17 @@ export default function StyleCard({ style, index }: StyleCardProps) {
       <div className="mb-6">
         <h3
           className="text-xs uppercase tracking-[0.2em] text-yellow-400/80 mb-2"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           Designed for
         </h3>
         <p
           className="text-xl text-kuhl-sand italic mb-2"
-          style={{ fontFamily: "'Cormorant Garamond', serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           {style.designedForHeadline}
         </p>
-        <p className="text-sm text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Barlow', sans-serif" }}>
+        <p className="text-sm text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
           {style.designedForBody}
         </p>
       </div>
@@ -300,12 +300,12 @@ export default function StyleCard({ style, index }: StyleCardProps) {
       <div className="mb-6">
         <h3
           className="text-xs uppercase tracking-[0.2em] text-yellow-400/80 mb-2"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           Why we built it
         </h3>
         <div className="border-l-2 border-yellow-400/40 pl-4">
-          <p className="text-sm text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Barlow', sans-serif" }}>
+          <p className="text-sm text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
             {style.whyWeBuiltIt}
           </p>
         </div>
@@ -315,7 +315,7 @@ export default function StyleCard({ style, index }: StyleCardProps) {
       <div className="mb-2">
         <h3
           className="text-xs uppercase tracking-[0.2em] text-yellow-400/80 mb-3"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           Construction
         </h3>
@@ -323,7 +323,7 @@ export default function StyleCard({ style, index }: StyleCardProps) {
           {style.constructionFeatures.map((f) => (
             <li key={f.name} className="flex items-start gap-2.5 text-sm">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-400" />
-              <span className="text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Barlow', sans-serif" }}>
+              <span className="text-kuhl-sand/70 leading-relaxed" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
                 <strong className="text-kuhl-cream font-semibold">{f.name}</strong>{' '}
                 &mdash; {f.description}
               </span>

@@ -18,11 +18,11 @@ function Nav() {
         {/* Logo */}
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded bg-yellow-400">
-            <span className="text-sm font-black text-kuhl-stone" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <span className="text-sm font-black text-kuhl-stone" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
               K
             </span>
           </div>
-          <span className="text-sm tracking-wide text-kuhl-sand" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+          <span className="text-sm tracking-wide text-kuhl-sand" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
             K&Uuml;HL <span className="text-kuhl-earth mx-1">&middot;</span> SP26 Style Stories
           </span>
         </div>
@@ -35,7 +35,7 @@ function Nav() {
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
             className="text-sm text-kuhl-clay hover:text-kuhl-cream transition-colors"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
           >
             Men&apos;s
           </button>
@@ -45,14 +45,14 @@ function Nav() {
               el?.scrollIntoView({ behavior: 'smooth' });
             }}
             className="text-sm text-kuhl-clay hover:text-kuhl-cream transition-colors"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
           >
             Women&apos;s
           </button>
           <Link
             href="/"
             className="group flex items-center gap-1.5 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-4 py-1.5 text-sm font-medium text-yellow-400 hover:bg-yellow-400/20 transition-colors"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+            style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
           >
             Pricing Tracker
             <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
@@ -104,7 +104,7 @@ function Hero() {
       <div className="relative z-10 mx-auto max-w-3xl px-6 text-center py-24">
         <h1
           className="text-4xl sm:text-5xl lg:text-6xl font-light text-kuhl-cream mb-6 leading-tight"
-          style={{ fontFamily: "'Cormorant Garamond', serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           Built for the mountain.
           <br />
@@ -112,7 +112,7 @@ function Hero() {
         </h1>
         <p
           className="text-base sm:text-lg text-kuhl-sand/80 max-w-xl mx-auto leading-relaxed"
-          style={{ fontFamily: "'Barlow', sans-serif" }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
         >
           The stories behind the styles that define K&Uuml;HL&apos;s SP26 line&mdash;who
           they&apos;re built for, why they exist, and how they&apos;re constructed.
@@ -124,7 +124,7 @@ function Hero() {
       <div className="absolute right-8 bottom-10 flex flex-col items-center gap-2 text-kuhl-earth z-10">
         <span
           className="text-[10px] uppercase tracking-[0.3em]"
-          style={{ fontFamily: "'Barlow Condensed', sans-serif", writingMode: 'vertical-rl' }}
+          style={{ fontFamily: "'Archivo Narrow', sans-serif", writingMode: 'vertical-rl' }}
         >
           Scroll
         </span>
@@ -159,7 +159,7 @@ function FilterBar({
                     ? 'text-yellow-400'
                     : 'text-kuhl-clay hover:text-kuhl-sand'
                 }`}
-                style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+                style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
               >
                 <span className="tracking-wide">{tab.label}</span>
                 <span className={`ml-1.5 text-xs ${isActive ? 'text-yellow-400/60' : 'text-kuhl-earth'}`}>
@@ -205,11 +205,11 @@ export default function StyleStoriesPage() {
           <div className="text-center py-24">
             <p
               className="text-2xl text-kuhl-earth italic"
-              style={{ fontFamily: "'Cormorant Garamond', serif" }}
+              style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
             >
               No styles match this filter yet.
             </p>
-            <p className="text-sm text-kuhl-earth/60 mt-2" style={{ fontFamily: "'Barlow', sans-serif" }}>
+            <p className="text-sm text-kuhl-earth/60 mt-2" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
               Women&apos;s and workwear styles are coming soon for SP26.
             </p>
           </div>
@@ -221,13 +221,13 @@ export default function StyleStoriesPage() {
         <div className="mx-auto max-w-7xl px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded bg-yellow-400/80">
-              <span className="text-[10px] font-black text-kuhl-stone" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>K</span>
+              <span className="text-[10px] font-black text-kuhl-stone" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>K</span>
             </div>
-            <span className="text-xs text-kuhl-earth" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+            <span className="text-xs text-kuhl-earth" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
               K&Uuml;HL &middot; SP26 Internal
             </span>
           </div>
-          <p className="text-xs text-kuhl-earth/60" style={{ fontFamily: "'Barlow', sans-serif" }}>
+          <p className="text-xs text-kuhl-earth/60" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>
             For internal use only. Pricing and margin data is confidential.
           </p>
         </div>
