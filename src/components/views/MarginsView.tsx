@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { exportCostingMargins } from '@/utils/exportCostingMargins';
-import { formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
+import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber } from '@/utils/format';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import MarginScenarioPanel, { ChannelMetric } from '@/components/MarginScenarioPanel';
@@ -1569,10 +1569,10 @@ export default function MarginsView({
                           {formatNumber(channel.units)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-text-secondary">
-                          ${channel.avgWholesalePrice.toFixed(2)}
+                          {formatCurrency(channel.avgWholesalePrice)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-text-primary">
-                          ${channel.avgNetPrice.toFixed(2)}
+                          {formatCurrency(channel.avgNetPrice)}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-mono text-sm ${channel.avgDiscount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -1580,7 +1580,7 @@ export default function MarginsView({
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-text-secondary">
-                          ${channel.avgLanded.toFixed(2)}
+                          {formatCurrency(channel.avgLanded)}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-mono font-bold px-2 py-1 rounded ${getMarginColor(channel.trueMargin)}`}>
@@ -1615,10 +1615,10 @@ export default function MarginsView({
                       {formatNumber(channelPerformance.blended.units)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-secondary">
-                      ${channelPerformance.blended.avgWholesalePrice.toFixed(2)}
+                      {formatCurrency(channelPerformance.blended.avgWholesalePrice)}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
-                      ${channelPerformance.blended.avgNetPrice.toFixed(2)}
+                      {formatCurrency(channelPerformance.blended.avgNetPrice)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={`font-mono font-bold text-sm ${channelPerformance.blended.avgDiscount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -1626,7 +1626,7 @@ export default function MarginsView({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-text-secondary">
-                      ${channelPerformance.blended.avgLanded.toFixed(2)}
+                      {formatCurrency(channelPerformance.blended.avgLanded)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={`font-mono font-bold px-3 py-1 rounded ${getMarginColor(channelPerformance.blended.trueMargin)}`}>
@@ -1736,7 +1736,7 @@ export default function MarginsView({
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-text-primary">{formatCurrencyShort(customer.revenue)}</td>
                           <td className="px-4 py-3 text-right font-mono text-text-secondary">{formatNumber(customer.units)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-text-primary">${customer.avgNetPrice.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-text-primary">{formatCurrency(customer.avgNetPrice)}</td>
                           <td className="px-4 py-3 text-right">
                             <span className={`font-mono font-semibold px-2 py-1 rounded ${getMarginColor(customer.margin)}`}>
                               {formatPercent(customer.margin)}
@@ -1994,7 +1994,7 @@ export default function MarginsView({
                                 }`} title={style.wholesaleSource === 'linelist' ? 'Line List' : style.wholesaleSource === 'sales' ? 'Sales' : 'Landed Sheet'}></span>
                               )}
                               <span className="font-mono text-sm text-text-primary">
-                                {style.wholesalePrice > 0 ? `$${style.wholesalePrice.toFixed(2)}` : '—'}
+                                {style.wholesalePrice > 0 ? formatCurrency(style.wholesalePrice) : '—'}
                               </span>
                             </div>
                           </td>
@@ -2004,7 +2004,7 @@ export default function MarginsView({
                                 <span className="w-2 h-2 rounded-full bg-purple-500" title="Sales (calculated from revenue/units)"></span>
                               )}
                               <span className="font-mono text-sm text-text-primary">
-                                {style.avgNetPrice > 0 ? `$${style.avgNetPrice.toFixed(2)}` : '—'}
+                                {style.avgNetPrice > 0 ? formatCurrency(style.avgNetPrice) : '—'}
                               </span>
                             </div>
                           </td>
@@ -2022,7 +2022,7 @@ export default function MarginsView({
                                 style.costWarning === 'missing' ? 'text-text-muted' :
                                 'text-text-secondary'
                               }`}>
-                                {style.landedCost > 0 ? `$${style.landedCost.toFixed(2)}` : '—'}
+                                {style.landedCost > 0 ? formatCurrency(style.landedCost) : '—'}
                               </span>
                               {style.costWarning === 'above-wholesale' && (
                                 <span className="text-amber-400 text-xs" title="Cost exceeds wholesale price — suspect data">⚠️</span>
@@ -2127,7 +2127,7 @@ export default function MarginsView({
                                         </div>
                                         <div className="flex justify-between">
                                           <span className="text-text-secondary">Avg Net Price:</span>
-                                          <span className="font-mono">${mix.avgNetPrice.toFixed(2)}</span>
+                                          <span className="font-mono">{formatCurrency(mix.avgNetPrice)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span className="text-text-secondary">Channel Margin:</span>
@@ -2147,7 +2147,7 @@ export default function MarginsView({
                               <div className="mt-4 pt-4 border-t border-border-strong flex items-center gap-6 text-sm">
                                 <div className="flex items-center">
                                   <span className="text-text-secondary">Landed Cost:</span>
-                                  <span className="font-mono font-medium ml-2">${style.landedCost.toFixed(2)}</span>
+                                  <span className="font-mono font-medium ml-2">{formatCurrency(style.landedCost)}</span>
                                   {style.costFallbackSeason && (
                                     <span className="ml-1 inline-flex items-center" title={`Cost from ${style.costFallbackSeason} (no landed cost for current season)`}>
                                       <Clock className="w-3 h-3 text-amber-400" />
@@ -2156,11 +2156,11 @@ export default function MarginsView({
                                 </div>
                                 <div>
                                   <span className="text-text-secondary">Wholesale Price:</span>
-                                  <span className="font-mono font-medium ml-2">${style.wholesalePrice.toFixed(2)}</span>
+                                  <span className="font-mono font-medium ml-2">{formatCurrency(style.wholesalePrice)}</span>
                                 </div>
                                 <div>
                                   <span className="text-text-secondary">Avg Net Price (All Channels):</span>
-                                  <span className="font-mono font-medium ml-2">${style.avgNetPrice.toFixed(2)}</span>
+                                  <span className="font-mono font-medium ml-2">{formatCurrency(style.avgNetPrice)}</span>
                                 </div>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); onStyleClick(style.styleNumber); }}

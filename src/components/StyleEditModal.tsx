@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Save, Edit3, Loader2 } from 'lucide-react';
 import { CostRecord, PricingRecord } from '@/types/product';
+import { formatCurrency } from '@/utils/format';
 
 interface StyleEditModalProps {
   /** Cost row for the style+season being edited. null if this style has no Cost row yet. */
@@ -233,7 +234,7 @@ export default function StyleEditModal({ cost, pricing, onClose, onSaved }: Styl
                   className="w-full px-3 py-2 bg-surface-secondary border border-primary rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <p className="text-xs text-text-muted mt-1">
-                  Current: {pricing.msrp != null ? (Number.isInteger(pricing.msrp) ? `$${pricing.msrp}` : `$${pricing.msrp.toFixed(2)}`) : '—'}
+                  Current: {formatCurrency(pricing.msrp)}
                 </p>
               </div>
 
@@ -250,7 +251,7 @@ export default function StyleEditModal({ cost, pricing, onClose, onSaved }: Styl
                   className="w-full px-3 py-2 bg-surface-secondary border border-primary rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <p className="text-xs text-text-muted mt-1">
-                  Current: {pricing.price != null ? `$${pricing.price.toFixed(2)}` : '—'}
+                  Current: {formatCurrency(pricing.price)}
                 </p>
               </div>
             </>
@@ -272,7 +273,7 @@ export default function StyleEditModal({ cost, pricing, onClose, onSaved }: Styl
                   className="w-full px-3 py-2 bg-surface-secondary border border-primary rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
                 <p className="text-xs text-text-muted mt-1">
-                  Current: {cost.landed != null ? `$${cost.landed.toFixed(2)}` : '—'}
+                  Current: {formatCurrency(cost.landed)}
                 </p>
               </div>
 

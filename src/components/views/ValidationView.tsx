@@ -5,7 +5,7 @@ import { Product, SalesRecord, CostRecord, PricingRecord, normalizeCategory } fr
 import { sortSeasons } from '@/lib/store';
 import { buildCSV } from '@/utils/exportData';
 import { getSeasonStatus } from '@/lib/season-utils';
-import { formatCurrencyShort, formatNumber } from '@/utils/format';
+import { formatCurrency, formatCurrencyShort, formatNumber } from '@/utils/format';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import {
   AlertTriangle,
@@ -770,7 +770,7 @@ export default function ValidationView({
                           {item.units > 0 ? formatNumber(item.units) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-base text-text-secondary">
-                          {item.wholesale > 0 ? `$${item.wholesale.toFixed(2)}` : '—'}
+                          {item.wholesale > 0 ? formatCurrency(item.wholesale) : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-text-muted">
                           {[item.hasSales && 'Sales', item.hasPricing && 'Pricing'].filter(Boolean).join(' + ')}

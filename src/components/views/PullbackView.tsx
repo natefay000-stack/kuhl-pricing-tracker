@@ -176,7 +176,7 @@ interface PullbackViewProps {
 
 type SectionKey = 'urgent' | 'web' | 'closeout' | 'slow' | 'deadstock';
 
-const fmtCurrency = (v: number) => `$${v.toFixed(2)}`;
+const fmtCurrency = (v: number) => (Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`);
 const fmtCurrencyShort = (v: number) => {
   if (!Number.isFinite(v)) return '—';
   if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
@@ -1197,7 +1197,7 @@ export default function PullbackView({ sales, invoices, costs, onStyleClick }: P
                             const href = s.siteUrl ?? null;
                             const badge = (
                               <span
-                                title={`Live on kuhl.com${s.currentPrice ? ` · $${s.currentPrice.toFixed(2)}` : ''}`}
+                                title={`Live on kuhl.com${s.currentPrice ? ` · ${fmtCurrency(s.currentPrice)}` : ''}`}
                                 className="inline-flex items-center gap-1 text-emerald-500"
                               >
                                 <Eye className="w-4 h-4" />

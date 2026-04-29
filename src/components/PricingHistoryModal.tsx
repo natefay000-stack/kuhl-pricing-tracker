@@ -22,7 +22,7 @@ interface PricingHistoryModalProps {
 
 const formatValue = (v: number | null | undefined): string => {
   if (v == null) return '—';
-  return `$${v.toFixed(2)}`;
+  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
 };
 
 const formatDate = (iso: string): string => {

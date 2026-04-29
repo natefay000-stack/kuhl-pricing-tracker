@@ -23,7 +23,7 @@ interface CostHistoryModalProps {
 const formatValue = (field: string, v: number | null | undefined): string => {
   if (v == null) return '—';
   if (field === 'margin') return `${(v * 100).toFixed(1)}%`;
-  return `$${v.toFixed(2)}`;
+  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
 };
 
 const formatDate = (iso: string): string => {

@@ -1052,7 +1052,7 @@ export default function StyleDetailPanel({
                     const fmt = (v: number | null) => {
                       if (v == null) return '—';
                       if (e.field === 'margin') return `${(v * 100).toFixed(1)}%`;
-                      return `$${v.toFixed(2)}`;
+                      return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
                     };
                     const label = e.field === 'price'
                       ? 'Wholesale'

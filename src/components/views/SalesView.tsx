@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { SalesRecord, Product, PricingRecord, CostRecord, InventoryOHRecord, normalizeCategory } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
-import { formatCurrencyShort, formatNumber } from '@/utils/format';
+import { formatCurrency, formatCurrencyShort, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
 import { matchesFilter } from '@/utils/filters';
 import { buildCSV } from '@/utils/exportData';
@@ -941,7 +941,7 @@ export default function SalesView({
         </div>
         <div className="bg-surface rounded-2xl border border-border-strong p-6 transition-all hover:border-text-faint">
           <div className="text-xs text-text-muted font-medium uppercase tracking-wider mb-2">Avg Unit Price</div>
-          <div className="text-4xl font-bold font-mono tracking-tighter mb-2.5 leading-none text-text-primary">${metrics.avgPrice.current.toFixed(2)}</div>
+          <div className="text-4xl font-bold font-mono tracking-tighter mb-2.5 leading-none text-text-primary">{formatCurrency(metrics.avgPrice.current)}</div>
           <div className="flex items-center gap-2">
             {metrics.avgPrice.change !== null && (
               <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${metrics.avgPrice.change >= 0 ? 'bg-[rgba(48,209,88,0.15)] text-[#30d158]' : 'bg-[rgba(255,69,58,0.15)] text-[#ff453a]'}`}>

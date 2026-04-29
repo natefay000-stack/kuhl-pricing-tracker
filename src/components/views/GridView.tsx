@@ -82,7 +82,7 @@ const canUseCostFallback = (season: string): boolean => {
 function formatCellValue(field: FieldKey, v: number | null): string {
   if (v == null || Number.isNaN(v)) return '';
   if (field === 'margin') return `${(v * 100).toFixed(1)}%`;
-  return `$${v.toFixed(2)}`;
+  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
 }
 
 function parseInputValue(raw: string): number | null {

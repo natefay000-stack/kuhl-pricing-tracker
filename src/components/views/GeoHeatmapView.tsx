@@ -539,7 +539,7 @@ export default function GeoHeatmapView({
       // Format label with population context
       const revenueStr = `$${value >= 1000 ? (value / 1000).toFixed(1) + 'K' : value.toFixed(0)}`;
       const popStr = pop > 0 ? ` · Pop: ${pop.toLocaleString()}` : '';
-      const perCapStr = perCapita > 0 ? ` · $${perCapita.toFixed(2)}/person` : '';
+      const perCapStr = perCapita > 0 ? ` · ${Number.isInteger(perCapita) ? `$${perCapita}` : `$${perCapita.toFixed(2)}`}/person` : '';
 
       return {
         zip: z.zip,
