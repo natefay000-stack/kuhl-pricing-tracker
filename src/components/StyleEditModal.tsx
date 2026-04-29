@@ -233,7 +233,7 @@ export default function StyleEditModal({ cost, pricing, onClose, onSaved }: Styl
                   className="w-full px-3 py-2 bg-surface-secondary border border-primary rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <p className="text-xs text-text-muted mt-1">
-                  Current: {pricing.msrp != null ? `$${pricing.msrp.toFixed(2)}` : '—'}
+                  Current: {pricing.msrp != null ? (Number.isInteger(pricing.msrp) ? `$${pricing.msrp}` : `$${pricing.msrp.toFixed(2)}`) : '—'}
                 </p>
               </div>
 

@@ -63,7 +63,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 
 const formatCurrency = (v: number | null | undefined): string => {
   if (v == null || !Number.isFinite(v)) return '—';
-  return `$${v.toFixed(2)}`;
+  return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
 };
 
 const formatPct = (v: number | null | undefined, digits = 1): string => {
@@ -912,7 +912,7 @@ export default function StyleDetailPanel({
                         }`}
                         title={
                           c.kulturUnits > 0
-                            ? `${formatNumber(c.kulturUnits)} Kultur units re-valued at MSRP $${(costInfo?.msrp ?? 0).toFixed(2)}`
+                            ? `${formatNumber(c.kulturUnits)} Kultur units re-valued at MSRP ${formatCurrency(costInfo?.msrp ?? 0)}`
                             : 'No KUHL Kultur units in this channel — booked margin already reflects reality.'
                         }
                       >

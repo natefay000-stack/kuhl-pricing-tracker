@@ -11,10 +11,12 @@
 
 // ── Currency ────────────────────────────────────────────────────────
 
-/** Exact currency – for line items, detail tables.  Null/undefined → '—' */
+/** Exact currency – for line items, detail tables.  Null/undefined → '—'
+ * Whole-dollar values render without trailing .00 (e.g. $129 not $129.00),
+ * fractional values keep 2 decimals ($129.50). */
 export function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  return `$${value.toFixed(2)}`;
+  return Number.isInteger(value) ? `$${value}` : `$${value.toFixed(2)}`;
 }
 
 /** Abbreviated currency – for dashboards & summary cards */
