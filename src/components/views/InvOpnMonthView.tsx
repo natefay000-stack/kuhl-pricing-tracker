@@ -131,26 +131,75 @@ export default function InvOpnMonthView({
   // Date bucket resolver (used by both filter-match and pivot). Sales records
   // often lack invoiceDate for booked-but-not-yet-shipped lines, so we fall
   // back to accountingPeriod, then to a season-derived month.
+  const MONTH_NAMES: Record<string, number> = {
+    JAN: 0, JANUARY: 0, FEB: 1, FEBRUARY: 1, MAR: 2, MARCH: 2,
+    APR: 3, APRIL: 3, MAY: 4, JUN: 5, JUNE: 5, JUL: 6, JULY: 6,
+    AUG: 7, AUGUST: 7, SEP: 8, SEPT: 8, SEPTEMBER: 8, OCT: 9, OCTOBER: 9,
+    NOV: 10, NOVEMBER: 10, DEC: 11, DECEMBER: 11,
+  };
+
+  const parseAcctPeriod = (raw: string): { y: number; m: number } | null => {
+    const ap = raw.trim().toUpperCase();
+    if (!ap) return null;
+    // "MM/YYYY" or "M/YYYY" or "MM-YYYY"
+    let match = ap.match(/^(\d{1,2})[\/\-\.](\d{4})$/);
+    if (match) {
+      const mm = parseInt(match[1], 10) - 1;
+      const yy = parseInt(match[2], 10);
+      if (mm >= 0 && mm <= 11) return { y: yy, m: mm };
+    }
+    // "YYYY/MM" or "YYYY-MM"
+    match = ap.match(/^(\d{4})[\/\-\.](\d{1,2})$/);
+    if (match) {
+      const yy = parseInt(match[1], 10);
+      const mm = parseInt(match[2], 10) - 1;
+      if (mm >= 0 && mm <= 11) return { y: yy, m: mm };
+    }
+    // "YYYYMM" (6 digits)
+    match = ap.match(/^(\d{4})(\d{2})$/);
+    if (match) {
+      const yy = parseInt(match[1], 10);
+      const mm = parseInt(match[2], 10) - 1;
+      if (mm >= 0 && mm <= 11) return { y: yy, m: mm };
+    }
+    // "MM/YY" or "M/YY"
+    match = ap.match(/^(\d{1,2})[\/\-\.](\d{2})$/);
+    if (match) {
+      const mm = parseInt(match[1], 10) - 1;
+      const yy = 2000 + parseInt(match[2], 10);
+      if (mm >= 0 && mm <= 11) return { y: yy, m: mm };
+    }
+    // "MMMYY" / "MMM-YY" / "MMM YY" / "MMM YYYY"  (e.g. "MAR25", "MAR-25", "MAR 2025")
+    match = ap.match(/^([A-Z]{3,9})[\s\-\/\.]?(\d{2,4})$/);
+    if (match) {
+      const monKey = match[1];
+      const mm = MONTH_NAMES[monKey];
+      if (mm !== undefined) {
+        const rawYr = parseInt(match[2], 10);
+        const yy = rawYr < 100 ? 2000 + rawYr : rawYr;
+        return { y: yy, m: mm };
+      }
+    }
+    // "P03-2025" / "P3-25" / "FY25P03"  → strip leading non-digits, retry
+    const stripped = ap.replace(/^[A-Z]+/, '').replace(/^FY/, '');
+    if (stripped !== ap) {
+      const retry = parseAcctPeriod(stripped);
+      if (retry) return retry;
+    }
+    // Last resort — try Date.parse
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return { y: d.getFullYear(), m: d.getMonth() };
+    return null;
+  };
+
   const resolveBucket = (inv: InvoiceRecord): { y: number; m: number } | null => {
     if (inv.invoiceDate) {
       const d = new Date(inv.invoiceDate);
       if (!isNaN(d.getTime())) return { y: d.getFullYear(), m: d.getMonth() };
     }
     if (inv.accountingPeriod) {
-      const ap = inv.accountingPeriod.trim();
-      let mm: number | null = null;
-      let yy: number | null = null;
-      let match = ap.match(/^(\d{1,2})[\/\-](\d{4})$/);
-      if (match) { mm = parseInt(match[1], 10) - 1; yy = parseInt(match[2], 10); }
-      if (!match) {
-        match = ap.match(/^(\d{4})[\/\-](\d{1,2})$/);
-        if (match) { yy = parseInt(match[1], 10); mm = parseInt(match[2], 10) - 1; }
-      }
-      if (!match) {
-        match = ap.match(/^(\d{4})(\d{2})$/);
-        if (match) { yy = parseInt(match[1], 10); mm = parseInt(match[2], 10) - 1; }
-      }
-      if (yy !== null && mm !== null && mm >= 0 && mm <= 11) return { y: yy, m: mm };
+      const parsed = parseAcctPeriod(inv.accountingPeriod);
+      if (parsed) return parsed;
     }
     if (inv.season) {
       const match = inv.season.match(/^(\d{2})(SP|FA)$/i);
@@ -391,15 +440,20 @@ export default function InvOpnMonthView({
   // invoiceDates from the report or are being season-fallback'd.)
   const dateSourceStats = useMemo(() => {
     let invoiceDate = 0, accountingPeriod = 0, seasonFallback = 0, unbucketable = 0, total = 0;
+    const acctSamples = new Set<string>();
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forPivot')) return;
       total++;
       if (inv.invoiceDate && !isNaN(new Date(inv.invoiceDate).getTime())) { invoiceDate++; return; }
-      if (inv.accountingPeriod && /\d{4}/.test(inv.accountingPeriod)) { accountingPeriod++; return; }
+      if (inv.accountingPeriod) {
+        const parsed = parseAcctPeriod(inv.accountingPeriod);
+        if (parsed) { accountingPeriod++; return; }
+        if (acctSamples.size < 5) acctSamples.add(inv.accountingPeriod);
+      }
       if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; return; }
       unbucketable++;
     });
-    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total };
+    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total, acctSamples: Array.from(acctSamples) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     invoices,
@@ -556,6 +610,11 @@ export default function InvOpnMonthView({
           <span>🌱 Season fallback: <span className="font-mono text-amber-500">{dateSourceStats.seasonFallback.toLocaleString()}</span></span>
           {dateSourceStats.unbucketable > 0 && (
             <span>⚠ Unbucketable: <span className="font-mono text-red-500">{dateSourceStats.unbucketable.toLocaleString()}</span></span>
+          )}
+          {dateSourceStats.acctSamples.length > 0 && (
+            <span className="basis-full text-text-faint">
+              Unparseable acct period samples: <span className="font-mono">{dateSourceStats.acctSamples.map((s) => `"${s}"`).join(', ')}</span>
+            </span>
           )}
         </div>
       )}
