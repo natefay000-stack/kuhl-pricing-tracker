@@ -183,8 +183,15 @@ export function exportCostingMargins(args: CostingExportArgs): void {
 
   // Product filter by division/category
   const matchesFilters = (p: Product): boolean => {
-    if (divisionFilter && !(p.divisionDesc ?? '').toLowerCase().includes(divisionFilter.toLowerCase())) return false;
-    if (categoryFilter && p.categoryDesc !== categoryFilter) return false;
+    if (divisionFilter) {
+      const desc = (p.divisionDesc ?? '').toLowerCase();
+      const tokens = divisionFilter.split('|').filter(Boolean);
+      if (tokens.length > 0 && !tokens.some(t => desc.includes(t.toLowerCase()))) return false;
+    }
+    if (categoryFilter) {
+      const tokens = categoryFilter.split('|').filter(Boolean);
+      if (tokens.length > 0 && !tokens.includes(p.categoryDesc ?? '')) return false;
+    }
     if (seasonFilter && seasonFilter.length > 0 && !seasonFilter.includes(p.season)) return false;
     return true;
   };

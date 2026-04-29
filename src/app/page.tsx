@@ -46,6 +46,7 @@ import { exportViewToPdf } from '@/utils/exportPdf';
 import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
 import { exportMultiSheetExcel } from '@/utils/exportData';
 import { normalizeDivisionDesc } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 
 // Cache version - increment to invalidate cache
 // v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
@@ -364,7 +365,7 @@ export default function Home() {
           mo = String(d.getMonth() + 1).padStart(2, '0');
         }
       }
-      if (mo && (!selectedYear || yr === selectedYear)) {
+      if (mo && matchesFilter(yr, selectedYear)) {
         mos.add(mo);
       }
     });
@@ -389,8 +390,8 @@ export default function Home() {
       }
       // If there's no date info on this record, keep it (don't hide non-invoice data)
       if (!yr && !mo) return true;
-      if (selectedYear && yr !== selectedYear) return false;
-      if (selectedMonth && mo !== selectedMonth) return false;
+      if (!matchesFilter(yr, selectedYear)) return false;
+      if (!matchesFilter(mo, selectedMonth)) return false;
       return true;
     });
   }, [sales, selectedYear, selectedMonth]);

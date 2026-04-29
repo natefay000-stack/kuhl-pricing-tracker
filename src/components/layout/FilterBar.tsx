@@ -4,13 +4,7 @@ import { useMemo } from 'react';
 import { ViewId } from './Sidebar';
 import { sortSeasons } from '@/lib/store';
 import { getSeasonStatus, type SeasonStatus } from '@/lib/season-utils';
-import { CUSTOMER_TYPE_LABELS } from '@/types/product';
-
-const MONTH_NAMES: Record<string, string> = {
-  '01': 'January', '02': 'February', '03': 'March', '04': 'April',
-  '05': 'May', '06': 'June', '07': 'July', '08': 'August',
-  '09': 'September', '10': 'October', '11': 'November', '12': 'December',
-};
+import MultiSelect from '@/components/MultiSelect';
 
 interface FilterBarProps {
   activeView: ViewId;
@@ -78,7 +72,6 @@ function getStatusColor(status: SeasonStatus): {
 }
 
 export default function FilterBar({
-  activeView,
   seasons,
   divisions,
   categories,
@@ -217,147 +210,72 @@ export default function FilterBar({
       </div>
 
       {/* ── Row 2: Dropdown Filters ─────────────────────────────── */}
-      <div className="px-6 py-2.5 flex items-center gap-6 flex-wrap">
-        {/* Division */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-            Division
-          </label>
-          <select
-            value={selectedDivision}
-            onChange={(e) => onDivisionChange(e.target.value)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] ${
-              selectedDivision ? 'border-cyan-500/50' : 'border-border-primary'
-            }`}
-          >
-            <option value="">All Divisions</option>
-            {divisions.map((div) => (
-              <option key={div} value={div}>{div}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Category */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-            Category
-          </label>
-          <select
-            value={selectedCategory}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] ${
-              selectedCategory ? 'border-cyan-500/50' : 'border-border-primary'
-            }`}
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Designer */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-            Designer
-          </label>
-          <select
-            value={selectedDesigner}
-            onChange={(e) => onDesignerChange(e.target.value)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] ${
-              selectedDesigner ? 'border-cyan-500/50' : 'border-border-primary'
-            }`}
-          >
-            <option value="">All Designers</option>
-            {designers.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Customer Type */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-            Customer Type
-          </label>
-          <select
-            value={selectedCustomerType}
-            onChange={(e) => onCustomerTypeChange(e.target.value)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[160px] ${
-              selectedCustomerType ? 'border-cyan-500/50' : 'border-border-primary'
-            }`}
-          >
-            <option value="">All Types</option>
-            {customerTypes.map((ct) => (
-              <option key={ct} value={ct}>{CUSTOMER_TYPE_LABELS[ct] || ct}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Customer */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-            Customer
-          </label>
-          <select
-            value={selectedCustomer}
-            onChange={(e) => onCustomerChange(e.target.value)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[170px] ${
-              selectedCustomer ? 'border-cyan-500/50' : 'border-border-primary'
-            }`}
-          >
-            <option value="">All Customers</option>
-            {customers.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
+      <div className="px-6 py-2.5 flex items-end gap-6 flex-wrap">
+        <MultiSelect
+          label="Division"
+          placeholder="All Divisions"
+          options={divisions}
+          values={selectedDivision ? selectedDivision.split('|').filter(Boolean) : []}
+          onChange={(arr) => onDivisionChange(arr.join('|'))}
+          widthClass="w-[160px]"
+        />
+        <MultiSelect
+          label="Category"
+          placeholder="All Categories"
+          options={categories}
+          values={selectedCategory ? selectedCategory.split('|').filter(Boolean) : []}
+          onChange={(arr) => onCategoryChange(arr.join('|'))}
+          widthClass="w-[160px]"
+        />
+        <MultiSelect
+          label="Designer"
+          placeholder="All Designers"
+          options={designers}
+          values={selectedDesigner ? selectedDesigner.split('|').filter(Boolean) : []}
+          onChange={(arr) => onDesignerChange(arr.join('|'))}
+          widthClass="w-[160px]"
+        />
+        <MultiSelect
+          label="Customer Type"
+          placeholder="All Types"
+          options={customerTypes}
+          values={selectedCustomerType ? selectedCustomerType.split('|').filter(Boolean) : []}
+          onChange={(arr) => onCustomerTypeChange(arr.join('|'))}
+          widthClass="w-[160px]"
+        />
+        <MultiSelect
+          label="Customer"
+          placeholder="All Customers"
+          options={customers}
+          values={selectedCustomer ? selectedCustomer.split('|').filter(Boolean) : []}
+          onChange={(arr) => onCustomerChange(arr.join('|'))}
+          widthClass="w-[170px]"
+        />
 
         {/* Separator before date filters */}
         {years.length > 0 && (
-          <div className="w-px h-10 bg-border-primary/50" />
+          <div className="w-px h-10 bg-border-primary/50 self-end mb-2" />
         )}
 
-        {/* Year */}
         {years.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-              Year
-            </label>
-            <select
-              value={selectedYear}
-              onChange={(e) => onYearChange(e.target.value)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[100px] ${
-                selectedYear ? 'border-cyan-500/50' : 'border-border-primary'
-              }`}
-            >
-              <option value="">All Years</option>
-              {years.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Year"
+            placeholder="All Years"
+            options={years}
+            values={selectedYear ? selectedYear.split('|').filter(Boolean) : []}
+            onChange={(arr) => onYearChange(arr.join('|'))}
+            widthClass="w-[110px]"
+          />
         )}
-
-        {/* Month */}
         {years.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <label className="text-[9px] font-semibold text-text-faint uppercase tracking-widest">
-              Month
-            </label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => onMonthChange(e.target.value)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium bg-surface-tertiary border text-text-primary focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 min-w-[130px] ${
-                selectedMonth ? 'border-cyan-500/50' : 'border-border-primary'
-              }`}
-            >
-              <option value="">All Months</option>
-              {months.map((m) => (
-                <option key={m} value={m}>{MONTH_NAMES[m] || m}</option>
-              ))}
-            </select>
-          </div>
+          <MultiSelect
+            label="Month"
+            placeholder="All Months"
+            options={months}
+            values={selectedMonth ? selectedMonth.split('|').filter(Boolean) : []}
+            onChange={(arr) => onMonthChange(arr.join('|'))}
+            widthClass="w-[140px]"
+          />
         )}
       </div>
     </div>

@@ -5,6 +5,7 @@ import { SalesRecord, Product, PricingRecord, CostRecord, InventoryOHRecord, nor
 import { sortSeasons } from '@/lib/store';
 import { formatCurrencyShort, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { buildCSV } from '@/utils/exportData';
 import {
   ChevronRight as ChevronRightIcon,
@@ -317,13 +318,10 @@ export default function SalesView({
   const activeSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.season !== activeSeason) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc || s.gender || '', selectedDivision)) return false;
-      if (selectedCategory) {
-        const norm = normalizeCategory(s.categoryDesc);
-        if (norm !== selectedCategory) return false;
-      }
-      if (selectedCustomerType && s.customerType !== selectedCustomerType) return false;
-      if (selectedCustomer && s.customer !== selectedCustomer) return false;
+      if (!matchesDivision(s.divisionDesc || s.gender || '', selectedDivision)) return false;
+      if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
+      if (!matchesFilter(s.customerType, selectedCustomerType)) return false;
+      if (!matchesFilter(s.customer, selectedCustomer)) return false;
       return true;
     });
   }, [sales, activeSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer]);
@@ -332,13 +330,10 @@ export default function SalesView({
     if (!compareSeason) return [];
     return sales.filter((s) => {
       if (s.season !== compareSeason) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc || s.gender || '', selectedDivision)) return false;
-      if (selectedCategory) {
-        const norm = normalizeCategory(s.categoryDesc);
-        if (norm !== selectedCategory) return false;
-      }
-      if (selectedCustomerType && s.customerType !== selectedCustomerType) return false;
-      if (selectedCustomer && s.customer !== selectedCustomer) return false;
+      if (!matchesDivision(s.divisionDesc || s.gender || '', selectedDivision)) return false;
+      if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
+      if (!matchesFilter(s.customerType, selectedCustomerType)) return false;
+      if (!matchesFilter(s.customer, selectedCustomer)) return false;
       return true;
     });
   }, [sales, compareSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer]);

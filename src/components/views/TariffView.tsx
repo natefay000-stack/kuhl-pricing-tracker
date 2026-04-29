@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Product, SalesRecord, CostRecord } from '@/types/product';
 import { matchesSeason, sortSeasons } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import {
   formatCurrency,
   formatCurrencyShort,
@@ -191,8 +192,8 @@ export default function TariffView({
       const divDesc = prod?.divisionDesc || '';
       const catDesc = prod?.categoryDesc || '';
 
-      if (selectedDivision && !matchesDivision(divDesc, selectedDivision)) return;
-      if (selectedCategory && catDesc !== selectedCategory) return;
+      if (!matchesDivision(divDesc, selectedDivision)) return;
+      if (!matchesFilter(catDesc, selectedCategory)) return;
 
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();

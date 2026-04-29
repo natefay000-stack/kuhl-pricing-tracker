@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Product, SalesRecord, InventoryOHRecord, normalizeCategory } from '@/types/product';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { sortSeasons } from '@/lib/store';
 import { formatCurrencyShort, formatNumber, formatPercent } from '@/utils/format';
 import { exportToExcel } from '@/utils/exportData';
@@ -165,8 +166,8 @@ export default function SellThroughView({
       .filter(r => r.snapshotDate === latestSnapshotDate)
       .forEach(r => {
         // Apply global filters
-        if (selectedDivision && r.division !== undefined && !matchesDivision(String(r.division), selectedDivision)) return;
-        if (selectedCategory && normalizeCategory(r.category || '') !== selectedCategory) return;
+        if (r.division !== undefined && !matchesDivision(String(r.division), selectedDivision)) return;
+        if (!matchesFilter(normalizeCategory(r.category || ''), selectedCategory)) return;
 
         const existing = map.get(r.styleNumber);
         if (existing) {
@@ -193,8 +194,8 @@ export default function SellThroughView({
     sales
       .filter(s => s.season === activeSeason)
       .forEach(s => {
-        if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return;
-        if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return;
+        if (!matchesDivision(s.divisionDesc, selectedDivision)) return;
+        if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return;
 
         const existing = map.get(s.styleNumber);
         if (existing) {

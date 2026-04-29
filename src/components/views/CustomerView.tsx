@@ -133,9 +133,16 @@ export default function CustomerView({
 
     sales.forEach(sale => {
       if (sale.season !== activeSeason) return;
-      if (globalCustomerType && sale.customerType !== globalCustomerType) return;
-      if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
-      if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalCustomerType) {
+        const tokens = globalCustomerType.split('|').filter(Boolean);
+        if (tokens.length > 0 && !tokens.includes(sale.customerType ?? '')) return;
+      }
+      if (globalCategory) {
+        const norm = normalizeCategory(sale.categoryDesc);
+        const tokens = globalCategory.split('|').filter(Boolean).map(normalizeCategory);
+        if (tokens.length > 0 && !tokens.includes(norm)) return;
+      }
+      if (!matchesDivision(sale.divisionDesc, globalDivision)) return;
       const cust = sale.customer || 'Unknown';
       if (!map.has(cust)) {
         map.set(cust, { customer: cust, customerType: sale.customerType || '', revenue: 0, shipped: 0, units: 0, totalCost: 0, styles: new Set(), orders: 0 });
@@ -196,9 +203,9 @@ export default function CustomerView({
   }, [filteredCustomers]);
 
   /* ── Auto-select first customer if none selected ──────────────── */
-  const activeCustomer = selectedCustomer && filteredCustomers.some(c => c.customer === selectedCustomer)
-    ? selectedCustomer
-    : filteredCustomers[0]?.customer || null;
+  const selectedCustomerTokens = selectedCustomer ? selectedCustomer.split('|').filter(Boolean) : [];
+  const firstSelectedMatch = selectedCustomerTokens.find(t => filteredCustomers.some(c => c.customer === t));
+  const activeCustomer = firstSelectedMatch || filteredCustomers[0]?.customer || null;
 
   const activeMetrics = activeCustomer ? filteredCustomers.find(c => c.customer === activeCustomer) : null;
   const activePrior = activeCustomer ? priorMetricsMap.get(activeCustomer) : null;

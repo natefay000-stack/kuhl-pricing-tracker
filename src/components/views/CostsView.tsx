@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Product, PricingRecord, CostRecord, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { formatCurrency, formatCurrencyShort, formatPercentRaw, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 import { buildCSV } from '@/utils/exportData';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
@@ -292,8 +293,8 @@ export default function CostsView({
       // Global division/category filters (lookup from product data)
       if (selectedDivision || selectedCategory) {
         const prod = productLookup.get(g.styleNumber);
-        if (selectedDivision && prod && !matchesDivision(prod.divisionDesc, selectedDivision)) return false;
-        if (selectedCategory && prod && prod.categoryDesc !== selectedCategory) return false;
+        if (prod && !matchesDivision(prod.divisionDesc, selectedDivision)) return false;
+        if (prod && !matchesFilter(prod.categoryDesc, selectedCategory)) return false;
       }
 
       // Global search filter

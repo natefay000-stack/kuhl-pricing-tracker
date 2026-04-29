@@ -223,8 +223,11 @@ export default function SeasonCompView({
     // Aggregate products (style counts)
     products.forEach((p) => {
       if (!allSeasonsForData.has(p.season)) return;
-      if (selectedDivision && !matchesDivision(p.divisionDesc, selectedDivision)) return;
-      if (selectedDesigner && p.designerName !== selectedDesigner) return;
+      if (!matchesDivision(p.divisionDesc, selectedDivision)) return;
+      if (selectedDesigner) {
+        const designerTokens = selectedDesigner.split('|').filter(Boolean);
+        if (designerTokens.length > 0 && !designerTokens.includes(p.designerName ?? '')) return;
+      }
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();
         if (!p.styleNumber?.toLowerCase().includes(q) && !(p.styleDesc || '').toLowerCase().includes(q)) return;
@@ -244,18 +247,33 @@ export default function SeasonCompView({
     sales.forEach((s) => {
       if (!allSeasonsForData.has(s.season)) return;
       if (selectedDivision) {
-        const gender = getGenderFromDivision(selectedDivision);
-        const saleGender = getGenderFromDivision(s.divisionDesc || '');
-        if (gender !== 'Unisex' && saleGender !== 'Unisex' && gender !== saleGender) return;
+        const tokens = selectedDivision.split('|').filter(Boolean);
+        if (tokens.length > 0) {
+          const saleGender = getGenderFromDivision(s.divisionDesc || '');
+          const passes = tokens.some((tok) => {
+            const gender = getGenderFromDivision(tok);
+            return gender === 'Unisex' || saleGender === 'Unisex' || gender === saleGender;
+          });
+          if (!passes) return;
+        }
       }
       if (selectedDesigner) {
-        const styleProduct = products.find((p) => p.styleNumber === s.styleNumber && p.designerName === selectedDesigner);
-        if (!styleProduct) return;
+        const designerTokens = selectedDesigner.split('|').filter(Boolean);
+        if (designerTokens.length > 0) {
+          const styleProduct = products.find((p) => p.styleNumber === s.styleNumber && designerTokens.includes(p.designerName ?? ''));
+          if (!styleProduct) return;
+        }
       }
       // Filter by customer type
-      if (selectedCustomerType && s.customerType !== selectedCustomerType) return;
+      if (selectedCustomerType) {
+        const tokens = selectedCustomerType.split('|').filter(Boolean);
+        if (tokens.length > 0 && !tokens.includes(s.customerType ?? '')) return;
+      }
       // Filter by customer
-      if (selectedCustomer && s.customer !== selectedCustomer) return;
+      if (selectedCustomer) {
+        const tokens = selectedCustomer.split('|').filter(Boolean);
+        if (tokens.length > 0 && !tokens.includes(s.customer ?? '')) return;
+      }
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();
         if (!s.styleNumber?.toLowerCase().includes(q) && !(s.styleDesc || '').toLowerCase().includes(q)) return;

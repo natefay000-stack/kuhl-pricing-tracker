@@ -238,22 +238,25 @@ export default function LineListView({
   }, [globalSeason, seasons]);
 
   useEffect(() => {
-    // Wrap the global single-string filter into the local array shape.
-    if (globalDivision) {
-      if (divisionFilter.length !== 1 || divisionFilter[0] !== globalDivision) {
-        setDivisionFilter([globalDivision]);
-      }
-    } else if (divisionFilter.length > 0 && !globalDivision) {
-      // Don't clobber local user picks when no global filter is set.
+    // Wrap the global pipe-delimited filter into the local array shape.
+    const tokens = globalDivision ? globalDivision.split('|').filter(Boolean) : [];
+    if (tokens.length > 0) {
+      const same =
+        tokens.length === divisionFilter.length &&
+        tokens.every((t, i) => divisionFilter[i] === t);
+      if (!same) setDivisionFilter(tokens);
     }
+    // Don't clobber local user picks when no global filter is set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalDivision]);
 
   useEffect(() => {
-    if (globalCategory) {
-      if (categoryFilter.length !== 1 || categoryFilter[0] !== globalCategory) {
-        setCategoryFilter([globalCategory]);
-      }
+    const tokens = globalCategory ? globalCategory.split('|').filter(Boolean) : [];
+    if (tokens.length > 0) {
+      const same =
+        tokens.length === categoryFilter.length &&
+        tokens.every((t, i) => categoryFilter[i] === t);
+      if (!same) setCategoryFilter(tokens);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalCategory]);

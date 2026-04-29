@@ -20,6 +20,7 @@ import {
 import { formatCurrencyShort } from '@/utils/format';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import StyleEditModal from '@/components/StyleEditModal';
 import CostHistoryModal from '@/components/CostHistoryModal';
 import PricingHistoryModal from '@/components/PricingHistoryModal';
@@ -152,8 +153,8 @@ export default function StyleDetailPanel({
       } else if (selectedSeason && !matchesSeason(s.season, selectedSeason)) {
         return false;
       }
-      if (selectedDivision && !matchesDivision(s.divisionDesc ?? '', selectedDivision)) return false;
-      if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
+      if (!matchesDivision(s.divisionDesc ?? '', selectedDivision)) return false;
+      if (!matchesFilter(s.categoryDesc, selectedCategory)) return false;
       return true;
     });
   }, [sales, styleNumber, selectedSeason, selectedDivision, selectedCategory, panelSeason]);
@@ -463,8 +464,8 @@ export default function StyleDetailPanel({
           : selectedSeason;
       chips.push({ label: 'Season', value: label });
     }
-    if (selectedDivision) chips.push({ label: 'Division', value: selectedDivision });
-    if (selectedCategory) chips.push({ label: 'Category', value: selectedCategory });
+    if (selectedDivision) chips.push({ label: 'Division', value: selectedDivision.split('|').filter(Boolean).join(', ') });
+    if (selectedCategory) chips.push({ label: 'Category', value: selectedCategory.split('|').filter(Boolean).join(', ') });
     return chips;
   }, [selectedSeason, selectedDivision, selectedCategory]);
 

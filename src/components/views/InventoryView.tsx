@@ -242,8 +242,14 @@ export default function InventoryView({
     if (!selectedSeason || selectedSeason === '__ALL_SP__' || selectedSeason === '__ALL_FA__') return '';
     return selectedSeason;
   }, [selectedSeason]);
-  const ohDivisionCode = useMemo(() => divisionNameToOHCode(selectedDivision), [selectedDivision]);
-  const ohCategoryCode = useMemo(() => categoryDescToOHCode(selectedCategory), [selectedCategory]);
+  const ohDivisionCodes = useMemo(
+    () => (selectedDivision ? selectedDivision.split('|').filter(Boolean).map(divisionNameToOHCode).filter(Boolean) : []),
+    [selectedDivision],
+  );
+  const ohCategoryCodes = useMemo(
+    () => (selectedCategory ? selectedCategory.split('|').filter(Boolean).map(categoryDescToOHCode).filter(Boolean) : []),
+    [selectedCategory],
+  );
 
   // ── Hierarchy & drill-down state ──
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set());
@@ -531,12 +537,12 @@ export default function InventoryView({
         (r.styleDesc || '').toLowerCase().includes(q)
       );
     }
-    if (ohCategoryCode) result = result.filter(r => r.category === ohCategoryCode);
+    if (ohCategoryCodes.length > 0) result = result.filter(r => ohCategoryCodes.includes(r.category ?? ''));
     if (ohSeasonCode) result = result.filter(r => r.season === ohSeasonCode);
-    if (ohDivisionCode) result = result.filter(r => String(r.division) === ohDivisionCode);
+    if (ohDivisionCodes.length > 0) result = result.filter(r => ohDivisionCodes.includes(String(r.division)));
     if (ohWarehouse) result = result.filter(r => String(r.warehouse) === ohWarehouse);
     return result;
-  }, [ohData, ohSearch, ohCategoryCode, ohSeasonCode, ohDivisionCode, ohWarehouse, globalSearchQuery]);
+  }, [ohData, ohSearch, ohCategoryCodes, ohSeasonCode, ohDivisionCodes, ohWarehouse, globalSearchQuery]);
 
   // ── Filtered KPI computations ──
   const ohTotalUnits = useMemo(() => filteredOH.reduce((s, r) => s + r.totalQty, 0), [filteredOH]);
@@ -549,7 +555,7 @@ export default function InventoryView({
     const booked = new Map<string, number>();
     const shipped = new Map<string, number>();
     sales.forEach(s => {
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) return;
       booked.set(s.styleNumber, (booked.get(s.styleNumber) || 0) + (s.unitsBooked || 0));
       shipped.set(s.styleNumber, (shipped.get(s.styleNumber) || 0) + (s.unitsShipped || 0));
     });

@@ -8,6 +8,7 @@ import { getCurrentShippingSeason, getSeasonStatus, getSeasonStatusBadge, getCos
 import { isRelevantSeason, parseSeasonCode } from '@/utils/season';
 import { formatCurrencyShort, formatCurrency, formatPercent, formatNumber } from '@/utils/format';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { cleanStyleNumber, getBaseStyleNumber, isVariantDescription, getCombineKey } from '@/utils/combineStyles';
 import { buildCostFallbackLookup } from '@/utils/costFallback';
 import {
@@ -315,8 +316,8 @@ export default function SeasonView({
 
     // Apply filters first
     const filtered = Array.from(styleMap.values()).filter((style) => {
-      if (selectedDivision && !matchesDivision(style.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && style.categoryDesc !== selectedCategory) return false;
+      if (!matchesDivision(style.divisionDesc, selectedDivision)) return false;
+      if (!matchesFilter(style.categoryDesc, selectedCategory)) return false;
       if (localCategoryFilter && style.categoryDesc !== localCategoryFilter) return false;
       if (localGenderFilter) {
         const lower = style.divisionDesc?.toLowerCase() || '';
@@ -324,7 +325,7 @@ export default function SeasonView({
         if (localGenderFilter === "Women's" && !(lower.includes("women") || lower.includes("woman"))) return false;
         if (localGenderFilter === "Unisex" && !lower.includes("unisex")) return false;
       }
-      if (selectedDesigner && style.designerName !== selectedDesigner) return false;
+      if (!matchesFilter(style.designerName, selectedDesigner)) return false;
       if (styleNumberFilter && !style.styleNumber.toLowerCase().includes(styleNumberFilter.toLowerCase())) return false;
       if (styleNameFilter && !style.styleDesc?.toLowerCase().includes(styleNameFilter.toLowerCase())) return false;
       if (globalSearchQuery) {
@@ -395,8 +396,11 @@ export default function SeasonView({
     // Sales by style+season
     const salesByStyleSeason = new Map<string, { revenue: number; units: number }>();
     sales.forEach((s) => {
-      if (selectedCustomerType && !s.customerType?.includes(selectedCustomerType)) return;
-      if (selectedCustomer && s.customer !== selectedCustomer) return;
+      if (selectedCustomerType) {
+        const tokens = selectedCustomerType.split('|').filter(Boolean);
+        if (tokens.length > 0 && !tokens.some(t => s.customerType?.includes(t))) return;
+      }
+      if (!matchesFilter(s.customer, selectedCustomer)) return;
       if (selectedSeasons.length > 0 && !selectedSeasons.includes(s.season)) return;
 
       // Clean style number and use base style number if combining styles

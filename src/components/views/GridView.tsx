@@ -28,6 +28,7 @@ import {
   getSeasonStatusBadge,
 } from '@/lib/season-utils';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { cleanStyleNumber } from '@/utils/combineStyles';
 import { Check, AlertCircle, Loader2, Search, X } from 'lucide-react';
 
@@ -236,10 +237,15 @@ export default function GridView({
   // Sets of styles that satisfy the sales-related filters (customer type / customer)
   const stylesMatchingSalesFilter = useMemo(() => {
     if (!selectedCustomerType && !selectedCustomer) return null; // no filter
+    const ctTokens = selectedCustomerType ? selectedCustomerType.split('|').filter(Boolean) : [];
+    const custTokens = selectedCustomer ? selectedCustomer.split('|').filter(Boolean) : [];
     const set = new Set<string>();
     sales.forEach((s) => {
-      if (selectedCustomerType && !((s.customerType ?? '').split(',').map((t) => t.trim().toUpperCase()).includes(selectedCustomerType))) return;
-      if (selectedCustomer && s.customer !== selectedCustomer) return;
+      if (ctTokens.length > 0) {
+        const types = (s.customerType ?? '').split(',').map((t) => t.trim().toUpperCase());
+        if (!ctTokens.some((tok) => types.includes(tok))) return;
+      }
+      if (custTokens.length > 0 && !custTokens.includes(s.customer ?? '')) return;
       if (s.styleNumber) set.add(s.styleNumber);
     });
     return set;
@@ -301,11 +307,11 @@ export default function GridView({
         const p = productByStyle.get(sn);
         // Division / category (global)
         if (p) {
-          if (selectedDivision && !matchesDivision(p.divisionDesc ?? '', selectedDivision)) return false;
-          if (selectedCategory && p.categoryDesc !== selectedCategory) return false;
+          if (!matchesDivision(p.divisionDesc ?? '', selectedDivision)) return false;
+          if (!matchesFilter(p.categoryDesc, selectedCategory)) return false;
         }
         // Local designer
-        if (selectedDesigner && p?.designerName !== selectedDesigner) return false;
+        if (!matchesFilter(p?.designerName, selectedDesigner)) return false;
         // Local gender (from division)
         if (localGenderFilter) {
           const div = (p?.divisionDesc ?? '').toLowerCase();

@@ -5,6 +5,7 @@ import { Product, SalesRecord, CostRecord, PricingRecord, normalizeCategory } fr
 import { isRelevantSeason } from '@/utils/season';
 import { matchesSeason, sortSeasons } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import {
   DollarSign,
   TrendingUp,
@@ -471,8 +472,8 @@ export default function MarginsView({
 
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
-      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+      if (!matchesDivision(record.divisionDesc, selectedDivision)) return;
+      if (!matchesFilter(normalizeCategory(record.categoryDesc), selectedCategory)) return;
 
       const channel = normalizeCustomerType(record.customerType);
       const costResult = getCost(record.styleNumber, record.season);
@@ -745,8 +746,8 @@ export default function MarginsView({
 
       // Apply division/category/search filters (totalRevenue is 0 for all projected rows)
       return results.filter((s) => {
-        if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-        if (selectedCategory && s.categoryDesc && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
+        if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+        if (s.categoryDesc && !matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
         return s.weightedMargin !== 0 || s.baselineMargin !== 0;
       });
     }
@@ -769,8 +770,8 @@ export default function MarginsView({
 
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
-      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+      if (!matchesDivision(record.divisionDesc, selectedDivision)) return;
+      if (!matchesFilter(normalizeCategory(record.categoryDesc), selectedCategory)) return;
       // Apply season filter if not "all"
       if (styleLevelSeasonFilter !== 'all' && record.season !== styleLevelSeasonFilter) return;
 
@@ -932,8 +933,8 @@ export default function MarginsView({
     const byCustomer = new Map<string, { customer: string; customerType: string; revenue: number; units: number; totalCost: number }>();
 
     filteredSales.forEach(record => {
-      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
-      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+      if (!matchesDivision(record.divisionDesc, selectedDivision)) return;
+      if (!matchesFilter(normalizeCategory(record.categoryDesc), selectedCategory)) return;
 
       // Apply customer type filter if set
       const type = normalizeCustomerType(record.customerType);
@@ -1021,8 +1022,8 @@ export default function MarginsView({
   // Apply filters (division, category, tier, channel)
   const filteredStyleMargins = useMemo(() => {
     return styleMargins.filter(s => {
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesFilter(s.categoryDesc, selectedCategory)) return false;
       if (selectedCategoryFilter && s.categoryDesc !== selectedCategoryFilter) return false;
       if (selectedTier) {
         const tier = getMarginTier(s.margin);
@@ -1150,8 +1151,8 @@ export default function MarginsView({
     // Need to go back to raw sales data for channel info
     filteredSales.forEach(record => {
       // Apply division/category filters
-      if (selectedDivision && !matchesDivision(record.divisionDesc, selectedDivision)) return;
-      if (selectedCategory && normalizeCategory(record.categoryDesc) !== selectedCategory) return;
+      if (!matchesDivision(record.divisionDesc, selectedDivision)) return;
+      if (!matchesFilter(normalizeCategory(record.categoryDesc), selectedCategory)) return;
 
       const channel = record.customerType || 'Other';
       const cost = getCost(record.styleNumber, record.season).cost;

@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, SalesRecord, PricingRecord, CostRecord } from '@/types/product';
 import { compareSeasons, matchesSeason } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import {
   Search,
   ChevronLeft,
@@ -118,8 +119,8 @@ export default function StyleMasterView({
   const filteredStyles = useMemo(() => {
     return uniqueStyles.filter(s => {
       if (selectedSeason && !matchesSeason(s.season, selectedSeason)) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && s.categoryDesc !== selectedCategory) return false;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesFilter(s.categoryDesc, selectedCategory)) return false;
       return true;
     });
   }, [uniqueStyles, selectedSeason, selectedDivision, selectedCategory]);

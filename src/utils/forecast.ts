@@ -158,8 +158,8 @@ function filterSales(sales: SalesRecord[], filters: FilterOptions): SalesRecord[
     if (filters.division && !matchesDivision(s.divisionDesc, filters.division)) return false;
     if (filters.category) {
       const normCat = normalizeCategory(s.categoryDesc);
-      const normFilter = normalizeCategory(filters.category);
-      if (normCat !== normFilter) return false;
+      const tokens = filters.category.split('|').filter(Boolean).map(normalizeCategory);
+      if (tokens.length > 0 && !tokens.includes(normCat)) return false;
     }
     if (filters.search) {
       const q = filters.search.toLowerCase();

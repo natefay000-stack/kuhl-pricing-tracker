@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { SalesRecord, InvoiceRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import {
   loadZipToCountyMap,
   type ZipToCountyMap,
@@ -293,10 +294,14 @@ export default function GeoHeatmapView({
   const filteredSales = useMemo(() => {
     return allGeoRecords.filter((s) => {
       if (!matchesSeason(s.season, selectedSeason)) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
-      if (selectedCustomerType && !(s.customerType || '').split(',').some(t => t.trim() === selectedCustomerType)) return false;
-      if (selectedCustomer && s.customer !== selectedCustomer) return false;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
+      if (selectedCustomerType) {
+        const tokens = selectedCustomerType.split('|').filter(Boolean);
+        const types = (s.customerType || '').split(',').map(t => t.trim());
+        if (tokens.length > 0 && !tokens.some(tok => types.includes(tok))) return false;
+      }
+      if (!matchesFilter(s.customer, selectedCustomer)) return false;
       if (quickGender && getGenderFromDivision(s.divisionDesc) !== quickGender) return false;
       // Date range filter
       if (dateStart || dateEnd) {
@@ -714,10 +719,10 @@ export default function GeoHeatmapView({
       {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || quickGender || selectedMonth || selectedYear) && (
         <div className="flex items-center gap-2 px-3 py-2 bg-[#0a84ff]/5 border border-[#0a84ff]/20 rounded-lg text-xs">
           <span className="text-[#8e8e93]">Filtering:</span>
-          {selectedDivision && <span className="px-2 py-0.5 bg-[#2563eb]/20 text-[#2563eb] rounded font-medium">{selectedDivision}</span>}
-          {selectedCategory && <span className="px-2 py-0.5 bg-[#30d158]/20 text-[#30d158] rounded font-medium">{selectedCategory}</span>}
-          {selectedCustomerType && <span className="px-2 py-0.5 bg-[#ff9f0a]/20 text-[#ff9f0a] rounded font-medium">{CUSTOMER_TYPE_LABELS[selectedCustomerType] || selectedCustomerType}</span>}
-          {selectedCustomer && <span className="px-2 py-0.5 bg-[#bf5af2]/20 text-[#bf5af2] rounded font-medium truncate max-w-[200px]">{selectedCustomer}</span>}
+          {selectedDivision && <span className="px-2 py-0.5 bg-[#2563eb]/20 text-[#2563eb] rounded font-medium">{selectedDivision.split('|').filter(Boolean).join(', ')}</span>}
+          {selectedCategory && <span className="px-2 py-0.5 bg-[#30d158]/20 text-[#30d158] rounded font-medium">{selectedCategory.split('|').filter(Boolean).join(', ')}</span>}
+          {selectedCustomerType && <span className="px-2 py-0.5 bg-[#ff9f0a]/20 text-[#ff9f0a] rounded font-medium">{selectedCustomerType.split('|').filter(Boolean).map(t => CUSTOMER_TYPE_LABELS[t] || t).join(', ')}</span>}
+          {selectedCustomer && <span className="px-2 py-0.5 bg-[#bf5af2]/20 text-[#bf5af2] rounded font-medium truncate max-w-[200px]">{selectedCustomer.split('|').filter(Boolean).join(', ')}</span>}
           {quickGender && <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: `${GENDER_COLORS[quickGender]}33`, color: GENDER_COLORS[quickGender] }}>{quickGender}</span>}
           {selectedMonth && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">{new Date(2000, parseInt(selectedMonth) - 1).toLocaleString('en-US', { month: 'long' })}</span>}
           {selectedYear && <span className="px-2 py-0.5 bg-[#64d2ff]/20 text-[#64d2ff] rounded font-medium">{selectedYear}</span>}

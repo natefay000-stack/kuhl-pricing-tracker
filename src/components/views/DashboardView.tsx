@@ -8,6 +8,7 @@ import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 import { matchesSeason } from '@/lib/store';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 
 // Helper to derive gender from divisionDesc (pure function, module-level)
 function getGenderFromDivision(divisionDesc: string): string {
@@ -57,8 +58,8 @@ export default function DashboardView({
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
       if (!matchesSeason(s.season, selectedSeason)) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && normalizeCategory(s.categoryDesc) !== selectedCategory) return false;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();
         if (!s.styleNumber?.toLowerCase().includes(q) && !(s.styleDesc || '').toLowerCase().includes(q)) return false;
@@ -117,7 +118,7 @@ export default function DashboardView({
       const aggs = salesAggregations.byCategory || [];
       const filtered = aggs.filter((a) => {
         if (!matchesSeason(a.season, selectedSeason)) return false;
-        if (selectedCategory && normalizeCategory(a.category) !== selectedCategory) return false;
+        if (!matchesFilter(normalizeCategory(a.category), selectedCategory)) return false;
         return true;
       });
       const totalRevenue = filtered.reduce((sum, a) => sum + (a.revenue || 0), 0);
@@ -145,7 +146,7 @@ export default function DashboardView({
       const grouped = new Map<string, number>();
       (salesAggregations.byCategory || []).forEach((a) => {
         if (!matchesSeason(a.season, selectedSeason)) return;
-        if (selectedCategory && normalizeCategory(a.category) !== selectedCategory) return;
+        if (!matchesFilter(normalizeCategory(a.category), selectedCategory)) return;
         const cat = normalizeCategory(a.category) || 'Unknown';
         grouped.set(cat, (grouped.get(cat) || 0) + (a.revenue || 0));
       });

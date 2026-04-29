@@ -11,6 +11,8 @@ import {
   CostRecord,
   InventoryRecord,
 } from '@/types/product';
+import { matchesFilter } from '@/utils/filters';
+import { matchesDivision } from '@/utils/divisionMap';
 
 export interface ViewDataBundle {
   products: Product[];
@@ -49,8 +51,8 @@ function matchesSearch(row: Record<string, unknown>, q: string): boolean {
 function filterProducts(bundle: ViewDataBundle): Product[] {
   return bundle.products.filter(p => {
     if (!matchesSeason(p.season, bundle.selectedSeason)) return false;
-    if (bundle.selectedDivision && p.divisionDesc !== bundle.selectedDivision) return false;
-    if (bundle.selectedCategory && p.categoryDesc !== bundle.selectedCategory) return false;
+    if (!matchesDivision(p.divisionDesc ?? '', bundle.selectedDivision)) return false;
+    if (!matchesFilter(p.categoryDesc, bundle.selectedCategory)) return false;
     if (bundle.searchQuery) {
       const q = bundle.searchQuery.toLowerCase();
       if (
@@ -66,8 +68,8 @@ function filterProducts(bundle: ViewDataBundle): Product[] {
 function filterSales(bundle: ViewDataBundle): SalesRecord[] {
   return bundle.sales.filter(s => {
     if (!matchesSeason(s.season, bundle.selectedSeason)) return false;
-    if (bundle.selectedDivision && s.divisionDesc !== bundle.selectedDivision) return false;
-    if (bundle.selectedCategory && s.categoryDesc !== bundle.selectedCategory) return false;
+    if (!matchesDivision(s.divisionDesc ?? '', bundle.selectedDivision)) return false;
+    if (!matchesFilter(s.categoryDesc, bundle.selectedCategory)) return false;
     if (bundle.searchQuery) {
       const q = bundle.searchQuery.toLowerCase();
       if (

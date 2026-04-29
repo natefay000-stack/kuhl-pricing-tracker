@@ -10,6 +10,7 @@ import {
 import { Product, SalesRecord, CostRecord } from '@/types/product';
 import { getCombineKey } from '@/utils/combineStyles';
 import { matchesDivision } from '@/utils/divisionMap';
+import { matchesFilter } from '@/utils/filters';
 import { sortSeasons } from '@/lib/store';
 import {
   formatCurrencyShort,
@@ -227,10 +228,14 @@ export default function StyleColorPerfView({
     for (let i = 0, len = sales.length; i < len; i++) {
       const s = sales[i];
       if (!activeSeasons.has(s.season)) continue;
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) continue;
-      if (selectedCategory && s.categoryDesc !== selectedCategory) continue;
-      if (selectedCustomerType && !(s.customerType || '').split(',').some(t => t.trim() === selectedCustomerType)) continue;
-      if (selectedCustomer && s.customer !== selectedCustomer) continue;
+      if (!matchesDivision(s.divisionDesc, selectedDivision)) continue;
+      if (!matchesFilter(s.categoryDesc, selectedCategory)) continue;
+      if (selectedCustomerType) {
+        const tokens = selectedCustomerType.split('|').filter(Boolean);
+        const types = (s.customerType || '').split(',').map(t => t.trim());
+        if (tokens.length > 0 && !tokens.some(tok => types.includes(tok))) continue;
+      }
+      if (!matchesFilter(s.customer, selectedCustomer)) continue;
 
       const styleKey = combineStyles
         ? (s.styleDesc || getCombineKey(s.styleNumber))
@@ -590,10 +595,10 @@ export default function StyleColorPerfView({
       {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer) && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-cyan-500/5 border border-cyan-500/20 rounded-lg text-[13px]">
           <span className="text-text-muted">Filtering by:</span>
-          {selectedDivision && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedDivision}</span>}
-          {selectedCategory && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCategory}</span>}
-          {selectedCustomerType && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCustomerType}</span>}
-          {selectedCustomer && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCustomer}</span>}
+          {selectedDivision && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedDivision.split('|').filter(Boolean).join(', ')}</span>}
+          {selectedCategory && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCategory.split('|').filter(Boolean).join(', ')}</span>}
+          {selectedCustomerType && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCustomerType.split('|').filter(Boolean).join(', ')}</span>}
+          {selectedCustomer && <span className="px-2.5 py-1 bg-cyan-600 text-white rounded-md font-medium">{selectedCustomer.split('|').filter(Boolean).join(', ')}</span>}
         </div>
       )}
 

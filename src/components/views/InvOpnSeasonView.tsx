@@ -129,8 +129,12 @@ export default function InvOpnSeasonView({
   const globalFiltered = useMemo(() => {
     return sales.filter(s => {
       if (!matchesSeason(s.season, selectedSeason || '')) return false;
-      if (selectedDivision && !matchesDivision(s.divisionDesc, selectedDivision)) return false;
-      if (selectedCategory && normalizeCategory(s.categoryDesc) !== normalizeCategory(selectedCategory)) return false;
+      if (!matchesDivision(s.divisionDesc ?? '', selectedDivision)) return false;
+      if (selectedCategory) {
+        const norm = normalizeCategory(s.categoryDesc);
+        const tokens = selectedCategory.split('|').filter(Boolean).map(normalizeCategory);
+        if (tokens.length > 0 && !tokens.includes(norm)) return false;
+      }
       if (orderTypeFilter === 'invoice' && s.orderType?.toLowerCase() !== 'invoice') return false;
       if (orderTypeFilter === 'open' && s.orderType?.toLowerCase() !== 'open') return false;
       if (searchQuery) {

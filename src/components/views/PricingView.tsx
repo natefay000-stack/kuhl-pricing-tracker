@@ -17,6 +17,7 @@ import {
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatDelta, formatNumber, formatPercent, getMarginColor, getMarginBg } from '@/utils/format';
+import { matchesFilter } from '@/utils/filters';
 import StyleEditModal from '@/components/StyleEditModal';
 import PricingHistoryModal from '@/components/PricingHistoryModal';
 
@@ -348,8 +349,8 @@ export default function PricingView({
 
     // Filter by division and category
     return data.filter(d => {
-      if (filterDivision && d.division !== filterDivision) return false;
-      if (filterCategory && d.category !== filterCategory) return false;
+      if (!matchesFilter(d.division, filterDivision)) return false;
+      if (!matchesFilter(d.category, filterCategory)) return false;
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();
         if (!d.styleNumber.toLowerCase().includes(q) && !d.styleDesc.toLowerCase().includes(q)) return false;
