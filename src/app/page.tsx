@@ -1532,9 +1532,15 @@ export default function Home() {
           }),
         });
 
-        const BATCH_SIZE = 10000;
+        // 10K-row inventory batches blew through Vercel's 4.5MB serverless
+        // payload limit (FUNCTION_PAYLOAD_TOO_LARGE / 413). 2K is the same
+        // chunk size the sales import uses and stays comfortably under.
+        const BATCH_SIZE = 2000;
+        const totalBatches = Math.ceil(data.inventory.length / BATCH_SIZE);
+        console.log(`Persisting ${data.inventory.length} inventory rows in ${totalBatches} batches of ${BATCH_SIZE}`);
         for (let i = 0; i < data.inventory.length; i += BATCH_SIZE) {
           const batch = data.inventory.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
           await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1545,6 +1551,7 @@ export default function Home() {
               replaceExisting: false,
             }),
           });
+          console.log(`Inventory batch ${batchNum}/${totalBatches} written (${batch.length} rows)`);
         }
         console.log('Inventory import complete');
       } catch (dbErr) {
