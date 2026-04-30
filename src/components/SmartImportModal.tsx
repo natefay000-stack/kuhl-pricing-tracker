@@ -695,31 +695,98 @@ export default function SmartImportModal({
         const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        // Some KUHL inventory exports have a 2-row header: row 0 = column
-        // names, row 1 = size-scale sub-headers (S/M/L/XL...). The default
-        // sheet_to_json treats row 0 as the header and produces __EMPTY_N
-        // keys for the unmatched cells in row 1, which then carry through
-        // every data row and inflate the JSON payload past Vercel's 4.5MB
-        // serverless body limit. We detect that pattern and skip row 1.
+        // KUHL ships TWO different inventory reports:
+        //   1. FG Inventory Movement — long-form: each row = one inventory
+        //      transaction (Type, Date, Qty, Balance, Extension…). Single
+        //      header row. This is the format the rest of the app was
+        //      originally built around.
+        //   2. FG Inventory data — stock-by-size: each row = one style+color
+        //      snapshot, with a 2-row header (row 0 = column names + a
+        //      "Size Scale" section, row 1 = size labels S/M/L/XL/XXL...).
+        //      Quantities live in the size columns. We detect format and
+        //      normalize variant 2 into movement-shape records (one record
+        //      per row, qty = total across all sizes, movementType = 'OH').
         const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
         const headerRow = (aoa[0] || []) as string[];
         const secondRow = (aoa[1] || []) as unknown[];
-        const sizeTokens = new Set(['S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XS', 'XXS', '2XL', '3XL']);
-        const looksLikeSizeRow =
-          secondRow.length > 0 &&
-          secondRow.filter((v) => typeof v === 'string' && sizeTokens.has(v.toUpperCase())).length >= 3;
-        const dataStartRow = looksLikeSizeRow ? 2 : 1;
-        const cleanRows = (aoa.slice(dataStartRow) as unknown[][])
-          .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined))
-          .map((row) => {
+        const sizeTokens = new Set(['S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XS', 'XXS', '2XL', '3XL', '4XL']);
+        const sizeColumnIndices: number[] = [];
+        secondRow.forEach((v, idx) => {
+          if (typeof v === 'string' && sizeTokens.has(v.toUpperCase())) sizeColumnIndices.push(idx);
+        });
+        const isStockBySize = sizeColumnIndices.length >= 3;
+
+        // Build a key→column-index map. When the source file has duplicate
+        // header names (this xlsx has 'Description' twice — once for style,
+        // once for color), the second occurrence becomes 'Description_1' so
+        // we can address it.
+        const seen = new Map<string, number>();
+        const keyByIdx: string[] = headerRow.map((raw) => {
+          const k = String(raw ?? '').trim();
+          if (!k) return '';
+          const n = seen.get(k) ?? 0;
+          seen.set(k, n + 1);
+          return n === 0 ? k : `${k}_${n}`;
+        });
+
+        const dataStartRow = isStockBySize ? 2 : 1;
+        const dataRows = (aoa.slice(dataStartRow) as unknown[][])
+          .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined));
+
+        let cleanRows: Record<string, unknown>[];
+        if (isStockBySize) {
+          // Helper: total qty = sum of numeric values in the size columns
+          const totalQtyOf = (row: unknown[]): number => {
+            let total = 0;
+            for (const idx of sizeColumnIndices) {
+              const n = Number(row[idx]);
+              if (Number.isFinite(n)) total += n;
+            }
+            return total;
+          };
+          const colOf = (row: unknown[], name: string): unknown => {
+            const idx = keyByIdx.indexOf(name);
+            return idx >= 0 ? row[idx] : '';
+          };
+          cleanRows = dataRows.map((row) => {
+            const qty = totalQtyOf(row);
+            return {
+              // Map to the schema fields the import endpoint already accepts
+              styleNumber: String(colOf(row, 'Style') ?? ''),
+              styleDesc: String(colOf(row, 'Description') ?? ''),
+              color: String(colOf(row, 'Color') ?? ''),
+              colorDesc: String(colOf(row, 'Description_1') ?? ''),
+              colorType: String(colOf(row, 'Color Type') ?? '') || null,
+              warehouse: String(colOf(row, 'Warehouse') ?? '') || null,
+              movementType: String(colOf(row, 'Type') ?? 'OH') || 'OH',
+              msrp: Number(colOf(row, 'MSRP') ?? 0),
+              wholesalePrice: Number(colOf(row, 'Std Price') ?? 0),
+              costPrice: Number(colOf(row, 'Std Cost') ?? 0),
+              divisionDesc: String(colOf(row, 'Div') ?? '') || null,
+              styleCategory: String(colOf(row, 'Category') ?? '') || null,
+              segmentCode: String(colOf(row, 'Segment Code') ?? '') || null,
+              labelDesc: String(colOf(row, 'Label') ?? '') || null,
+              // Season info from this report
+              period: String(colOf(row, 'Season') ?? '') || null,
+              qty,
+              balance: qty,
+              extension: qty * Number(colOf(row, 'MSRP') ?? 0),
+              // Stock report has no per-row date — leave null
+              movementDate: null,
+            };
+          });
+          console.log(`Inventory parser: detected stock-by-size report. ${cleanRows.length} rows, ${sizeColumnIndices.length} size columns.`);
+        } else {
+          // Movement report — pass raw rows through; the existing API mapper
+          // handles the column→schema translation.
+          cleanRows = dataRows.map((row) => {
             const obj: Record<string, unknown> = {};
-            headerRow.forEach((key, idx) => {
-              if (key) obj[String(key)] = row[idx] ?? '';
+            keyByIdx.forEach((key, idx) => {
+              if (key) obj[key] = row[idx] ?? '';
             });
             return obj;
           });
-        if (looksLikeSizeRow) {
-          console.log(`Inventory parser: detected size-scale sub-header, skipped row 1. ${cleanRows.length} data rows.`);
+          console.log(`Inventory parser: detected movement report. ${cleanRows.length} data rows.`);
         }
         data = { success: true, fileType: 'inventory', inventory: cleanRows, summary: `${cleanRows.length} inventory records` };
       } else {
