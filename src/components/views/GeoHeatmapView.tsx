@@ -218,22 +218,45 @@ export default function GeoHeatmapView({
     return `${selectedYear}-${month}-${String(lastDay).padStart(2, '0')}`;
   }, [selectedMonth, selectedYear]);
 
-  // Available years and months from the invoice data
+  // Available years and months — pulled from any record (sales OR invoices)
+  // that has either an invoiceDate or an accountingPeriod we can parse.
   const { availableYears, availableMonths } = useMemo(() => {
     const years = new Set<string>();
     const months = new Set<string>();
-    for (const s of sales) {
-      if (!s.invoiceDate) continue;
-      const d = new Date(s.invoiceDate);
-      if (isNaN(d.getTime())) continue;
-      years.add(String(d.getFullYear()));
-      months.add(String(d.getMonth() + 1).padStart(2, '0'));
-    }
+    const ingest = (rec: { invoiceDate?: string | null; accountingPeriod?: string | null }) => {
+      if (rec.invoiceDate) {
+        const d = new Date(rec.invoiceDate);
+        if (!isNaN(d.getTime())) {
+          years.add(String(d.getFullYear()));
+          months.add(String(d.getMonth() + 1).padStart(2, '0'));
+          return;
+        }
+      }
+      if (rec.accountingPeriod) {
+        // Match common formats: YYYYMM, MM/YYYY, YYYY-MM
+        const ap = rec.accountingPeriod.trim();
+        let y: string | null = null;
+        let m: string | null = null;
+        const fmt6 = ap.match(/^(\d{4})(\d{2})$/);
+        if (fmt6) { y = fmt6[1]; m = fmt6[2]; }
+        if (!y) {
+          const fmtSlash = ap.match(/^(\d{1,2})[\/\-](\d{4})$/);
+          if (fmtSlash) { m = fmtSlash[1].padStart(2, '0'); y = fmtSlash[2]; }
+        }
+        if (!y) {
+          const fmtIso = ap.match(/^(\d{4})[\/\-](\d{1,2})$/);
+          if (fmtIso) { y = fmtIso[1]; m = fmtIso[2].padStart(2, '0'); }
+        }
+        if (y && m) { years.add(y); months.add(m); }
+      }
+    };
+    for (const s of sales) ingest(s);
+    for (const inv of invoices) ingest(inv);
     return {
       availableYears: Array.from(years).sort(),
       availableMonths: Array.from(months).sort(),
     };
-  }, [sales]);
+  }, [sales, invoices]);
 
   // Load CBSA metro data + zip map + city coords + state centroids on mount
   useEffect(() => {
