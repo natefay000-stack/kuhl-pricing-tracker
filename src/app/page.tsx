@@ -381,6 +381,31 @@ export default function Home() {
   // populates without a schema migration.
   const derivedInventoryOH = useMemo<InventoryOHRecord[]>(() => {
     if (inventoryOH.length > 0) return inventoryOH; // explicit OH wins
+    // The OH view's filters expect division as a numeric code
+    //   (1 = Mens, 2 = Womens, 3 = Unisex/Accessory)
+    // and category as a 4-char abbreviation (PANT, SHRT, BASE…). The
+    // import stored the human-readable values in divisionDesc /
+    // styleCategory, so map them here.
+    const divisionToCode = (name: string | null | undefined): number | undefined => {
+      if (!name) return undefined;
+      const n = name.toLowerCase();
+      if (n.includes('men') && !n.includes('women')) return 1;
+      if (n.includes('women')) return 2;
+      if (n.includes('unisex') || n.includes('accessor')) return 3;
+      return undefined;
+    };
+    const CATEGORY_DESC_TO_CODE: Record<string, string> = {
+      'PANTS': 'PANT', 'SHORTS': 'SHOR', 'SHORT SLEEVE': 'SHRT', 'JACKET': 'JACK',
+      'LONG SLEEVE': 'LONG', 'FLEECE': 'FLEE', 'HEADWEAR': 'HEAD', 'SWEATER': 'SWEA',
+      'FLANNEL': 'FLAN', 'SLEEVELESS': 'SLEE', 'DRESS': 'DRES', 'SKORTS': 'SKOR',
+      'VEST': 'VEST', 'UNDERWEAR': 'UNDE', 'LEGGINGS': 'LEGG', 'BASELAYER': 'BASE',
+      'BAGS': 'BAGS', 'SKIRTS': 'SKIR', 'MISCELLANEOUS': 'MISC',
+    };
+    const categoryToCode = (desc: string | null | undefined): string | undefined => {
+      if (!desc) return undefined;
+      const d = desc.toUpperCase().trim();
+      return CATEGORY_DESC_TO_CODE[d] || (d.length <= 4 ? d : d.slice(0, 4));
+    };
     return inventory
       .filter((r) => (r.movementType ?? '').toUpperCase() === 'OH')
       .map((r) => {
@@ -401,8 +426,8 @@ export default function Home() {
           styleNumber: r.styleNumber,
           styleDesc: r.styleDesc,
           season: r.period ?? undefined,
-          category: r.styleCategory ?? undefined,
-          division: undefined,
+          category: categoryToCode(r.styleCategory),
+          division: divisionToCode(r.divisionDesc),
           prodType: undefined,
           prodLine: undefined,
           stdPrice: r.wholesalePrice ?? 0,
