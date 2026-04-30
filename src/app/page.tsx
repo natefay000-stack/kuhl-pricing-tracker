@@ -21,6 +21,7 @@ const SeasonView = retryDynamic(() => import('@/components/views/SeasonView'));
 const GridView = retryDynamic(() => import('@/components/views/GridView'));
 const PullbackView = retryDynamic(() => import('@/components/views/PullbackView'));
 const InvOpnMonthView = retryDynamic(() => import('@/components/views/InvOpnMonthView'));
+const InvoiceMonthView = retryDynamic(() => import('@/components/views/InvoiceMonthView'));
 const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
 const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
@@ -2067,6 +2068,18 @@ export default function Home() {
           {activeView === 'invopnmonth' && (
             <ErrorBoundary viewName="Inv-Opn Month">
               <InvOpnMonthView
+                invoices={invoices}
+                sales={sales}
+                products={products}
+                selectedSeason={selectedSeason}
+                onStyleClick={handleStyleClick}
+              />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'invoicemonth' && (
+            <ErrorBoundary viewName="Invoice Month">
+              <InvoiceMonthView
                 invoices={invoices}
                 sales={sales}
                 products={products}
