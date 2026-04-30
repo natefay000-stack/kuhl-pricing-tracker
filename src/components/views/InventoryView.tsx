@@ -167,12 +167,16 @@ function getDivisionLabel(div: number | undefined): string {
 }
 
 // Map global filter division name → OH numeric division string
+// Returns the OH division code matching what derivedInventoryOH stores
+// in r.division (1=Men's, 2=Women's, 6=Accessories, 8=Unisex — the last
+// digits of the canonical sales codes 01/02/06/08).
 function divisionNameToOHCode(name: string): string {
   if (!name) return '';
   const n = name.toLowerCase();
   if (n.includes('men') && !n.includes('women')) return '1';
   if (n.includes('women')) return '2';
-  if (n.includes('unisex') || n.includes('accessor')) return '3';
+  if (n.includes('accessor')) return '6';
+  if (n.includes('unisex')) return '8';
   return '';
 }
 

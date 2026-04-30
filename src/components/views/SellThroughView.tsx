@@ -165,8 +165,13 @@ export default function SellThroughView({
     inventoryOH
       .filter(r => r.snapshotDate === latestSnapshotDate)
       .forEach(r => {
-        // Apply global filters
-        if (r.division !== undefined && !matchesDivision(String(r.division), selectedDivision)) return;
+        // Apply global filters. Division is stored as a numeric code
+        // (1, 2, 6, 8) — matchesDivision expects the zero-padded
+        // sales-record format ('01', '02', '06', '08').
+        const divCode = r.division !== undefined && r.division !== null
+          ? String(r.division).padStart(2, '0')
+          : '';
+        if (divCode && !matchesDivision(divCode, selectedDivision)) return;
         if (!matchesFilter(normalizeCategory(r.category || ''), selectedCategory)) return;
 
         const existing = map.get(r.styleNumber);

@@ -381,17 +381,18 @@ export default function Home() {
   // populates without a schema migration.
   const derivedInventoryOH = useMemo<InventoryOHRecord[]>(() => {
     if (inventoryOH.length > 0) return inventoryOH; // explicit OH wins
-    // The OH view's filters expect division as a numeric code
-    //   (1 = Mens, 2 = Womens, 3 = Unisex/Accessory)
-    // and category as a 4-char abbreviation (PANT, SHRT, BASE…). The
-    // import stored the human-readable values in divisionDesc /
-    // styleCategory, so map them here.
+    // Use the canonical sales-record division codes (01 = Men's,
+    // 02 = Women's, 08 = Unisex, 06 = Accessories) so matchesDivision()
+    // recognizes them across views. Stored as numeric (1/2/8/6) to fit
+    // InventoryOHRecord.division: number — string lookups in DIVISION_MAP
+    // happen via String(div).padStart(2, '0').
     const divisionToCode = (name: string | null | undefined): number | undefined => {
       if (!name) return undefined;
       const n = name.toLowerCase();
       if (n.includes('men') && !n.includes('women')) return 1;
       if (n.includes('women')) return 2;
-      if (n.includes('unisex') || n.includes('accessor')) return 3;
+      if (n.includes('unisex')) return 8;
+      if (n.includes('accessor')) return 6;
       return undefined;
     };
     const CATEGORY_DESC_TO_CODE: Record<string, string> = {
@@ -2041,7 +2042,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
-                inventoryOH={inventoryOH}
+                inventoryOH={derivedInventoryOH}
                 salesAggregations={salesAggregations}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
@@ -2093,7 +2094,7 @@ export default function Home() {
               <SellThroughView
                 products={products}
                 sales={dateFilteredSales}
-                inventoryOH={inventoryOH}
+                inventoryOH={derivedInventoryOH}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
@@ -2110,7 +2111,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 pricing={pricing}
                 costs={costs}
-                inventoryOH={inventoryOH}
+                inventoryOH={derivedInventoryOH}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
                 selectedCategory={selectedCategory}
