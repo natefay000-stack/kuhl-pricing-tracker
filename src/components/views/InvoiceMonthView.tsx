@@ -472,19 +472,28 @@ export default function InvoiceMonthView({
   const dateSourceStats = useMemo(() => {
     let invoiceDate = 0, accountingPeriod = 0, seasonFallback = 0, unbucketable = 0, total = 0;
     const acctSamples = new Set<string>();
+    const yearCounts = new Map<number, number>();
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forPivot')) return;
       total++;
-      if (inv.invoiceDate && !isNaN(new Date(inv.invoiceDate).getTime())) { invoiceDate++; return; }
-      if (inv.accountingPeriod) {
+      if (inv.invoiceDate && !isNaN(new Date(inv.invoiceDate).getTime())) { invoiceDate++; }
+      else if (inv.accountingPeriod) {
         const parsed = parseAcctPeriod(inv.accountingPeriod);
-        if (parsed) { accountingPeriod++; return; }
-        if (acctSamples.size < 5) acctSamples.add(inv.accountingPeriod);
+        if (parsed) { accountingPeriod++; }
+        else {
+          if (acctSamples.size < 5) acctSamples.add(inv.accountingPeriod);
+          if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; }
+          else { unbucketable++; }
+        }
       }
-      if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; return; }
-      unbucketable++;
+      else if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; }
+      else { unbucketable++; }
+      // Year distribution — tally based on whatever bucket we'd resolve.
+      const bucket = resolveBucket(inv);
+      if (bucket) yearCounts.set(bucket.y, (yearCounts.get(bucket.y) ?? 0) + 1);
     });
-    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total, acctSamples: Array.from(acctSamples) };
+    const yearBreakdown = Array.from(yearCounts.entries()).sort((a, b) => a[0] - b[0]);
+    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total, acctSamples: Array.from(acctSamples), yearBreakdown };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     invoices,
@@ -645,6 +654,16 @@ export default function InvoiceMonthView({
           {dateSourceStats.acctSamples.length > 0 && (
             <span className="basis-full text-text-faint">
               Unparseable acct period samples: <span className="font-mono">{dateSourceStats.acctSamples.map((s) => `"${s}"`).join(', ')}</span>
+            </span>
+          )}
+          {dateSourceStats.yearBreakdown.length > 0 && (
+            <span className="basis-full text-text-faint mt-1">
+              Year distribution:{' '}
+              {dateSourceStats.yearBreakdown.map(([y, c]) => (
+                <span key={y} className="font-mono mr-3">
+                  {y}: <span className="text-text-secondary">{c.toLocaleString()}</span>
+                </span>
+              ))}
             </span>
           )}
         </div>
