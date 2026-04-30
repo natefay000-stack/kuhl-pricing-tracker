@@ -135,6 +135,9 @@ export default function SellThroughView({
   // Configurable season-length window for the weeks-of-supply calc
   const [seasonWeeks, setSeasonWeeks] = useState<number>(26);
 
+  // Data coverage panel toggle
+  const [showCoverage, setShowCoverage] = useState<boolean>(false);
+
   // Determine the active search (global takes priority)
   const activeSearch = globalSearchQuery || localSearch;
 
@@ -361,6 +364,54 @@ export default function SellThroughView({
     return { totalOH, totalSold, overallSellThrough, overstockCount, criticalCount, totalOHValue };
   }, [sellThroughData]);
 
+  // ── Data coverage diagnostic ──
+  // Surfaces what's missing on the inventory + sales side so the user
+  // knows what extra files / fields would improve the analysis.
+  const coverage = useMemo(() => {
+    const ohStyles = new Set(inventoryOH.map((r) => r.styleNumber));
+    const ohRowsTotal = inventoryOH.length;
+    const ohMissingSeason = inventoryOH.filter((r) => !r.season).length;
+    const ohMissingCost = inventoryOH.filter((r) => !r.stdCost || r.stdCost <= 0).length;
+    const ohMissingPrice = inventoryOH.filter((r) => !r.stdPrice || r.stdPrice <= 0).length;
+    const ohMissingMsrp = inventoryOH.filter((r) => !r.msrp || r.msrp <= 0).length;
+    const ohMissingDivision = inventoryOH.filter((r) => r.division === undefined || r.division === null).length;
+    const ohMissingCategory = inventoryOH.filter((r) => !r.category).length;
+    const ohMissingWarehouse = inventoryOH.filter((r) => r.warehouse === undefined || r.warehouse === null).length;
+
+    // Style-level coverage: what's in OH but has no sales (and vice versa)
+    const salesStyles = new Set(
+      sales
+        .filter((s) => !activeSeason || s.season === activeSeason)
+        .map((s) => s.styleNumber),
+    );
+    const ohWithoutSales = sellThroughData.filter((s) => s.ohUnits > 0 && s.soldUnits === 0).length;
+    const salesWithoutOH = sellThroughData.filter((s) => s.soldUnits > 0 && s.ohUnits === 0).length;
+    const stylesInBoth = sellThroughData.filter((s) => s.ohUnits > 0 && s.soldUnits > 0).length;
+
+    // Sample missing-cost styles (for the user to investigate)
+    const missingCostSamples = inventoryOH
+      .filter((r) => !r.stdCost || r.stdCost <= 0)
+      .slice(0, 5)
+      .map((r) => r.styleNumber);
+
+    return {
+      ohRowsTotal,
+      ohStylesUnique: ohStyles.size,
+      ohMissingSeason,
+      ohMissingCost,
+      ohMissingPrice,
+      ohMissingMsrp,
+      ohMissingDivision,
+      ohMissingCategory,
+      ohMissingWarehouse,
+      ohWithoutSales,
+      salesWithoutOH,
+      stylesInBoth,
+      salesStylesCount: salesStyles.size,
+      missingCostSamples,
+    };
+  }, [inventoryOH, sales, activeSeason, sellThroughData]);
+
   // Risk distribution
   const riskCounts = useMemo(() => {
     const counts = { overstock: 0, healthy: 0, low: 0, critical: 0 };
@@ -460,6 +511,88 @@ export default function SellThroughView({
           <p className="text-2xl font-bold text-red-400">{kpis.criticalCount}</p>
           <p className="text-[10px] text-text-faint mt-1">&lt;4 weeks remaining</p>
         </div>
+      </div>
+
+      {/* Data Coverage panel — surfaces what's missing per OH row */}
+      <div className="bg-surface rounded-xl border border-border-primary overflow-hidden">
+        <button
+          onClick={() => setShowCoverage((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-surface-tertiary transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
+              Data Coverage
+            </span>
+            <span className="text-[10px] text-text-muted">
+              {coverage.ohRowsTotal.toLocaleString()} OH rows · {coverage.ohStylesUnique.toLocaleString()} unique styles · {coverage.salesStylesCount.toLocaleString()} styles with sales
+            </span>
+          </div>
+          {showCoverage ? <ChevronDown className="w-4 h-4 text-text-muted" /> : <ChevronRight className="w-4 h-4 text-text-muted" />}
+        </button>
+        {showCoverage && (
+          <div className="border-t border-border-primary">
+            <table className="w-full text-xs">
+              <thead className="bg-surface-tertiary text-text-muted">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Field / Coverage</th>
+                  <th className="text-right px-4 py-2 font-medium">Missing</th>
+                  <th className="text-right px-4 py-2 font-medium">% of OH rows</th>
+                  <th className="text-left px-4 py-2 font-medium">Where to fix</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-primary">
+                {[
+                  { label: 'Season', missing: coverage.ohMissingSeason, fix: 'Source xlsx Season column, or Pricing import for these styles' },
+                  { label: 'Std Cost (stdCost)', missing: coverage.ohMissingCost, fix: 'Cost / Pricing / Product table — none had a value for these styles' },
+                  { label: 'Wholesale Price (stdPrice)', missing: coverage.ohMissingPrice, fix: 'Pricing import for the inferred season' },
+                  { label: 'MSRP', missing: coverage.ohMissingMsrp, fix: 'Pricing import for the inferred season' },
+                  { label: 'Division', missing: coverage.ohMissingDivision, fix: 'Source xlsx — Gender / Division Description column' },
+                  { label: 'Category', missing: coverage.ohMissingCategory, fix: 'Source xlsx — Category Description column' },
+                  { label: 'Warehouse', missing: coverage.ohMissingWarehouse, fix: 'Source xlsx — Warehouse column' },
+                ].map((row) => {
+                  const pct = coverage.ohRowsTotal > 0 ? (row.missing / coverage.ohRowsTotal) * 100 : 0;
+                  const tone = pct === 0 ? 'text-emerald-500' : pct < 5 ? 'text-text-secondary' : pct < 25 ? 'text-amber-500' : 'text-red-400';
+                  return (
+                    <tr key={row.label}>
+                      <td className="px-4 py-2 text-text-secondary">{row.label}</td>
+                      <td className={`px-4 py-2 text-right font-mono ${tone}`}>{row.missing.toLocaleString()}</td>
+                      <td className={`px-4 py-2 text-right font-mono ${tone}`}>{pct.toFixed(1)}%</td>
+                      <td className="px-4 py-2 text-text-muted">{row.fix}</td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-surface-tertiary/50">
+                  <td colSpan={4} className="px-4 py-1.5 text-[10px] text-text-muted uppercase tracking-wider font-semibold">Style-level coverage</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-text-secondary">Styles in stock with no sales for {activeSeason || 'any season'}</td>
+                  <td className="px-4 py-2 text-right font-mono text-amber-500">{coverage.ohWithoutSales.toLocaleString()}</td>
+                  <td className="px-4 py-2"></td>
+                  <td className="px-4 py-2 text-text-muted">Slow movers — flag for review or markdown</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-text-secondary">Styles with sales but no on-hand stock</td>
+                  <td className="px-4 py-2 text-right font-mono text-red-400">{coverage.salesWithoutOH.toLocaleString()}</td>
+                  <td className="px-4 py-2"></td>
+                  <td className="px-4 py-2 text-text-muted">Possibly out-of-stock; check incoming POs</td>
+                </tr>
+                <tr>
+                  <td className="px-4 py-2 text-text-secondary">Styles with both stock AND sales</td>
+                  <td className="px-4 py-2 text-right font-mono text-emerald-500">{coverage.stylesInBoth.toLocaleString()}</td>
+                  <td className="px-4 py-2"></td>
+                  <td className="px-4 py-2 text-text-muted">Healthy data — full sell-through visibility</td>
+                </tr>
+              </tbody>
+            </table>
+            {coverage.missingCostSamples.length > 0 && (
+              <div className="px-4 py-2.5 bg-surface-tertiary/30 text-[11px] text-text-muted border-t border-border-primary">
+                <span className="font-semibold">Sample styles missing cost:</span>{' '}
+                <span className="font-mono">{coverage.missingCostSamples.join(', ')}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Category Breakdown */}
