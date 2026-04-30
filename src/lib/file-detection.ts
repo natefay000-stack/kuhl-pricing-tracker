@@ -75,7 +75,18 @@ const INVENTORY_COLUMNS = [
   'ProdMgr',
   'Old Style #',
   'Pantone/CSI Desc',
-  // On-hand snapshot columns (future)
+  // FG Inventory detail (SKU-level) columns
+  'Units On Hand', 'Units ATS', 'Units At-Once',
+  'Inventory Classification', 'Style Segment Description',
+  'Block Code Description', 'Style Vendor',
+  'Size Type', 'UPC Code', 'Gender Description',
+  '$ Unit Price - Wholesale', '$ Unit Price - Retail (MSRP)',
+  // FG Inventory data (stock-by-size pivot) columns
+  'Std Price', 'Std Cost', 'Outlet MSRP',
+  'Garment Class', 'Garment Class Description',
+  'Inventory Classification', 'Size Scale',
+  'Loc 1', 'Loc 2', 'Loc 3', 'Pocket',
+  // On-hand snapshot columns (legacy)
   'On Hand', 'On-Hand', 'O/H', 'OH', 'OnHand',
   'Hold', 'On Hold',
   'Reserved', 'Rsrv',
