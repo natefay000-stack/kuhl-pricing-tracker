@@ -471,11 +471,14 @@ export default function InvoiceMonthView({
   // invoiceDates from the report or are being season-fallback'd.)
   const dateSourceStats = useMemo(() => {
     let invoiceDate = 0, accountingPeriod = 0, seasonFallback = 0, unbucketable = 0, total = 0;
+    let invoicedTotal = 0;  // passes isInvoiced (has invoiceNumber + non-zero net)
     const acctSamples = new Set<string>();
-    const yearCounts = new Map<number, number>();
+    const yearCounts = new Map<number, { all: number; invoiced: number }>();
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forPivot')) return;
       total++;
+      const isInv = isInvoiced(inv);
+      if (isInv) invoicedTotal++;
       if (inv.invoiceDate && !isNaN(new Date(inv.invoiceDate).getTime())) { invoiceDate++; }
       else if (inv.accountingPeriod) {
         const parsed = parseAcctPeriod(inv.accountingPeriod);
@@ -488,12 +491,18 @@ export default function InvoiceMonthView({
       }
       else if (inv.season && /^\d{2}(SP|FA)$/i.test(inv.season)) { seasonFallback++; }
       else { unbucketable++; }
-      // Year distribution — tally based on whatever bucket we'd resolve.
       const bucket = resolveBucket(inv);
-      if (bucket) yearCounts.set(bucket.y, (yearCounts.get(bucket.y) ?? 0) + 1);
+      if (bucket) {
+        const cur = yearCounts.get(bucket.y) ?? { all: 0, invoiced: 0 };
+        cur.all += 1;
+        if (isInv) cur.invoiced += 1;
+        yearCounts.set(bucket.y, cur);
+      }
     });
-    const yearBreakdown = Array.from(yearCounts.entries()).sort((a, b) => a[0] - b[0]);
-    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total, acctSamples: Array.from(acctSamples), yearBreakdown };
+    const yearBreakdown = Array.from(yearCounts.entries())
+      .map(([y, v]) => ({ year: y, ...v }))
+      .sort((a, b) => a.year - b.year);
+    return { invoiceDate, accountingPeriod, seasonFallback, unbucketable, total, invoicedTotal, acctSamples: Array.from(acctSamples), yearBreakdown };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     invoices,
@@ -656,14 +665,26 @@ export default function InvoiceMonthView({
               Unparseable acct period samples: <span className="font-mono">{dateSourceStats.acctSamples.map((s) => `"${s}"`).join(', ')}</span>
             </span>
           )}
+          <span className="basis-full text-text-faint mt-1">
+            Invoiced rows (passes invoiceNumber + non-zero net check):{' '}
+            <span className="font-mono text-emerald-500">
+              {dateSourceStats.invoicedTotal.toLocaleString()}
+            </span>{' '}
+            / <span className="font-mono">{dateSourceStats.total.toLocaleString()}</span>
+            <span className="text-text-faint"> · the others are booked-only / open stubs and don&apos;t hit this view&apos;s pivot.</span>
+          </span>
           {dateSourceStats.yearBreakdown.length > 0 && (
             <span className="basis-full text-text-faint mt-1">
-              Year distribution:{' '}
-              {dateSourceStats.yearBreakdown.map(([y, c]) => (
-                <span key={y} className="font-mono mr-3">
-                  {y}: <span className="text-text-secondary">{c.toLocaleString()}</span>
-                </span>
-              ))}
+              Year distribution (invoiced / all):{' '}
+              {dateSourceStats.yearBreakdown.map((row) => {
+                const tone = row.invoiced === 0 ? 'text-red-500' : row.invoiced < row.all * 0.1 ? 'text-amber-500' : 'text-emerald-500';
+                return (
+                  <span key={row.year} className="font-mono mr-3">
+                    {row.year}: <span className={tone}>{row.invoiced.toLocaleString()}</span>
+                    <span className="text-text-faint"> / {row.all.toLocaleString()}</span>
+                  </span>
+                );
+              })}
             </span>
           )}
         </div>
