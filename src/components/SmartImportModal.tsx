@@ -694,8 +694,34 @@ export default function SmartImportModal({
       } else if (selectedType === 'inventory') {
         const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
-        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }) as Record<string, unknown>[];
-        data = { success: true, fileType: 'inventory', inventory: rawRows, summary: `${rawRows.length} inventory records` };
+        const sheet = workbook.Sheets[sheetName];
+        // Some KUHL inventory exports have a 2-row header: row 0 = column
+        // names, row 1 = size-scale sub-headers (S/M/L/XL...). The default
+        // sheet_to_json treats row 0 as the header and produces __EMPTY_N
+        // keys for the unmatched cells in row 1, which then carry through
+        // every data row and inflate the JSON payload past Vercel's 4.5MB
+        // serverless body limit. We detect that pattern and skip row 1.
+        const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+        const headerRow = (aoa[0] || []) as string[];
+        const secondRow = (aoa[1] || []) as unknown[];
+        const sizeTokens = new Set(['S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XS', 'XXS', '2XL', '3XL']);
+        const looksLikeSizeRow =
+          secondRow.length > 0 &&
+          secondRow.filter((v) => typeof v === 'string' && sizeTokens.has(v.toUpperCase())).length >= 3;
+        const dataStartRow = looksLikeSizeRow ? 2 : 1;
+        const cleanRows = (aoa.slice(dataStartRow) as unknown[][])
+          .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined))
+          .map((row) => {
+            const obj: Record<string, unknown> = {};
+            headerRow.forEach((key, idx) => {
+              if (key) obj[String(key)] = row[idx] ?? '';
+            });
+            return obj;
+          });
+        if (looksLikeSizeRow) {
+          console.log(`Inventory parser: detected size-scale sub-header, skipped row 1. ${cleanRows.length} data rows.`);
+        }
+        data = { success: true, fileType: 'inventory', inventory: cleanRows, summary: `${cleanRows.length} inventory records` };
       } else {
         throw new Error(`Unknown file type: ${selectedType}`);
       }
