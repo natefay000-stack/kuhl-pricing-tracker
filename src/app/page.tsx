@@ -429,17 +429,31 @@ export default function Home() {
         if (p.styleNumber && p.season) seasonByStyle.set(p.styleNumber, p.season);
       }
     }
+    // Cost fallback chain (most-authoritative first):
+    //   1. Cost.landed (full build-up: FOB + duty + freight + tariff + overhead)
+    //   2. Pricing.cost (set by cost-by-season pricing imports)
+    //   3. Product.cost (catalog-level)
+    // Within each source, take the most recent season we have.
     const costByStyle = new Map<string, number>();
+    const seasonRank = (s: string | undefined): number => {
+      const m = (s || '').match(/(\d{2})(SP|FA)/);
+      if (!m) return -1;
+      return parseInt(m[1], 10) * 10 + (m[2] === 'FA' ? 1 : 0);
+    };
+    // Tier 3: Product.cost (lowest priority — write first, overwritten by tiers 1/2)
+    for (const p of products) {
+      if (p.styleNumber && p.cost && p.cost > 0) costByStyle.set(p.styleNumber, p.cost);
+    }
+    // Tier 2: Pricing.cost (sorted oldest→newest so latest sticks)
     {
-      const sorted = [...costs].sort((a, b) => {
-        const ax = (a.season || '').match(/(\d{2})(SP|FA)/);
-        const bx = (b.season || '').match(/(\d{2})(SP|FA)/);
-        if (!ax) return -1;
-        if (!bx) return 1;
-        const ay = parseInt(ax[1], 10), by = parseInt(bx[1], 10);
-        if (ay !== by) return ay - by;
-        return ax[2] === 'FA' ? 1 : -1;
-      });
+      const sorted = [...pricing].sort((a, b) => seasonRank(a.season) - seasonRank(b.season));
+      for (const p of sorted) {
+        if (p.styleNumber && p.cost && p.cost > 0) costByStyle.set(p.styleNumber, p.cost);
+      }
+    }
+    // Tier 1: Cost.landed (overwrites the others — most authoritative)
+    {
+      const sorted = [...costs].sort((a, b) => seasonRank(a.season) - seasonRank(b.season));
       for (const c of sorted) {
         if (c.styleNumber && c.landed > 0) costByStyle.set(c.styleNumber, c.landed);
       }
@@ -489,7 +503,7 @@ export default function Home() {
           totalQty: r.qty ?? 0,
         };
       });
-  }, [inventoryOH, inventory, pricing, costs]);
+  }, [inventoryOH, inventory, pricing, costs, products]);
 
   const dateFilteredSales = useMemo(() => {
     if (!selectedYear && !selectedMonth) return sales;
