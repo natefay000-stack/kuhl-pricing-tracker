@@ -373,6 +373,44 @@ export default function Home() {
   }, [sales, selectedYear]);
 
   // Pre-filter sales by selected year/month so all views benefit automatically
+  // ── Derived: stock-on-hand snapshot from the Inventory table ──
+  // The InventoryView's "On-Hand" tab reads from `inventoryOH` (a Supabase-
+  // era separate dataset). When users import the FG Inventory stock-by-size
+  // report it lands in the regular Inventory table with movementType='OH';
+  // bridge those rows into InventoryOHRecord shape so the On-Hand tab
+  // populates without a schema migration.
+  const derivedInventoryOH = useMemo<InventoryOHRecord[]>(() => {
+    if (inventoryOH.length > 0) return inventoryOH; // explicit OH wins
+    return inventory
+      .filter((r) => (r.movementType ?? '').toUpperCase() === 'OH')
+      .map((r) => ({
+        id: r.id ?? `oh-${r.styleNumber}-${r.color ?? ''}`,
+        snapshotDate: r.movementDate ?? new Date().toISOString(),
+        styleNumber: r.styleNumber,
+        styleDesc: r.styleDesc,
+        season: r.period ?? undefined,
+        category: r.styleCategory ?? undefined,
+        division: undefined,
+        prodType: undefined,
+        prodLine: undefined,
+        stdPrice: r.wholesalePrice ?? 0,
+        msrp: r.msrp ?? 0,
+        outletMsrp: 0,
+        stdCost: r.costPrice ?? 0,
+        color: r.color,
+        colorDesc: r.colorDesc,
+        colorType: r.colorType ?? undefined,
+        segmentCode: r.segmentCode ?? undefined,
+        garmentClass: undefined,
+        garmentClassDesc: undefined,
+        warehouse: r.warehouse ? Number(r.warehouse) || undefined : undefined,
+        sizeType: undefined,
+        inventoryClassification: undefined,
+        sizeBreakdown: {},
+        totalQty: r.qty ?? 0,
+      }));
+  }, [inventoryOH, inventory]);
+
   const dateFilteredSales = useMemo(() => {
     if (!selectedYear && !selectedMonth) return sales;
     return sales.filter(s => {
@@ -2001,7 +2039,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 inventory={inventory}
                 inventoryAggregations={invAggregations || undefined}
-                inventoryOH={inventoryOH}
+                inventoryOH={derivedInventoryOH}
                 ohAggregations={ohAggregations || undefined}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
