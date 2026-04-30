@@ -381,11 +381,9 @@ export default function Home() {
   // populates without a schema migration.
   const derivedInventoryOH = useMemo<InventoryOHRecord[]>(() => {
     if (inventoryOH.length > 0) return inventoryOH; // explicit OH wins
-    // Use the canonical sales-record division codes (01 = Men's,
-    // 02 = Women's, 08 = Unisex, 06 = Accessories) so matchesDivision()
-    // recognizes them across views. Stored as numeric (1/2/8/6) to fit
-    // InventoryOHRecord.division: number — string lookups in DIVISION_MAP
-    // happen via String(div).padStart(2, '0').
+    // Canonical sales-record division codes (01=Men's, 02=Women's,
+    // 08=Unisex, 06=Accessories). Stored numerically to fit
+    // InventoryOHRecord.division: number — consumers zero-pad to '01' etc.
     const divisionToCode = (name: string | null | undefined): number | undefined => {
       if (!name) return undefined;
       const n = name.toLowerCase();
@@ -407,11 +405,49 @@ export default function Home() {
       const d = desc.toUpperCase().trim();
       return CATEGORY_DESC_TO_CODE[d] || (d.length <= 4 ? d : d.slice(0, 4));
     };
+
+    // ── Build lookup tables for season + cost backfill ──
+    // Season inference: many OH reports omit season per row. We pick the
+    // most recent season we have a Pricing record for, per style.
+    // Cost backfill: the SKU-detail OH report has wholesale/MSRP but no
+    // Std Cost. We use the latest landed cost from the Cost table.
+    const seasonByStyle = new Map<string, string>();
+    {
+      // sortSeasons orders chronologically; iterate latest-last so the
+      // map ends up holding the most recent season per style.
+      const sorted = [...pricing].sort((a, b) => {
+        // crude: 26FA > 26SP > 25FA > 25SP …
+        const ax = (a.season || '').match(/(\d{2})(SP|FA)/);
+        const bx = (b.season || '').match(/(\d{2})(SP|FA)/);
+        if (!ax) return -1;
+        if (!bx) return 1;
+        const ay = parseInt(ax[1], 10), by = parseInt(bx[1], 10);
+        if (ay !== by) return ay - by;
+        return ax[2] === 'FA' ? 1 : -1;
+      });
+      for (const p of sorted) {
+        if (p.styleNumber && p.season) seasonByStyle.set(p.styleNumber, p.season);
+      }
+    }
+    const costByStyle = new Map<string, number>();
+    {
+      const sorted = [...costs].sort((a, b) => {
+        const ax = (a.season || '').match(/(\d{2})(SP|FA)/);
+        const bx = (b.season || '').match(/(\d{2})(SP|FA)/);
+        if (!ax) return -1;
+        if (!bx) return 1;
+        const ay = parseInt(ax[1], 10), by = parseInt(bx[1], 10);
+        if (ay !== by) return ay - by;
+        return ax[2] === 'FA' ? 1 : -1;
+      });
+      for (const c of sorted) {
+        if (c.styleNumber && c.landed > 0) costByStyle.set(c.styleNumber, c.landed);
+      }
+    }
+
     return inventory
       .filter((r) => (r.movementType ?? '').toUpperCase() === 'OH')
       .map((r) => {
-        // The SKU-detail importer packs size breakdown + ATS/at-once into
-        // sizePricing as JSON. Decode if present.
         let sizeBreakdown: Record<string, number> = {};
         if (r.sizePricing) {
           try {
@@ -421,12 +457,17 @@ export default function Home() {
             }
           } catch { /* not JSON, ignore */ }
         }
+        // Backfill missing season + cost from latest pricing/cost records
+        const inferredSeason = r.period ?? seasonByStyle.get(r.styleNumber);
+        const inferredCost = (r.costPrice && r.costPrice > 0)
+          ? r.costPrice
+          : (costByStyle.get(r.styleNumber) ?? 0);
         return {
           id: r.id ?? `oh-${r.styleNumber}-${r.color ?? ''}-${r.warehouse ?? ''}`,
           snapshotDate: r.movementDate ?? new Date().toISOString(),
           styleNumber: r.styleNumber,
           styleDesc: r.styleDesc,
-          season: r.period ?? undefined,
+          season: inferredSeason ?? undefined,
           category: categoryToCode(r.styleCategory),
           division: divisionToCode(r.divisionDesc),
           prodType: undefined,
@@ -434,7 +475,7 @@ export default function Home() {
           stdPrice: r.wholesalePrice ?? 0,
           msrp: r.msrp ?? 0,
           outletMsrp: 0,
-          stdCost: r.costPrice ?? 0,
+          stdCost: inferredCost,
           color: r.color,
           colorDesc: r.colorDesc,
           colorType: r.colorType ?? undefined,
@@ -448,7 +489,7 @@ export default function Home() {
           totalQty: r.qty ?? 0,
         };
       });
-  }, [inventoryOH, inventory]);
+  }, [inventoryOH, inventory, pricing, costs]);
 
   const dateFilteredSales = useMemo(() => {
     if (!selectedYear && !selectedMonth) return sales;

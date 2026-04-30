@@ -132,6 +132,9 @@ export default function SellThroughView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
+  // Configurable season-length window for the weeks-of-supply calc
+  const [seasonWeeks, setSeasonWeeks] = useState<number>(26);
+
   // Determine the active search (global takes priority)
   const activeSearch = globalSearchQuery || localSearch;
 
@@ -220,8 +223,8 @@ export default function SellThroughView({
     return map;
   }, [sales, activeSeason, selectedDivision, selectedCategory]);
 
-  // Estimate weeks of selling season remaining (rough: 26 weeks per season)
-  const SEASON_WEEKS = 26;
+  // Selling-season length used for weeks-of-supply rate (user-configurable above)
+  const SEASON_WEEKS = seasonWeeks;
 
   // Combine OH + sales into sell-through data
   const sellThroughData = useMemo(() => {
@@ -270,7 +273,7 @@ export default function SellThroughView({
     });
 
     return results;
-  }, [ohByStyle, salesByStyle]);
+  }, [ohByStyle, salesByStyle, SEASON_WEEKS]);
 
   // Category summary for the chart
   const categorySummary = useMemo(() => {
@@ -507,7 +510,23 @@ export default function SellThroughView({
             );
           })}
         </div>
-        <div className="relative w-56">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-text-muted">
+            <span>Season weeks:</span>
+            <input
+              type="number"
+              min={1}
+              max={104}
+              value={seasonWeeks}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (Number.isFinite(n) && n >= 1 && n <= 104) setSeasonWeeks(n);
+              }}
+              className="w-14 px-2 py-1 text-xs bg-surface-tertiary border border-border-primary rounded text-text-primary text-right focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              title="Length of selling season in weeks. Drives the weeks-of-supply rate (sold ÷ seasonWeeks) and the risk classification."
+            />
+          </label>
+          <div className="relative w-56">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-faint" />
           <input
             type="text"
@@ -516,6 +535,7 @@ export default function SellThroughView({
             placeholder="Filter styles..."
             className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-surface-tertiary border border-border-strong text-text-primary placeholder:text-text-faint"
           />
+          </div>
         </div>
       </div>
 
