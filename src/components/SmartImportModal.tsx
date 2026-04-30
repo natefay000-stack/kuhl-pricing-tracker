@@ -695,26 +695,31 @@ export default function SmartImportModal({
         const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        // KUHL ships TWO different inventory reports:
+        // KUHL ships THREE different inventory reports:
         //   1. FG Inventory Movement — long-form: each row = one inventory
-        //      transaction (Type, Date, Qty, Balance, Extension…). Single
-        //      header row. This is the format the rest of the app was
-        //      originally built around.
-        //   2. FG Inventory data — stock-by-size: each row = one style+color
-        //      snapshot, with a 2-row header (row 0 = column names + a
-        //      "Size Scale" section, row 1 = size labels S/M/L/XL/XXL...).
-        //      Quantities live in the size columns. We detect format and
-        //      normalize variant 2 into movement-shape records (one record
-        //      per row, qty = total across all sizes, movementType = 'OH').
+        //      transaction (Type, Date, Qty, Balance, Extension…).
+        //   2. FG Inventory data — stock-by-size: 2-row header, each row =
+        //      one style+color, qty per size in S/M/L/XL columns.
+        //   3. FG Inventory detail — SKU-level: each row = one
+        //      style+color+size, with explicit "Units On Hand", "Units ATS",
+        //      "Units At-Once", and a "Size" column. We aggregate to
+        //      style+color and preserve the size breakdown as JSON.
         const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
         const headerRow = (aoa[0] || []) as string[];
         const secondRow = (aoa[1] || []) as unknown[];
+        const headerSet = new Set(headerRow.map((h) => String(h ?? '').trim()));
+        const isSkuDetail =
+          headerSet.has('Units On Hand') &&
+          headerSet.has('Size') &&
+          (headerSet.has('Units ATS') || headerSet.has('Units At-Once'));
         const sizeTokens = new Set(['S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'XS', 'XXS', '2XL', '3XL', '4XL']);
         const sizeColumnIndices: number[] = [];
-        secondRow.forEach((v, idx) => {
-          if (typeof v === 'string' && sizeTokens.has(v.toUpperCase())) sizeColumnIndices.push(idx);
-        });
-        const isStockBySize = sizeColumnIndices.length >= 3;
+        if (!isSkuDetail) {
+          secondRow.forEach((v, idx) => {
+            if (typeof v === 'string' && sizeTokens.has(v.toUpperCase())) sizeColumnIndices.push(idx);
+          });
+        }
+        const isStockBySize = !isSkuDetail && sizeColumnIndices.length >= 3;
 
         // Build a key→column-index map. When the source file has duplicate
         // header names (this xlsx has 'Description' twice — once for style,
@@ -734,7 +739,124 @@ export default function SmartImportModal({
           .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined));
 
         let cleanRows: Record<string, unknown>[];
-        if (isStockBySize) {
+        if (isSkuDetail) {
+          // SKU-level detail: aggregate to style+color, preserve per-size
+          // qty as a JSON object stored in `sizePricing` so the On-Hand
+          // view can rebuild sizeBreakdown after a round-trip through the DB.
+          const colIdx = (name: string) => headerRow.findIndex((h) => String(h ?? '').trim() === name);
+          const idx = {
+            style: colIdx('Style'),
+            color: colIdx('Color'),
+            styleDesc: colIdx('Style Description'),
+            colorDesc: colIdx('Color Description'),
+            warehouse: colIdx('Warehouse'),
+            wholesale: colIdx('$ Unit Price - Wholesale'),
+            msrp: colIdx('$ Unit Price - Retail (MSRP)'),
+            unitsAts: colIdx('Units ATS'),
+            unitsOnHand: colIdx('Units On Hand'),
+            unitsAtOnce: colIdx('Units At-Once'),
+            size: colIdx('Size'),
+            sizeType: colIdx('Size Type'),
+            gender: colIdx('Gender Description'),
+            category: colIdx('Category Description'),
+            segment: colIdx('Style Segment Description'),
+            classification: colIdx('Inventory Classification'),
+            blockCode: colIdx('Block Code Description'),
+            vendor: colIdx('Style Vendor'),
+          };
+
+          interface AggBucket {
+            styleNumber: string;
+            styleDesc: string;
+            color: string;
+            colorDesc: string;
+            warehouse: string;
+            msrp: number;
+            wholesale: number;
+            divisionDesc: string;
+            styleCategory: string;
+            segmentCode: string;
+            colorType: string;
+            classification: string;
+            sizeBreakdown: Record<string, number>;
+            unitsOnHand: number;
+            unitsAts: number;
+            unitsAtOnce: number;
+            blockCode: string;
+            vendor: string;
+          }
+          const buckets = new Map<string, AggBucket>();
+          for (const row of dataRows) {
+            const sn = String(row[idx.style] ?? '').trim();
+            const co = String(row[idx.color] ?? '').trim();
+            const wh = String(row[idx.warehouse] ?? '').trim();
+            if (!sn) continue;
+            const key = `${sn}|${co}|${wh}`;
+            const onHand = Number(row[idx.unitsOnHand] ?? 0) || 0;
+            const ats = Number(row[idx.unitsAts] ?? 0) || 0;
+            const atOnce = Number(row[idx.unitsAtOnce] ?? 0) || 0;
+            const size = String(row[idx.size] ?? '').trim() || '_';
+            const existing = buckets.get(key);
+            if (existing) {
+              existing.unitsOnHand += onHand;
+              existing.unitsAts += ats;
+              existing.unitsAtOnce += atOnce;
+              existing.sizeBreakdown[size] = (existing.sizeBreakdown[size] ?? 0) + onHand;
+            } else {
+              buckets.set(key, {
+                styleNumber: sn,
+                styleDesc: String(row[idx.styleDesc] ?? ''),
+                color: co,
+                colorDesc: String(row[idx.colorDesc] ?? ''),
+                warehouse: wh,
+                msrp: Number(row[idx.msrp] ?? 0) || 0,
+                wholesale: Number(row[idx.wholesale] ?? 0) || 0,
+                divisionDesc: String(row[idx.gender] ?? ''),
+                styleCategory: String(row[idx.category] ?? ''),
+                segmentCode: String(row[idx.segment] ?? ''),
+                colorType: String(row[idx.sizeType] ?? ''),
+                classification: String(row[idx.classification] ?? ''),
+                sizeBreakdown: { [size]: onHand },
+                unitsOnHand: onHand,
+                unitsAts: ats,
+                unitsAtOnce: atOnce,
+                blockCode: String(row[idx.blockCode] ?? ''),
+                vendor: String(row[idx.vendor] ?? ''),
+              });
+            }
+          }
+          cleanRows = Array.from(buckets.values()).map((b) => ({
+            styleNumber: b.styleNumber,
+            styleDesc: b.styleDesc,
+            color: b.color,
+            colorDesc: b.colorDesc,
+            colorType: b.colorType || null,
+            warehouse: b.warehouse || null,
+            movementType: 'OH',
+            msrp: b.msrp,
+            wholesalePrice: b.wholesale,
+            costPrice: 0,
+            divisionDesc: b.divisionDesc || null,
+            styleCategory: b.styleCategory || null,
+            segmentCode: b.segmentCode || null,
+            labelDesc: b.classification || null,
+            period: null,
+            qty: b.unitsOnHand,
+            balance: b.unitsAts, // ATS stored in balance for rendering
+            extension: b.unitsOnHand * b.msrp,
+            movementDate: null,
+            // Pack size breakdown + extra quantities as JSON in sizePricing.
+            // page.tsx parses this back when deriving inventoryOH.
+            sizePricing: JSON.stringify({
+              sizeBreakdown: b.sizeBreakdown,
+              unitsAts: b.unitsAts,
+              unitsAtOnce: b.unitsAtOnce,
+              blockCode: b.blockCode,
+              vendor: b.vendor,
+            }),
+          }));
+          console.log(`Inventory parser: detected SKU-detail report. ${dataRows.length} SKU rows -> ${cleanRows.length} style+color+warehouse aggregates.`);
+        } else if (isStockBySize) {
           // Helper: total qty = sum of numeric values in the size columns
           const totalQtyOf = (row: unknown[]): number => {
             let total = 0;

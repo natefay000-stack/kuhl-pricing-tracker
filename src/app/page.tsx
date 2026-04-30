@@ -383,32 +383,45 @@ export default function Home() {
     if (inventoryOH.length > 0) return inventoryOH; // explicit OH wins
     return inventory
       .filter((r) => (r.movementType ?? '').toUpperCase() === 'OH')
-      .map((r) => ({
-        id: r.id ?? `oh-${r.styleNumber}-${r.color ?? ''}`,
-        snapshotDate: r.movementDate ?? new Date().toISOString(),
-        styleNumber: r.styleNumber,
-        styleDesc: r.styleDesc,
-        season: r.period ?? undefined,
-        category: r.styleCategory ?? undefined,
-        division: undefined,
-        prodType: undefined,
-        prodLine: undefined,
-        stdPrice: r.wholesalePrice ?? 0,
-        msrp: r.msrp ?? 0,
-        outletMsrp: 0,
-        stdCost: r.costPrice ?? 0,
-        color: r.color,
-        colorDesc: r.colorDesc,
-        colorType: r.colorType ?? undefined,
-        segmentCode: r.segmentCode ?? undefined,
-        garmentClass: undefined,
-        garmentClassDesc: undefined,
-        warehouse: r.warehouse ? Number(r.warehouse) || undefined : undefined,
-        sizeType: undefined,
-        inventoryClassification: undefined,
-        sizeBreakdown: {},
-        totalQty: r.qty ?? 0,
-      }));
+      .map((r) => {
+        // The SKU-detail importer packs size breakdown + ATS/at-once into
+        // sizePricing as JSON. Decode if present.
+        let sizeBreakdown: Record<string, number> = {};
+        if (r.sizePricing) {
+          try {
+            const parsed = JSON.parse(r.sizePricing);
+            if (parsed && typeof parsed === 'object' && parsed.sizeBreakdown) {
+              sizeBreakdown = parsed.sizeBreakdown;
+            }
+          } catch { /* not JSON, ignore */ }
+        }
+        return {
+          id: r.id ?? `oh-${r.styleNumber}-${r.color ?? ''}-${r.warehouse ?? ''}`,
+          snapshotDate: r.movementDate ?? new Date().toISOString(),
+          styleNumber: r.styleNumber,
+          styleDesc: r.styleDesc,
+          season: r.period ?? undefined,
+          category: r.styleCategory ?? undefined,
+          division: undefined,
+          prodType: undefined,
+          prodLine: undefined,
+          stdPrice: r.wholesalePrice ?? 0,
+          msrp: r.msrp ?? 0,
+          outletMsrp: 0,
+          stdCost: r.costPrice ?? 0,
+          color: r.color,
+          colorDesc: r.colorDesc,
+          colorType: r.colorType ?? undefined,
+          segmentCode: r.segmentCode ?? undefined,
+          garmentClass: undefined,
+          garmentClassDesc: undefined,
+          warehouse: r.warehouse ? Number(r.warehouse) || undefined : undefined,
+          sizeType: undefined,
+          inventoryClassification: r.labelDesc ?? undefined,
+          sizeBreakdown,
+          totalQty: r.qty ?? 0,
+        };
+      });
   }, [inventoryOH, inventory]);
 
   const dateFilteredSales = useMemo(() => {
