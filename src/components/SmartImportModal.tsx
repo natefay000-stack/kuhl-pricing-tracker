@@ -146,8 +146,10 @@ export default function SmartImportModal({
 
   // Overwrite warning state
   const [overwriteCheck, setOverwriteCheck] = useState<{
+    type: string;
     existingCount: number;
     warning: string | null;
+    isAppendOnly?: boolean;
     lastImport: { fileName: string; recordCount: number; importedAt: string } | null;
   } | null>(null);
   const [overwriteConfirmed, setOverwriteConfirmed] = useState(false);
@@ -176,7 +178,9 @@ export default function SmartImportModal({
       .then(data => {
         if (data.existingCount > 0) {
           setOverwriteCheck(data);
-          setOverwriteConfirmed(false);
+          // Append-only types (invoice) don't replace anything, so no
+          // confirmation checkbox is needed — auto-confirm.
+          setOverwriteConfirmed(Boolean(data.isAppendOnly));
         } else {
           setOverwriteCheck(null);
           setOverwriteConfirmed(true);
@@ -1459,6 +1463,19 @@ export default function SmartImportModal({
                 <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
                   <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                </div>
+              )}
+
+              {/* Append-only info banner (invoices) — calm green, no checkbox */}
+              {overwriteCheck && overwriteCheck.isAppendOnly && overwriteCheck.existingCount > 0 && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-lg flex items-start gap-2">
+                  <span className="text-emerald-600 dark:text-emerald-400 text-base flex-shrink-0">✓</span>
+                  <div className="text-sm text-emerald-800 dark:text-emerald-200">
+                    <p className="font-medium">Append-only import</p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+                      {overwriteCheck.existingCount.toLocaleString()} existing {overwriteCheck.type} records will be preserved. New rows are added; duplicates (same invoice + style + color + customer) are silently skipped.
+                    </p>
+                  </div>
                 </div>
               )}
 

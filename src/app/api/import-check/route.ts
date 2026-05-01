@@ -50,11 +50,25 @@ export async function GET(request: NextRequest) {
       orderBy: { importedAt: 'desc' },
     });
 
+    // Invoice imports are append-only (composite unique key dedupes
+    // re-imports). No replacement happens, so don't show a scary
+    // "will replace X records" banner — show informational context only.
+    const isAppendOnly = type === 'invoice';
+    let warning: string | null = null;
+    if (existingCount > 0) {
+      if (isAppendOnly) {
+        warning = null; // append-only — no warning needed
+      } else {
+        warning = `This will replace ${existingCount.toLocaleString()} existing ${type} records${season ? ` for season ${season}` : ''}.`;
+      }
+    }
+
     return NextResponse.json({
       type,
       season: season || 'all',
       existingCount,
       hasExistingData: existingCount > 0,
+      isAppendOnly,
       lastImport: lastImport
         ? {
             fileName: lastImport.fileName,
@@ -62,9 +76,7 @@ export async function GET(request: NextRequest) {
             importedAt: lastImport.importedAt,
           }
         : null,
-      warning: existingCount > 0
-        ? `This will replace ${existingCount.toLocaleString()} existing ${type} records${season ? ` for season ${season}` : ''}.`
-        : null,
+      warning,
     });
   } catch (error) {
     console.error('Import check error:', error);
