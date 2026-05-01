@@ -28,8 +28,28 @@ function createPrismaClient(): PrismaClient {
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+/**
+ * Lazy-initialized Prisma client. The real client is created on first
+ * property access — never at module import time. This is what lets the
+ * Next.js build's "Collecting page data" phase succeed even when
+ * DATABASE_URL isn't available during build (e.g. before Vercel injects
+ * env vars). Any actual query at runtime will still throw if the env var
+ * isn't set, but module evaluation no longer crashes the whole build.
+ */
+function getPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient();
+  }
+  return globalForPrisma.prisma;
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getPrisma() as unknown as Record<string | symbol, unknown>;
+    const value = client[prop as string];
+    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+  },
+});
 
 export default prisma;
