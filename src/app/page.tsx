@@ -862,16 +862,18 @@ export default function Home() {
     // response limit. The API returns pages of ~4k rows; we loop until done
     // and progressively update state so the UI can start rendering partway.
     const loadInvoicesFromAnySource = async () => {
-      // Try 0: IndexedDB cache from a prior session. If fresh (< 1 hr old)
-      // we use it as-is and skip the API fetch entirely. If stale, we still
-      // render it instantly and refresh from the API in the background.
+      // Try 0: IndexedDB cache from a prior session.
+      let hasCached = false;
       try {
         const cached = await loadInvoicesFromCache();
         if (cached && cached.invoices.length > 0) {
           setInvoices(cached.invoices);
+          hasCached = true;
           console.log(`Invoices loaded from IndexedDB cache: ${cached.invoices.length} (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale})`);
           if (!cached.stale) return; // fresh cache wins, no API call
-          // Stale: fall through to refresh from API in foreground
+          // Stale: refresh from API in background, but DON'T progressive-render
+          // (we already have the full set rendered — flickering down to a
+          // partial fetch then back up is worse UX than a silent refresh).
         }
       } catch { /* non-fatal */ }
 
@@ -888,13 +890,16 @@ export default function Home() {
           const batch: InvoiceRecord[] = result.invoices ?? [];
           all.push(...batch);
           hasMore = Boolean(result.hasMore);
-          // Progressive render: push what we have so the UI is interactive ASAP
-          setInvoices([...all]);
+          // Progressive render only if we don't already have a cached set
+          // displayed — otherwise we'd briefly clobber it with a partial.
+          if (!hasCached) setInvoices([...all]);
           if (batch.length === 0) break;
           page += 1;
         }
         if (all.length > 0) {
           console.log(`Invoices loaded from DB API: ${all.length}`);
+          // Atomic swap to the fresh full set
+          setInvoices(all);
           // Persist to IndexedDB so the next page load is instant
           saveInvoicesToCache(all).catch(() => { /* non-fatal */ });
           return;

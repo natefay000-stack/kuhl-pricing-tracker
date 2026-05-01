@@ -24,9 +24,11 @@ const STORE = 'invoices';
 const META_STORE = 'meta';
 const META_KEY = 'invoices';
 
-// Cache valid for 1 hour. After that the page re-fetches in foreground
-// (we still serve the stale cache instantly while the refresh streams in).
-const CACHE_TTL_MS = 60 * 60 * 1000;
+// Cache valid for 24 hours. The browser still re-fetches sooner than this
+// after any import (cache is rewritten with the merged set). For idle
+// reloads — refresh, navigate away/back — we want to skip the 5-minute
+// API roundtrip entirely. New imports invalidate the cache.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
