@@ -194,16 +194,19 @@ async function main() {
     ensureDir(publicDir);
 
     // ── Step 1: Fetch non-sales tables (small) ──
+    // Invoices are NOT loaded into memory here — at 400K+ rows they OOM
+    // the Vercel build machine. We only need the count for log/manifest,
+    // and the runtime API serves them paginated anyway.
     console.log('Fetching core tables...');
-    const [products, pricing, costs, inventory, invoices] = await Promise.all([
+    const [products, pricing, costs, inventory, invoiceCount] = await Promise.all([
       prisma.product.findMany({ orderBy: { season: 'desc' } }),
       prisma.pricing.findMany({ orderBy: { season: 'desc' } }),
       prisma.cost.findMany({ orderBy: { season: 'desc' } }),
       prisma.inventory.findMany({ orderBy: [{ movementDate: 'desc' }, { styleNumber: 'asc' }] }),
-      prisma.invoice.findMany({ orderBy: [{ season: 'asc' }, { styleNumber: 'asc' }] }),
+      prisma.invoice.count(),
     ]);
 
-    console.log(`  Products: ${products.length} | Pricing: ${pricing.length} | Costs: ${costs.length} | Inventory: ${inventory.length} | Invoices: ${invoices.length}`);
+    console.log(`  Products: ${products.length} | Pricing: ${pricing.length} | Costs: ${costs.length} | Inventory: ${inventory.length} | Invoices: ${invoiceCount}`);
 
     // Compute inventory aggregations
     const inventoryAggregations = computeInventoryAggregations(inventory);
@@ -273,7 +276,7 @@ async function main() {
         pricing: pricing.length,
         costs: costs.length,
         inventory: inventory.length,
-        invoices: invoices.length,
+        invoices: invoiceCount,
       },
       data: { products, pricing, costs, inventory },
       salesAggregations,
@@ -287,7 +290,7 @@ async function main() {
     // Invoices are too large for static files (~197MB) — Vercel's 250MB serverless
     // function limit includes all public/ files. Invoices are loaded at runtime
     // via /api/data/invoices instead.
-    console.log(`\n  Invoices: ${invoices.length} records (served via API, not static file)`);
+    console.log(`\n  Invoices: ${invoiceCount} records (served via API, not static file)`);
 
     // Remove any stale invoice snapshot from previous builds
     const staleInvoicePath = path.join(publicDir, 'data-invoices.json');
@@ -303,7 +306,7 @@ async function main() {
     console.log(`\nSnapshots built in ${elapsed}s`);
     console.log(`  Core:  ${corePath} (${coreSizeMB} MB)`);
     console.log(`  Sales: ${seasons.length} season files (${totalSalesMB.toFixed(1)} MB total)`);
-    console.log(`Counts: ${products.length} products, ${totalSales} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory, ${invoices.length} invoices`);
+    console.log(`Counts: ${products.length} products, ${totalSales} sales, ${pricing.length} pricing, ${costs.length} costs, ${inventory.length} inventory, ${invoiceCount} invoices`);
 
     await prisma.$disconnect();
     await pool.end();
