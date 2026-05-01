@@ -1316,11 +1316,24 @@ export default function Home() {
     }
     console.log('Invoice import:', data.invoices.length, 'records for seasons:', data.seasons);
 
-    // Update local state
+    // Update local state — APPEND ONLY (do NOT filter by season).
+    // The previous code stripped every existing invoice that shared a season
+    // tag with the imported file, then re-added the new batch. That wiped
+    // Q1 2024 from the in-memory state when a Q2 2024 file was imported,
+    // even though the DB itself was unaffected. Now we merge by natural key
+    // (invoiceNumber + styleNumber + colorCode + customer) so re-imports
+    // overwrite their own rows but never touch the rest of the season.
     const newInvoices = data.invoices as unknown as InvoiceRecord[];
-    const seasonsSet = new Set(data.seasons);
-    const invoicesToKeep = invoices.filter(inv => !seasonsSet.has(inv.season));
-    setInvoices([...invoicesToKeep, ...newInvoices]);
+    const keyOf = (inv: InvoiceRecord) =>
+      inv.invoiceNumber
+        ? `${inv.invoiceNumber}|${inv.styleNumber}|${inv.colorCode ?? ''}|${inv.customer ?? ''}`
+        : `_NOKEY_${inv.id}`;
+    const newKeys = new Set(newInvoices.map(keyOf));
+    const merged = [
+      ...invoices.filter(inv => !newKeys.has(keyOf(inv))),
+      ...newInvoices,
+    ];
+    setInvoices(merged);
 
     // Persist to database in chunks per season
     try {
