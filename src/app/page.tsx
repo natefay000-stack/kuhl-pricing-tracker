@@ -48,7 +48,7 @@ import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
 import { exportMultiSheetExcel } from '@/utils/exportData';
 import { normalizeDivisionDesc } from '@/utils/divisionMap';
 import { matchesFilter } from '@/utils/filters';
-import { loadInvoicesFromCache, saveInvoicesToCache } from '@/lib/invoice-cache';
+import { loadInvoicesFromCache, saveInvoicesToCache, clearInvoiceCache } from '@/lib/invoice-cache';
 
 // Cache version - increment to invalidate cache
 // v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
@@ -861,49 +861,63 @@ export default function Home() {
     // Invoice dataset is ~120k rows, which exceeds Vercel's 4.5 MB serverless
     // response limit. The API returns pages of ~4k rows; we loop until done
     // and progressively update state so the UI can start rendering partway.
-    const loadInvoicesFromAnySource = async () => {
+    const loadInvoicesFromAnySource = async (opts?: { skipCache?: boolean }) => {
       // Try 0: IndexedDB cache from a prior session.
       let hasCached = false;
-      try {
-        const cached = await loadInvoicesFromCache();
-        if (cached && cached.invoices.length > 0) {
-          setInvoices(cached.invoices);
-          hasCached = true;
-          console.log(`Invoices loaded from IndexedDB cache: ${cached.invoices.length} (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale})`);
-          if (!cached.stale) return; // fresh cache wins, no API call
-          // Stale: refresh from API in background, but DON'T progressive-render
-          // (we already have the full set rendered — flickering down to a
-          // partial fetch then back up is worse UX than a silent refresh).
-        }
-      } catch { /* non-fatal */ }
+      if (!opts?.skipCache) {
+        try {
+          const cached = await loadInvoicesFromCache();
+          if (cached && cached.invoices.length > 0) {
+            setInvoices(cached.invoices);
+            hasCached = true;
+            console.log(`Invoices loaded from IndexedDB cache: ${cached.invoices.length} (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale})`);
+            if (!cached.stale) return; // fresh cache wins, no API call
+            // Stale: refresh in background without clobbering the rendered set
+          }
+        } catch { /* non-fatal */ }
+      }
 
-      // Try 1: Database API, paginated
+      // Try 1: Database API. Page size 5000 (max) + 4-way parallel fetch so
+      // 1M+ rows finish in ~30s instead of 5min.
       try {
-        const pageSize = 4000;
-        let page = 1;
-        const all: InvoiceRecord[] = [];
-        let hasMore = true;
-        while (hasMore) {
-          const res = await fetch(`/api/data/invoices?page=${page}&pageSize=${pageSize}`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const result = await res.json();
-          const batch: InvoiceRecord[] = result.invoices ?? [];
-          all.push(...batch);
-          hasMore = Boolean(result.hasMore);
-          // Progressive render only if we don't already have a cached set
-          // displayed — otherwise we'd briefly clobber it with a partial.
-          if (!hasCached) setInvoices([...all]);
-          if (batch.length === 0) break;
-          page += 1;
+        const pageSize = 5000;
+        // First fetch tells us total → we then fan out.
+        const firstRes = await fetch(`/api/data/invoices?page=1&pageSize=${pageSize}`);
+        if (!firstRes.ok) throw new Error(`HTTP ${firstRes.status}`);
+        const firstResult = await firstRes.json();
+        const firstBatch: InvoiceRecord[] = firstResult.invoices ?? [];
+        const total: number = firstResult.total ?? firstBatch.length;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const all: InvoiceRecord[] = new Array(total);
+        firstBatch.forEach((inv, i) => { all[i] = inv; });
+        if (!hasCached) setInvoices(firstBatch);
+
+        // Fetch remaining pages in parallel windows of 4
+        const PARALLEL = 4;
+        const pagesNeeded: number[] = [];
+        for (let p = 2; p <= totalPages; p++) pagesNeeded.push(p);
+        let writeCursor = firstBatch.length;
+        while (pagesNeeded.length > 0) {
+          const window = pagesNeeded.splice(0, PARALLEL);
+          const results = await Promise.all(
+            window.map(p =>
+              fetch(`/api/data/invoices?page=${p}&pageSize=${pageSize}`)
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+            )
+          );
+          for (const result of results) {
+            const batch: InvoiceRecord[] = result.invoices ?? [];
+            for (const inv of batch) {
+              all[writeCursor++] = inv;
+            }
+          }
+          if (!hasCached) setInvoices(all.slice(0, writeCursor));
         }
-        if (all.length > 0) {
-          console.log(`Invoices loaded from DB API: ${all.length}`);
-          // Atomic swap to the fresh full set
-          setInvoices(all);
-          // Persist to IndexedDB so the next page load is instant
-          saveInvoicesToCache(all).catch(() => { /* non-fatal */ });
-          return;
-        }
+        const final = all.slice(0, writeCursor).filter(Boolean);
+        console.log(`Invoices loaded from DB API: ${final.length} (parallel x${PARALLEL}, pageSize ${pageSize})`);
+        setInvoices(final);
+        saveInvoicesToCache(final).catch(() => { /* non-fatal */ });
+        return;
       } catch (err) {
         console.warn('DB API invoice load failed, trying snapshot:', err);
       }
@@ -1355,8 +1369,11 @@ export default function Home() {
       ...newInvoices,
     ];
     setInvoices(merged);
-    // Persist the merged set to IndexedDB so next page load is instant.
-    saveInvoicesToCache(merged).catch(() => { /* non-fatal */ });
+    // The merged set may be partial if the in-memory `invoices` array hadn't
+    // finished streaming the full DB before import. Don't poison the cache
+    // with a partial set — clear it instead so the next page load does a
+    // clean re-fetch of the authoritative DB state.
+    clearInvoiceCache().catch(() => { /* non-fatal */ });
 
     // Persist to database in chunks per season
     try {
