@@ -2060,7 +2060,7 @@ export default function Home() {
         <div ref={viewContentRef} className="min-h-[calc(100vh-112px)]">
           {activeView === 'executive' && (
             <ErrorBoundary viewName="Executive Dashboard">
-              <ExecutiveDashboardView />
+              <ExecutiveDashboardView invoices={invoices} sales={sales} />
             </ErrorBoundary>
           )}
 

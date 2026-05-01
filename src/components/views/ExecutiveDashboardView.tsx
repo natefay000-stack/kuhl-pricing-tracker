@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import type { InvoiceRecord, SalesRecord } from '@/types/product';
 
 // ── Design system colors (from wireframe) ───────────────────────────────────
 const C = {
@@ -157,11 +158,112 @@ const decliners = [
 ];
 
 // ── Component ───────────────────────────────────────────────────────────────
-export default function ExecutiveDashboardView() {
+interface ExecutiveDashboardViewProps {
+  invoices?: InvoiceRecord[];
+  sales?: SalesRecord[];
+}
+
+const fmtCurrencyShort = (v: number): string => {
+  if (!Number.isFinite(v) || v === 0) return '$0';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}$${Math.round(abs)}`;
+};
+
+export default function ExecutiveDashboardView({ invoices = [], sales = [] }: ExecutiveDashboardViewProps) {
   const [activeView, setActiveView] = useState<ViewMode>('season');
+
+  // ── Year totals from real data (invoiced = shippedAtNet − returnedAtNet) ──
+  // Bucket by invoiceDate year. Falls back to accountingPeriod if invoiceDate
+  // is null. Records without either are skipped.
+  const yearTotals = useMemo(() => {
+    const sums = new Map<number, { invoiced: number; rows: number; orders: Set<string> }>();
+    const ingest = (
+      d: { invoiceDate?: string | null; accountingPeriod?: string | null; shippedAtNet?: number; returnedAtNet?: number; invoiceNumber?: string | null },
+    ) => {
+      let yr: number | null = null;
+      if (d.invoiceDate) {
+        const dt = new Date(d.invoiceDate);
+        if (!isNaN(dt.getTime())) yr = dt.getFullYear();
+      }
+      if (yr === null && d.accountingPeriod) {
+        const ap = d.accountingPeriod.trim();
+        const m = ap.match(/^(\d{4})/) || ap.match(/(\d{4})$/);
+        if (m) yr = parseInt(m[1], 10);
+      }
+      if (yr === null) return;
+      const net = (d.shippedAtNet ?? 0) - (d.returnedAtNet ?? 0);
+      const cur = sums.get(yr) ?? { invoiced: 0, rows: 0, orders: new Set<string>() };
+      cur.invoiced += net;
+      cur.rows += 1;
+      if (d.invoiceNumber) cur.orders.add(d.invoiceNumber);
+      sums.set(yr, cur);
+    };
+    invoices.forEach(ingest);
+    sales.forEach(ingest);
+    return Array.from(sums.entries())
+      .map(([yr, v]) => ({ year: yr, invoiced: v.invoiced, rows: v.rows, orders: v.orders.size }))
+      .filter(r => r.year >= 2020 && r.year <= 2030 && r.invoiced > 0)
+      .sort((a, b) => a.year - b.year);
+  }, [invoices, sales]);
 
   return (
     <div style={{ padding: '20px 24px', fontFamily: sans, color: C.text }}>
+
+      {/* ─── 0. Year-over-year totals (real data) ──────────────────────── */}
+      {yearTotals.length > 0 && (() => {
+        const maxInvoiced = Math.max(...yearTotals.map(y => y.invoiced));
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${yearTotals.length}, 1fr)`, gap: 12, marginBottom: 12 }}>
+            {yearTotals.map((y, i) => {
+              const prev = yearTotals[i - 1];
+              const yoy = prev && prev.invoiced > 0 ? ((y.invoiced - prev.invoiced) / prev.invoiced) * 100 : null;
+              const isCurrent = i === yearTotals.length - 1;
+              return (
+                <div
+                  key={y.year}
+                  style={{
+                    ...cardStyle,
+                    padding: '16px 18px',
+                    borderColor: isCurrent ? C.blue : C.border,
+                    background: isCurrent ? 'rgba(10,132,255,0.06)' : C.card,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: isCurrent ? C.blue : C.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {y.year} {isCurrent && '· Current'}
+                    </span>
+                    {yoy !== null && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: yoy >= 0 ? C.green : C.red }}>
+                        {yoy >= 0 ? '↑' : '↓'} {Math.abs(yoy).toFixed(1)}% YoY
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 700, fontFamily: mono, lineHeight: 1.1 }}>
+                    {fmtCurrencyShort(y.invoiced)}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{y.rows.toLocaleString()} rows</span>
+                    <span>{y.orders.toLocaleString()} invoices</span>
+                  </div>
+                  <div style={{ height: 4, background: C.surface, borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.max(2, (y.invoiced / maxInvoiced) * 100)}%`,
+                        background: isCurrent ? 'linear-gradient(90deg,#0a84ff,#5ac8fa)' : C.blue,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* ─── 1. Time Period Toggle Bar ─────────────────────────────────── */}
       <div style={{ ...cardStyle, padding: '12px 20px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
