@@ -48,6 +48,7 @@ import { getViewExportData, ViewDataBundle } from '@/utils/exportViewData';
 import { exportMultiSheetExcel } from '@/utils/exportData';
 import { normalizeDivisionDesc } from '@/utils/divisionMap';
 import { matchesFilter } from '@/utils/filters';
+import { loadInvoicesFromCache, saveInvoicesToCache } from '@/lib/invoice-cache';
 
 // Cache version - increment to invalidate cache
 // v10: Bug fixes (memory leak, NaN guard, margin thresholds, show-more tables), dead code cleanup
@@ -861,6 +862,19 @@ export default function Home() {
     // response limit. The API returns pages of ~4k rows; we loop until done
     // and progressively update state so the UI can start rendering partway.
     const loadInvoicesFromAnySource = async () => {
+      // Try 0: IndexedDB cache from a prior session. If fresh (< 1 hr old)
+      // we use it as-is and skip the API fetch entirely. If stale, we still
+      // render it instantly and refresh from the API in the background.
+      try {
+        const cached = await loadInvoicesFromCache();
+        if (cached && cached.invoices.length > 0) {
+          setInvoices(cached.invoices);
+          console.log(`Invoices loaded from IndexedDB cache: ${cached.invoices.length} (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale})`);
+          if (!cached.stale) return; // fresh cache wins, no API call
+          // Stale: fall through to refresh from API in foreground
+        }
+      } catch { /* non-fatal */ }
+
       // Try 1: Database API, paginated
       try {
         const pageSize = 4000;
@@ -881,6 +895,8 @@ export default function Home() {
         }
         if (all.length > 0) {
           console.log(`Invoices loaded from DB API: ${all.length}`);
+          // Persist to IndexedDB so the next page load is instant
+          saveInvoicesToCache(all).catch(() => { /* non-fatal */ });
           return;
         }
       } catch (err) {
@@ -1334,6 +1350,8 @@ export default function Home() {
       ...newInvoices,
     ];
     setInvoices(merged);
+    // Persist the merged set to IndexedDB so next page load is instant.
+    saveInvoicesToCache(merged).catch(() => { /* non-fatal */ });
 
     // Persist to database in chunks per season
     try {
