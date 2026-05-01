@@ -12,12 +12,22 @@ interface ImportData {
   data: Record<string, unknown>[];
   fileName?: string;
   replaceExisting?: boolean;
+  /** Required when a delete would remove > DELETE_GUARD_THRESHOLD rows.
+   *  Prevents accidental large-scale data loss. */
+  force?: boolean;
 }
+
+/** Refuse to delete more than this many rows without an explicit force flag. */
+const DELETE_GUARD_THRESHOLD = 10000;
 
 export async function POST(request: NextRequest) {
   try {
     const body: ImportData = await request.json();
-    const { type, season, data, fileName, replaceExisting = true } = body;
+    // Default `replaceExisting` to FALSE — destructive imports must be opt-in.
+    // Older callers may still pass `replaceExisting: true` when they really
+    // want to wipe + replace, but any future caller that forgets the flag
+    // will append-only by default rather than silently delete data.
+    const { type, season, data, fileName, replaceExisting = false, force = false } = body;
 
     if (!type || !data || !Array.isArray(data)) {
       return NextResponse.json(
@@ -26,12 +36,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Delete-guard: refuse to delete > 10K rows without `force: true` ──
+    if (replaceExisting && !force) {
+      const tableModel = (() => {
+        switch (type) {
+          case 'products': return prisma.product;
+          case 'sales': return prisma.sale;
+          case 'pricing': return prisma.pricing;
+          case 'costs': return prisma.cost;
+          case 'inventory': return prisma.inventory;
+          case 'invoice': return prisma.invoice;
+          default: return null;
+        }
+      })();
+      if (tableModel) {
+        const willDelete = await (tableModel as { count: (args?: { where?: { season: string } }) => Promise<number> })
+          .count(season ? { where: { season } } : undefined);
+        if (willDelete > DELETE_GUARD_THRESHOLD) {
+          return NextResponse.json(
+            {
+              error: 'DELETE_GUARD',
+              message: `Refusing to delete ${willDelete.toLocaleString()} ${type} rows (season=${season ?? 'all'}) without an explicit force flag. Pass force: true if you really mean to wipe this data.`,
+              wouldDelete: willDelete,
+              type,
+              season: season ?? null,
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     let count = 0;
     const batchSize = 2000; // Keep small to fit within Vercel serverless timeouts
 
     // Wrap delete + insert in a transaction to prevent partial data loss on failure
     await prisma.$transaction(async (tx) => {
-      // Delete existing data if replaceExisting
+      // Delete existing data if replaceExisting (already guarded above)
       if (replaceExisting) {
         switch (type) {
           case 'products':
