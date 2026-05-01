@@ -1,0 +1,2154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Jacket Colorway Tool</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e7ebf3;
+    --muted: #8b93a7;
+    --accent: #6aa8ff;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 1fr 380px; height: 100vh; }
+  .stage { display: flex; flex-direction: column; padding: 16px; gap: 12px; min-width: 0; }
+  .stage-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .stage-head h1 { font-size: 15px; margin: 0 auto 0 0; font-weight: 600; }
+  .toolbar { display: flex; gap: 6px; align-items: center; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+  .toolbar .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+  .toolbar label.small { color: var(--muted); font-size: 11px; }
+  .canvas-wrap { flex: 1; background: #0a0c10 repeating-conic-gradient(#13161c 0 25%, #0a0c10 0 50%) 0 0 / 24px 24px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; position: relative; }
+  .canvas-wrap.panning { cursor: grabbing; }
+  /* Stack is positioned in top-left of the wrap and moved via view.panX/panY.
+     No flex centering — centering is managed in JS (resetView) so that
+     zoom-about-cursor math has a single coordinate system. */
+  .stack { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .zoom-hint { position: absolute; bottom: 8px; right: 10px; padding: 4px 8px; background: rgba(10,12,16,0.75); color: var(--muted); font-size: 11px; border-radius: 4px; pointer-events: none; font-family: ui-monospace, monospace; }
+  canvas { display: block; max-width: 100%; image-rendering: -webkit-optimize-contrast; }
+  canvas.main { cursor: crosshair; }
+  canvas.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .side { border-left: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .side header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .side .body { padding: 12px 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  button, .btn, input[type=file]::file-selector-button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 10px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #05101f; border-color: var(--accent); font-weight: 600; }
+  button.on { background: var(--accent); color: #05101f; border-color: var(--accent); }
+  button.icon { padding: 6px 8px; }
+  input[type=text], input[type=number] {
+    background: #0c0f14; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font: inherit; width: 100%;
+  }
+  input[type=range] { width: 100%; }
+  label.small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .adj { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .adj.active { outline: 2px solid var(--accent); }
+  .adj .top { display: flex; gap: 8px; align-items: center; }
+  .swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; }
+  .swatch.small { width: 18px; height: 18px; border-radius: 4px; }
+  .adj .name { flex: 1; font-weight: 600; }
+  .adj .meta { color: var(--muted); font-size: 11px; }
+  .adj .target-row { display: flex; align-items: center; gap: 8px; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { flex: 1; padding: 6px; font-size: 12px; }
+  .empty { color: var(--muted); font-size: 12px; text-align: center; padding: 18px; border: 1px dashed var(--border); border-radius: 8px; }
+  details { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .pantone-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-top: 8px; max-height: 180px; overflow-y: auto; }
+  .pantone-grid .p { display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .pantone-grid .p:hover { background: #0c0f14; }
+  .mask-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .mask-dot.has { background: #4ade80; }
+  .colorway-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+  .colorway-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0; }
+  .colorway-list { display: flex; gap: 8px; overflow-x: auto; flex: 1; padding: 2px; }
+  .colorway-card { position: relative; width: 72px; flex-shrink: 0; cursor: pointer; border: 2px solid var(--border); border-radius: 6px; background: #0a0c10; overflow: hidden; }
+  .colorway-card.active { border-color: var(--accent); }
+  .colorway-card canvas { width: 100%; height: 90px; display: block; object-fit: cover; }
+  .colorway-card .cw-name { padding: 3px 5px; font-size: 10px; text-align: center; color: var(--text); background: var(--panel-2); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .colorway-card .cw-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; font-size: 11px; line-height: 1; border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none; display: none; }
+  .colorway-card:hover .cw-del { display: block; }
+  /* Palette picker modal */
+  .ai-banner { position: fixed; inset: 0; background: rgba(0,0,0,0.82); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .ai-banner .box { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 28px 36px; display: flex; flex-direction: column; gap: 10px; align-items: center; min-width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .ai-banner h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .ai-banner p { margin: 0; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.5; }
+  .ai-banner .bar { width: 100%; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .ai-banner .bar > span { display: block; height: 100%; background: var(--accent); width: 0%; transition: width 0.2s; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage">
+    <div class="stage-head">
+      <h1>Jacket Colorway Tool</h1>
+      <span class="hint" id="status">Upload a jacket image to begin</span>
+      <label class="btn">Upload jacket<input id="jacketFile" type="file" accept="image/*" hidden /></label>
+      <button id="resetBtn" title="Clear all regions and adjustments">Reset</button>
+      <button id="techPackBtn" title="Export a tech-pack sheet with all colorways">Tech pack</button>
+      <button id="exportBtn" class="primary">Export PNG</button>
+    </div>
+
+    <div class="toolbar">
+      <label class="small">Region tool:</label>
+      <button data-tool="smart" id="toolSmart" title="Click a fabric panel — automatically finds its edges and creates a named region">🎯 Smart Click</button>
+      <button data-tool="wand" id="toolWand" title="Flood-fill by color (no edge awareness)">✨ Wand</button>
+      <button data-tool="brush" id="toolBrush" title="Paint mask">🖌 Brush</button>
+      <button data-tool="erase" id="toolErase" title="Erase mask">🧽 Erase</button>
+      <button data-tool="pick" id="toolPick" title="Eyedropper: sample source color only">💧 Eyedrop</button>
+      <span class="sep"></span>
+      <label class="small">Tolerance</label>
+      <input type="range" id="wandTol" min="2" max="120" value="32" style="width:120px" />
+      <span id="wandTolVal" class="meta hint">32</span>
+      <span class="sep"></span>
+      <label class="small">Brush</label>
+      <input type="range" id="brushSize" min="4" max="120" value="30" style="width:100px" />
+      <span id="brushSizeVal" class="meta hint">30</span>
+      <span class="sep"></span>
+      <label class="row"><input type="checkbox" id="contiguous" checked /> Contiguous</label>
+      <label class="row"><input type="checkbox" id="showMask" checked /> Show region</label>
+      <span class="sep"></span>
+      <button id="clearMaskBtn" title="Clear the active adjustment's region">Clear region</button>
+      <button id="growBtn" title="Expand the active region outward by 1 pixel">Grow</button>
+      <button id="shrinkBtn" title="Shrink the active region inward by 1 pixel">Shrink</button>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="stack" id="stack">
+        <canvas class="main" id="canvas"></canvas>
+        <canvas class="overlay" id="overlay"></canvas>
+      </div>
+      <div class="zoom-hint" id="zoomHint">100% · scroll to zoom · space+drag to pan</div>
+    </div>
+    <div class="hint" id="pickHint">Upload a jacket. The background and mannequin get stripped automatically. Then click each fabric panel you want to recolor — one click per panel. Pick a Pantone on the right, build colorways, export your tech pack.</div>
+
+    <div class="colorway-strip" id="colorwayStrip">
+      <div class="colorway-label">Colorways:</div>
+      <div class="colorway-list" id="colorwayList"></div>
+      <button id="addColorwayBtn" title="Create a new colorway from the current state">+ New colorway</button>
+    </div>
+  </div>
+
+  <aside class="side">
+    <header>Color Adjustments</header>
+    <div class="body">
+      <div class="row" style="gap:6px">
+        <button id="addAdj" style="flex:1">+ Add color region</button>
+        <button id="mergeBtn" style="display:none" title="Merge selected regions into the first one">Merge 0</button>
+        <button id="applyBulkBtn" style="display:none" title="Apply a color to all selected regions">Apply color</button>
+        <input type="color" id="bulkColorInput" style="position:absolute;opacity:0;pointer-events:none" />
+      </div>
+      <div id="adjList"></div>
+      <div class="empty" id="emptyMsg">Upload a jacket. After the background clears, click each fabric panel on the image — one click per panel, auto-named by position. Rename on the right, assign a Pantone, save as a colorway, export the tech pack.</div>
+      <details>
+        <summary>How it works</summary>
+        <div class="hint" style="margin-top:6px">
+          On upload, an on-device ML model (SegFormer, clothing-parsing) isolates the jacket from the background, mannequin, and model. Smart Click uses edge-aware flood fill to capture the fabric you click. Each masked pixel keeps its original brightness, so shading, folds, and stitches survive the recolor. Brush / Erase / Grow / Shrink clean up edges when needed. The designer is the detector: you know which panels matter for your tech pack.
+        </div>
+      </details>
+    </div>
+  </aside>
+</div>
+
+<div id="aiBanner" class="ai-banner" style="display:none">
+  <div class="box">
+    <h3 id="aiBannerTitle">Preparing…</h3>
+    <p id="aiBannerMsg">Loading the background-removal model (runs fully on your device — nothing leaves the browser).</p>
+    <div class="bar"><span id="aiBannerBar"></span></div>
+  </div>
+</div>
+
+<script type="module">
+// ML INTEGRATION — clothing-parsing SegFormer via transformers.js.
+//
+// We use `Xenova/segformer_b2_clothes`, a SegFormer-B2 fine-tuned on the
+// ATR / Clothing Parsing dataset. Unlike generic background removers (e.g.
+// RMBG-1.4), this model outputs per-pixel clothing part labels — so we can
+// keep JUST the jacket pixels and drop everything else (person, background,
+// pants, shoes, bag, etc.). Critical for jacket-specific recoloring.
+//
+// Label set (from the Xenova config):
+//   0 Background   1 Hat        2 Hair       3 Sunglasses
+//   4 Upper-clothes 5 Skirt     6 Pants      7 Dress
+//   8 Belt         9 Left-shoe 10 Right-shoe 11 Face
+//  12 Left-leg    13 Right-leg 14 Left-arm  15 Right-arm
+//  16 Bag         17 Scarf
+//
+// We keep {4: Upper-clothes, 7: Dress} as jacket-like. Everything else is bg.
+// The match below is by label STRING (the pipeline returns names, not ids).
+
+let _segPipeline = null;
+let _segLoading = null;
+
+async function ensureSegLoaded(onProgress) {
+  if (_segPipeline) return;
+  if (_segLoading) return _segLoading;
+  _segLoading = (async () => {
+    onProgress?.("Loading ML runtime…");
+    const { pipeline, env } = await import(
+      "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2"
+    );
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    onProgress?.("Downloading clothing-parsing model (≈70 MB)…");
+    _segPipeline = await pipeline(
+      "image-segmentation",
+      "Xenova/segformer_b2_clothes",
+      {
+        progress_callback: (p) => {
+          if (p?.status === "progress") {
+            const pct = (p.progress || 0).toFixed(0);
+            onProgress?.(`Downloading model… ${pct}%`);
+          }
+        },
+      }
+    );
+    onProgress?.("Model ready");
+  })();
+  return _segLoading;
+}
+
+// Returns { mask, width, height } where mask[p] = 255 for jacket pixels
+// (upper-clothes / dress) and 0 everywhere else.
+window.aiCleanForeground = async function (sourceCanvas, onProgress) {
+  await ensureSegLoaded(onProgress);
+  onProgress?.("Running segmentation…");
+  const dataURL = sourceCanvas.toDataURL("image/png");
+  // pipeline() accepts URLs / data URLs directly.
+  const segments = await _segPipeline(dataURL);
+  // segments is an array of { label, score, mask: RawImage(1 channel, same
+  // size as input, 0 or 255) } — one entry per detected class.
+  const w = sourceCanvas.width, h = sourceCanvas.height;
+  const mask = new Uint8Array(w * h);
+  let matchedLabels = [];
+  for (const seg of segments) {
+    // Identify jacket-ish classes either by id (if provided) or by name.
+    const label = (seg.label || "").toLowerCase();
+    const isJacket =
+      label.includes("upper-clothes") ||
+      label.includes("upper_clothes") ||
+      label === "dress" ||
+      label === "jacket" ||
+      label === "coat";
+    if (!isJacket) continue;
+    matchedLabels.push(seg.label);
+    const m = seg.mask.data; // Uint8Array
+    // RawImage mask resolution matches the input — but just in case the
+    // pipeline resized, handle width/height mismatches by nearest-neighbor.
+    if (seg.mask.width === w && seg.mask.height === h) {
+      for (let p = 0; p < mask.length; p++) if (m[p]) mask[p] = 255;
+    } else {
+      const sw = seg.mask.width, sh = seg.mask.height;
+      for (let y = 0; y < h; y++) {
+        const sy = Math.min(sh - 1, Math.floor(y * sh / h));
+        for (let x = 0; x < w; x++) {
+          const sx = Math.min(sw - 1, Math.floor(x * sw / w));
+          if (m[sy * sw + sx]) mask[y * w + x] = 255;
+        }
+      }
+    }
+  }
+  onProgress?.(
+    matchedLabels.length
+      ? `Isolated: ${matchedLabels.join(", ")}`
+      : "No jacket detected — keeping whole image"
+  );
+  // If the model didn't find any upper-clothes (e.g. a zoomed-in flat-lay
+  // that doesn't look like clothing-on-person), fall back to keeping
+  // everything — better than an all-white canvas.
+  if (matchedLabels.length === 0) {
+    mask.fill(255);
+  }
+  return { mask, width: w, height: h, matchedLabels };
+};
+</script>
+
+<script>
+// Approximate sRGB values for reference / mockup use — NOT official licensed Pantone data.
+// Mix of C (coated print) and TCX (textile) codes commonly used in apparel.
+const PANTONE = [
+  // --- Neutrals ---
+  ["White", "#ffffff"],
+  ["11-0601 TCX Bright White", "#f4f5f0"],
+  ["11-4800 TCX Blanc de Blanc", "#e7e9e7"],
+  ["12-0304 TCX Egret", "#e4dfd4"],
+  ["13-0905 TCX Birch", "#d6cdb7"],
+  ["14-1014 TCX Cement", "#a69a82"],
+  ["16-1212 TCX Simply Taupe", "#a89a8e"],
+  ["16-0000 TCX Paloma", "#9c9b99"],
+  ["17-1506 TCX Bungee Cord", "#696158"],
+  ["18-0403 TCX Charcoal Gray", "#5a5a58"],
+  ["19-0303 TCX Jet Black", "#2a2a2c"],
+  ["Black 6 C", "#101820"],
+  ["Cool Gray 11 C", "#53565a"],
+  ["Cool Gray 8 C", "#888b8d"],
+  ["Cool Gray 6 C", "#a7a8aa"],
+  ["Cool Gray 3 C", "#c8c9c7"],
+  ["Warm Gray 9 C", "#83786f"],
+
+  // --- Reds / pinks ---
+  ["Warm Red C", "#f9423a"],
+  ["185 C (Red)", "#e4002b"],
+  ["Red 032 C", "#ef3340"],
+  ["186 C (True Red)", "#c8102e"],
+  ["199 C (Racing Red)", "#d50032"],
+  ["1797 C (Crimson)", "#cb333b"],
+  ["202 C (Brick)", "#862633"],
+  ["7427 C (Wine)", "#971b2f"],
+  ["19-1557 TCX Chili Pepper", "#9b1b30"],
+  ["18-1763 TCX High Risk Red", "#cc0033"],
+  ["17-1456 TCX Tangerine", "#dd4124"],
+  ["18-1750 TCX Rococco Red", "#b93a32"],
+  ["18-1555 TCX Aurora Red", "#b93a32"],
+  ["213 C (Pink)", "#e10098"],
+  ["219 C (Hot Pink)", "#da1884"],
+  ["705 C (Blush)", "#f4cdd4"],
+  ["15-1821 TCX Flamingo Pink", "#f49ac1"],
+  ["13-1520 TCX Rose Quartz", "#f7cac9"],
+
+  // --- Oranges / golds ---
+  ["158 C (Orange)", "#e87722"],
+  ["165 C (Pumpkin)", "#ff671f"],
+  ["1505 C (Orange)", "#ff6720"],
+  ["151 C (Bright Orange)", "#ff8200"],
+  ["16-1462 TCX Flame", "#f2552c"],
+  ["17-1463 TCX Orange Peel", "#fa7a35"],
+  ["15-1147 TCX Amber Yellow", "#ec9706"],
+  ["16-1143 TCX Honey", "#d69a2d"],
+  ["18-0724 TCX Butternut", "#8c6b36"],
+  ["17-1047 TCX Tawny Birch", "#c68346"],
+  ["17-1052 TCX Buckthorn Brown", "#a77d4e"],
+  ["17-1340 TCX Autumnal", "#a15843"],
+  ["7406 C (Gold)", "#f1b434"],
+  ["7409 C (Mustard)", "#f0b323"],
+  ["123 C (Yellow)", "#ffc72c"],
+  ["116 C (Yellow)", "#ffcd00"],
+  ["102 C (Lemon)", "#fce300"],
+  ["7404 C (Canary)", "#f2eb16"],
+  ["13-0859 TCX Cyber Yellow", "#ffd400"],
+  ["12-0758 TCX Vibrant Yellow", "#ffda29"],
+
+  // --- Browns / tans ---
+  ["1395 C (Tan)", "#9b6a2f"],
+  ["4625 C (Brown)", "#4a2c14"],
+  ["7504 C (Khaki)", "#a58d7f"],
+  ["7527 C (Stone)", "#d6d2c4"],
+  ["16-1334 TCX Doe", "#b08565"],
+  ["17-1327 TCX Almond", "#a48264"],
+  ["18-1015 TCX Shitake", "#8a7563"],
+  ["19-1116 TCX Chocolate Brown", "#5b3f33"],
+  ["19-1314 TCX Seal Brown", "#403330"],
+  ["14-1116 TCX Sand", "#d8b587"],
+  ["14-1122 TCX Warm Sand", "#d0ae81"],
+  ["15-1213 TCX Beige", "#c9ae80"],
+
+  // --- Greens ---
+  ["368 C (Lime)", "#78be20"],
+  ["361 C (Grass)", "#43b02a"],
+  ["354 C (Kelly)", "#00b140"],
+  ["356 C (Forest)", "#007a33"],
+  ["357 C (Deep Forest)", "#215732"],
+  ["5535 C (Pine)", "#183028"],
+  ["5467 C (Sage)", "#405a50"],
+  ["5757 C (Olive)", "#6c7b3b"],
+  ["448 C (Military)", "#4a4f3c"],
+  ["18-0527 TCX Woodbine", "#6a7031"],
+  ["18-0426 TCX Olive Branch", "#656a3f"],
+  ["17-0330 TCX Mosstone", "#849064"],
+  ["16-0532 TCX Sage", "#a6a87f"],
+  ["15-6437 TCX Jade Cream", "#95d3ac"],
+  ["17-5641 TCX Jade", "#00a170"],
+  ["18-5338 TCX Emerald", "#009473"],
+  ["19-5513 TCX Hunter Green", "#0e4731"],
+  ["19-5914 TCX Scarab", "#283432"],
+
+  // --- Teals / cyans ---
+  ["3272 C (Teal)", "#00a499"],
+  ["320 C (Deep Teal)", "#009499"],
+  ["321 C (Peacock)", "#008c95"],
+  ["326 C (Mint)", "#00b7a4"],
+  ["17-4928 TCX Scuba Blue", "#00abc0"],
+  ["16-4834 TCX Blue Atoll", "#00b1b0"],
+  ["18-4735 TCX Harbor Blue", "#3f7d81"],
+
+  // --- Blues ---
+  ["312 C (Cyan)", "#00a9e0"],
+  ["306 C (Sky)", "#00b5e2"],
+  ["299 C (Bright Blue)", "#00a3e0"],
+  ["285 C (Blue)", "#0072ce"],
+  ["286 C (Royal)", "#0033a0"],
+  ["287 C (Ocean)", "#003da5"],
+  ["288 C (Deep Royal)", "#002b5c"],
+  ["289 C (Navy)", "#0c2340"],
+  ["2767 C (Midnight)", "#1d252d"],
+  ["540 C (Dark Navy)", "#003865"],
+  ["19-4024 TCX Dress Blues", "#2c3e50"],
+  ["19-3920 TCX Peacoat", "#2a3244"],
+  ["19-3933 TCX Medieval Blue", "#323e4f"],
+  ["19-4013 TCX Moonlit Ocean", "#222a35"],
+  ["19-4026 TCX Estate Blue", "#203449"],
+  ["18-4148 TCX Palace Blue", "#1f5e9e"],
+  ["18-4252 TCX Directoire Blue", "#1b5687"],
+  ["17-4131 TCX Little Boy Blue", "#6cace4"],
+  ["16-4132 TCX Airy Blue", "#91b7d6"],
+  ["14-4318 TCX Aquatic", "#88b9c6"],
+  ["15-4020 TCX Dusk Blue", "#7992a4"],
+  ["18-3949 TCX Dazzling Blue", "#3850a0"],
+
+  // --- Purples ---
+  ["267 C (Purple)", "#5f259f"],
+  ["269 C (Aubergine)", "#5f2167"],
+  ["2695 C (Deep Purple)", "#341446"],
+  ["527 C (Violet)", "#8031a7"],
+  ["17-3834 TCX Violet Storm", "#655a9a"],
+  ["18-3838 TCX Ultra Violet", "#5f4b8b"],
+  ["19-3847 TCX Clematis Blue", "#393e64"],
+];
+
+// deterministic hue per adjustment index for overlay color
+const OVERLAY_HUES = [200, 140, 30, 320, 60, 260, 0, 170, 90, 290];
+
+const state = {
+  img: null,
+  baseData: null,
+  width: 0,
+  height: 0,
+  adjustments: [], // {id,name,source:{hex}|null,target:{hex},mode,mask:Uint8Array|null}
+  activeId: null,
+  tool: "wand", // wand | brush | erase | pick
+  wandTol: 32,
+  brushSize: 30,
+  contiguous: true,
+  showMask: true,
+  colorways: [],        // [{id, name, assignments:{[adjId]:{hex,mode}}, thumb}]
+  activeColorwayId: null,
+  mergeSelection: new Set(), // ids of regions checkbox-selected for merging
+};
+let nextId = 1;
+let nextColorwayId = 1;
+
+const canvas = document.getElementById("canvas");
+const overlay = document.getElementById("overlay");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const octx = overlay.getContext("2d");
+const canvasWrap = document.getElementById("canvasWrap");
+const stackEl = document.getElementById("stack");
+const zoomHint = document.getElementById("zoomHint");
+let view = { zoom: 1, panX: 0, panY: 0 };
+let panning = false, panStartX = 0, panStartY = 0;
+let spaceHeld = false;
+const fileInput = document.getElementById("jacketFile");
+const adjList = document.getElementById("adjList");
+const emptyMsg = document.getElementById("emptyMsg");
+const statusEl = document.getElementById("status");
+const pickHint = document.getElementById("pickHint");
+const colorwayList = document.getElementById("colorwayList");
+
+// toolbar wiring
+const toolButtons = {
+  smart: document.getElementById("toolSmart"),
+  wand: document.getElementById("toolWand"),
+  brush: document.getElementById("toolBrush"),
+  erase: document.getElementById("toolErase"),
+  pick: document.getElementById("toolPick"),
+};
+for (const [name, btn] of Object.entries(toolButtons)) {
+  btn.addEventListener("click", () => setTool(name));
+}
+function setTool(t) {
+  state.tool = t;
+  for (const [name, btn] of Object.entries(toolButtons)) btn.classList.toggle("on", name === t);
+  const msgs = {
+    smart: "Click any fabric panel — I'll find its edges automatically and create a named region.",
+    wand: "Click a fabric panel to flood-fill its region (tolerance controls how forgiving).",
+    brush: "Drag to paint the region for the active adjustment.",
+    erase: "Drag to erase parts of the active region.",
+    pick: "Click the jacket to sample a source color for the active adjustment.",
+  };
+  pickHint.textContent = msgs[t] || "";
+}
+setTool("smart");
+
+document.getElementById("wandTol").addEventListener("input", e => {
+  state.wandTol = +e.target.value;
+  document.getElementById("wandTolVal").textContent = state.wandTol;
+});
+document.getElementById("brushSize").addEventListener("input", e => {
+  state.brushSize = +e.target.value;
+  document.getElementById("brushSizeVal").textContent = state.brushSize;
+});
+document.getElementById("contiguous").addEventListener("change", e => { state.contiguous = e.target.checked; });
+document.getElementById("showMask").addEventListener("change", e => { state.showMask = e.target.checked; drawOverlay(); });
+document.getElementById("clearMaskBtn").addEventListener("click", () => {
+  const adj = activeAdj();
+  if (!adj) return;
+  adj.mask = new Uint8Array(state.width * state.height);
+  invalidateFeather(adj);
+  render(); drawOverlay(); renderList();
+});
+document.getElementById("growBtn").addEventListener("click", () => {
+  const adj = activeAdj();
+  if (!adj || !adj.mask) return;
+  adj.mask = dilateMask(adj.mask, state.width, state.height);
+  invalidateFeather(adj);
+  render(); drawOverlay();
+});
+document.getElementById("shrinkBtn").addEventListener("click", () => {
+  const adj = activeAdj();
+  if (!adj || !adj.mask) return;
+  adj.mask = erodeMask(adj.mask, state.width, state.height);
+  invalidateFeather(adj);
+  render(); drawOverlay();
+});
+document.getElementById("applyBulkBtn").addEventListener("click", () => {
+  const picker = document.getElementById("bulkColorInput");
+  // seed with the first selected region's current color
+  const first = state.adjustments.find(a => state.mergeSelection.has(a.id));
+  if (first) picker.value = first.target.hex;
+  picker.click();
+});
+document.getElementById("bulkColorInput").addEventListener("input", e => {
+  const hex = e.target.value;
+  const targets = state.adjustments.filter(a => state.mergeSelection.has(a.id));
+  for (const adj of targets) adj.target.hex = hex;
+  render(); renderList(); drawOverlay(); markColorwayDirty();
+});
+fileInput.addEventListener("change", e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  loadJacket(URL.createObjectURL(f));
+});
+document.getElementById("addAdj").addEventListener("click", () => addAdjustment());
+document.getElementById("resetBtn").addEventListener("click", () => {
+  state.adjustments = []; state.activeId = null;
+  render(); drawOverlay(); renderList();
+});
+document.getElementById("exportBtn").addEventListener("click", () => {
+  if (!state.img) return;
+  const a = document.createElement("a");
+  a.download = "jacket-colorway.png"; a.href = canvas.toDataURL("image/png"); a.click();
+});
+document.getElementById("mergeBtn").addEventListener("click", () => {
+  mergeSelectedRegions();
+});
+document.getElementById("addColorwayBtn").addEventListener("click", () => {
+  if (!state.adjustments.length) { pickHint.textContent = "Define at least one region first."; return; }
+  snapshotCurrentToActiveColorway();
+  createColorway("Colorway " + (state.colorways.length + 1));
+});
+document.getElementById("techPackBtn").addEventListener("click", () => {
+  if (!state.img) return;
+  exportTechPack();
+});
+// AI background removal — runs automatically after every jacket upload.
+// Blocks with a banner modal until the model finishes so downstream Smart
+// Click never has to contend with a mannequin or a studio backdrop.
+async function runAiClean() {
+  if (!state.baseData) return;
+  const banner = document.getElementById("aiBanner");
+  const title = document.getElementById("aiBannerTitle");
+  const msg = document.getElementById("aiBannerMsg");
+  const bar = document.getElementById("aiBannerBar");
+  banner.style.display = "flex";
+  title.textContent = "Preparing…";
+  msg.textContent = "Loading the clothing-segmentation model (≈70 MB, cached after first run — stays fully on your device).";
+  bar.style.width = "0%";
+  const progress = (s) => {
+    title.textContent = s;
+    statusEl.textContent = s;
+    // Best-effort progress parsing from transformers.js status strings.
+    const m = /(\d+)%/.exec(String(s));
+    if (m) bar.style.width = m[1] + "%";
+  };
+  try {
+    if (!window.aiCleanForeground) {
+      progress("ML module failed to load — reload the page.");
+      return;
+    }
+    const result = await window.aiCleanForeground(canvas, progress);
+    title.textContent = "Applying mask…";
+    bar.style.width = "95%";
+    const w = state.width, h = state.height;
+    if (result.width !== w || result.height !== h) {
+      progress("Mask size mismatch — aborting.");
+      return;
+    }
+    // Build a binary bg mask from the AI alpha.
+    const total = w * h;
+    const data = state.baseData.data;
+    const isBg = new Uint8Array(total);
+    for (let p = 0; p < total; p++) {
+      if (result.mask[p] < 128) isBg[p] = 1;
+    }
+
+    // ---- 1. FILL INTERNAL HOLES ----------------------------------------
+    // Flood-fill from the four borders. Only pixels reachable from the
+    // image edge are true background; anything else is a segmentation hole
+    // inside the jacket that we want to keep.
+    const borderReachable = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    {
+      let qh = 0, qt = 0;
+      const pushIfBg = (px) => {
+        if (px < 0 || px >= total) return;
+        if (!isBg[px] || borderReachable[px]) return;
+        borderReachable[px] = 1;
+        queue[qt++] = px;
+      };
+      for (let x = 0; x < w; x++) { pushIfBg(x); pushIfBg((h - 1) * w + x); }
+      for (let y = 0; y < h; y++) { pushIfBg(y * w); pushIfBg(y * w + (w - 1)); }
+      while (qh < qt) {
+        const p = queue[qh++];
+        const cx = p % w, cy = (p / w) | 0;
+        if (cx > 0)     pushIfBg(p - 1);
+        if (cx < w - 1) pushIfBg(p + 1);
+        if (cy > 0)     pushIfBg(p - w);
+        if (cy < h - 1) pushIfBg(p + w);
+      }
+    }
+    // Start with a "hard" foreground mask = not a border-reachable bg.
+    const fg = new Uint8Array(total);
+    for (let p = 0; p < total; p++) if (!borderReachable[p]) fg[p] = 255;
+
+    // ---- 2. MORPHOLOGICAL CLOSE (dilate 2, erode 2) --------------------
+    // Smooths the staircase SegFormer produces and fills 1–2 px gaps.
+    const morph = (src, dilate) => {
+      const out = new Uint8Array(total);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const p = y * w + x;
+          let any = 0, all = 1;
+          for (let dy = -1; dy <= 1 && (dilate ? !any : all); dy++) {
+            const ny = y + dy; if (ny < 0 || ny >= h) { all = 0; continue; }
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx; if (nx < 0 || nx >= w) { all = 0; continue; }
+              const v = src[ny * w + nx];
+              if (v) any = 1; else all = 0;
+              if (dilate && any) break;
+              if (!dilate && !all) break;
+            }
+          }
+          out[p] = dilate ? (any ? 255 : 0) : (all ? 255 : 0);
+        }
+      }
+      return out;
+    };
+    // Close: dilate twice, then erode twice.
+    let m = morph(fg, true);  m = morph(m, true);
+    m = morph(m, false);      m = morph(m, false);
+    fg.set(m);
+
+    // ---- 3. EDGE-SNAP REFINEMENT ---------------------------------------
+    // Compute gradient on the ORIGINAL source RGB (before we paint bg white).
+    // For each mask boundary pixel, search a ±3 px window perpendicular to
+    // the boundary. If a stronger gradient lies off-boundary, move the
+    // boundary to it. Single pass is enough — segformer is usually within
+    // a couple pixels of the true edge.
+    const srcEdge = computeEdgeMap(data, w, h);
+    const refined = new Uint8Array(fg);
+    const searchR = 3;
+    for (let y = searchR; y < h - searchR; y++) {
+      for (let x = searchR; x < w - searchR; x++) {
+        const p = y * w + x;
+        const cur = fg[p];
+        // Only consider boundary pixels (has at least one neighbor of other class).
+        let onBoundary = false;
+        if (cur) {
+          if (!fg[p-1] || !fg[p+1] || !fg[p-w] || !fg[p+w]) onBoundary = true;
+        } else {
+          if (fg[p-1] || fg[p+1] || fg[p-w] || fg[p+w]) onBoundary = true;
+        }
+        if (!onBoundary) continue;
+        // Find the strongest gradient in a small box around this pixel.
+        let bestE = srcEdge[p], bestP = p;
+        for (let dy = -searchR; dy <= searchR; dy++) {
+          for (let dx = -searchR; dx <= searchR; dx++) {
+            const np = (y + dy) * w + (x + dx);
+            const e = srcEdge[np];
+            if (e > bestE) { bestE = e; bestP = np; }
+          }
+        }
+        // If a strong edge lies nearby, flood-assign pixels between boundary
+        // and that edge to match the dominant side. Simpler heuristic: if
+        // this pixel is fg but is close (within 1 px) to a stronger bg
+        // pixel's side of the edge, toggle it. We use majority of 5x5 around
+        // the strongest-gradient pixel to decide which side is fg.
+        if (bestE < 40) continue; // no real edge nearby
+        let fgCount5 = 0, bgCount5 = 0;
+        const bx = bestP % w, by = (bestP / w) | 0;
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const np = (by + dy) * w + (bx + dx);
+            if (np < 0 || np >= total) continue;
+            if (fg[np]) fgCount5++; else bgCount5++;
+          }
+        }
+        // If this pixel is on the "minority" side near the strong edge, flip.
+        const shouldBeFg = fgCount5 >= bgCount5;
+        refined[p] = shouldBeFg ? 255 : 0;
+      }
+    }
+    fg.set(refined);
+
+    // ---- 4. SOFT COMPOSITE ALPHA AT THE BOUNDARY -----------------------
+    // Compute a distance-to-boundary within 2 px for each fg pixel so the
+    // outermost ring fades gradually against white. This replaces the hard
+    // 0/255 cutoff that makes the jacket look like a sticker.
+    const alpha = new Uint8ClampedArray(total);
+    const FEATHER = 2;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        if (!fg[p]) { alpha[p] = 0; continue; }
+        // Find distance to nearest bg pixel within FEATHER.
+        let minD2 = FEATHER * FEATHER + 1;
+        for (let dy = -FEATHER; dy <= FEATHER; dy++) {
+          const yy = y + dy; if (yy < 0 || yy >= h) continue;
+          for (let dx = -FEATHER; dx <= FEATHER; dx++) {
+            const xx = x + dx; if (xx < 0 || xx >= w) continue;
+            if (!fg[yy * w + xx]) {
+              const d2 = dx * dx + dy * dy;
+              if (d2 < minD2) minD2 = d2;
+            }
+          }
+        }
+        if (minD2 > FEATHER * FEATHER) { alpha[p] = 255; continue; }
+        // Linear fade from edge (alpha 0) to distance FEATHER (alpha 255).
+        const t = Math.sqrt(minD2) / FEATHER;
+        alpha[p] = Math.round(255 * t);
+      }
+    }
+
+    // ---- 5. APPLY: composite the image against white using alpha -------
+    let fgCount = 0, holesFilled = 0;
+    for (let p = 0; p < total; p++) {
+      const i = p * 4;
+      const a = alpha[p];
+      if (a === 0) {
+        // Pure background.
+        data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255;
+      } else if (a === 255) {
+        // Pure foreground — keep original.
+        fgCount++;
+        if (isBg[p]) holesFilled++;
+      } else {
+        // Feathered edge — blend source RGB toward white by (1 - alpha/255).
+        const blend = 1 - a / 255;
+        data[i]   = Math.round(data[i]   + (255 - data[i])   * blend);
+        data[i+1] = Math.round(data[i+1] + (255 - data[i+1]) * blend);
+        data[i+2] = Math.round(data[i+2] + (255 - data[i+2]) * blend);
+        data[i+3] = 255;
+        fgCount++;
+      }
+    }
+    if (holesFilled > 0) {
+      console.log(`[aiClean] Filled ${holesFilled} internal segmentation holes.`);
+    }
+    ctx.putImageData(state.baseData, 0, 0);
+    // Re-compute edge map off the CLEANED image so Smart Click doesn't
+    // see the original photo's edges anymore.
+    state.edgeMap = computeEdgeMap(state.baseData.data, w, h);
+    for (const a of state.adjustments) invalidateFeather(a);
+    drawOverlay();
+    bar.style.width = "100%";
+    statusEl.textContent = `${w}×${h}px · cleaned (${fgCount.toLocaleString()} jacket pixels)`;
+    pickHint.textContent = "Click any fabric panel on the jacket to create a region. Each click auto-names and auto-colors based on what it touched.";
+    setTimeout(() => { banner.style.display = "none"; }, 300);
+  } catch (err) {
+    console.error(err);
+    title.textContent = "AI clean failed";
+    msg.textContent = String(err.message || err) + " — you can still use Smart Click, but background may be clustered as a fabric.";
+    bar.style.width = "0%";
+    setTimeout(() => { banner.style.display = "none"; }, 2800);
+  }
+}
+
+// canvas interaction
+let painting = false;
+canvas.addEventListener("mousedown", e => {
+  // Space+drag or middle-click = pan
+  if (spaceHeld || e.button === 1) {
+    e.preventDefault();
+    panning = true;
+    panStartX = e.clientX - view.panX;
+    panStartY = e.clientY - view.panY;
+    canvasWrap.classList.add("panning");
+    return;
+  }
+  if (!state.baseData) return;
+  const {x, y} = canvasCoord(e);
+  // Smart Click is a one-shot tool: it creates a new named region with each
+  // click, so it doesn't require a pre-existing active adjustment.
+  if (state.tool === "smart") {
+    const result = smartFloodFill(x, y);
+    if (!result || result.pixelCount < 20) {
+      pickHint.textContent = "Couldn't isolate a region from that click — try a different spot or use the Wand.";
+      return;
+    }
+    const adjNew = createRegionFromSmartClick(result.mask, result.seedColor, x, y);
+    if (adjNew) {
+      markColorwayDirty();
+      renderList();
+      render();
+      drawOverlay();
+      pickHint.textContent = `Created "${adjNew.name}" (${result.pixelCount.toLocaleString()} pixels, tolerance ${result.tolerance.toFixed(0)}). Click another panel to add more.`;
+    }
+    return;
+  }
+  const adj = activeAdj();
+  if (!adj) { pickHint.textContent = "Add or select a color adjustment first."; return; }
+  if (state.tool === "pick") {
+    const d = state.baseData.data;
+    const i = (y * state.width + x) * 4;
+    adj.source = { hex: rgbToHex(d[i], d[i+1], d[i+2]) };
+    renderList();
+    return;
+  }
+  if (state.tool === "wand") {
+    if (!adj.mask) adj.mask = new Uint8Array(state.width * state.height);
+    magicWand(adj.mask, x, y, state.wandTol, state.contiguous);
+    invalidateFeather(adj);
+    // auto-set source color from click for convenience
+    const d = state.baseData.data;
+    const i = (y * state.width + x) * 4;
+    adj.source = { hex: rgbToHex(d[i], d[i+1], d[i+2]) };
+    render(); drawOverlay(); renderList();
+    return;
+  }
+  if (state.tool === "brush" || state.tool === "erase") {
+    if (!adj.mask) adj.mask = new Uint8Array(state.width * state.height);
+    painting = true;
+    stamp(adj.mask, x, y, state.brushSize, state.tool === "brush" ? 255 : 0);
+    invalidateFeather(adj);
+    render(); drawOverlay();
+  }
+});
+canvas.addEventListener("mousemove", e => {
+  if (!painting) return;
+  const adj = activeAdj(); if (!adj || !adj.mask) return;
+  const {x, y} = canvasCoord(e);
+  stamp(adj.mask, x, y, state.brushSize, state.tool === "brush" ? 255 : 0);
+  invalidateFeather(adj);
+  render(); drawOverlay();
+});
+window.addEventListener("mousemove", e => {
+  if (!panning) return;
+  view.panX = e.clientX - panStartX;
+  view.panY = e.clientY - panStartY;
+  clampPan();
+  applyViewTransform();
+});
+window.addEventListener("mouseup", () => {
+  painting = false;
+  if (panning) {
+    panning = false;
+    if (!spaceHeld) canvasWrap.classList.remove("panning");
+  }
+});
+
+function canvasCoord(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.max(0, Math.min(state.width - 1, Math.floor((e.clientX - rect.left) * (state.width / rect.width))));
+  const y = Math.max(0, Math.min(state.height - 1, Math.floor((e.clientY - rect.top) * (state.height / rect.height))));
+  return { x, y };
+}
+
+function activeAdj() {
+  return state.adjustments.find(a => a.id === state.activeId) || null;
+}
+
+function loadJacket(src) {
+  const img = new Image();
+  img.onload = () => {
+    const maxW = 1400, maxH = 1400;
+    let w = img.width, h = img.height;
+    const scale = Math.min(1, maxW / w, maxH / h);
+    w = Math.round(w * scale); h = Math.round(h * scale);
+    canvas.width = w; canvas.height = h;
+    overlay.width = w; overlay.height = h;
+    state.width = w; state.height = h;
+    ctx.drawImage(img, 0, 0, w, h);
+    state.baseData = ctx.getImageData(0, 0, w, h);
+    state.img = img;
+    // Precompute edge magnitude map for Smart Click / edge-aware flood fill.
+    // Uses RGB-channel Sobel so isochromatic seams register (gray-on-tan).
+    state.edgeMap = computeEdgeMap(state.baseData.data, w, h);
+    // resize existing masks to new dimensions (clear them)
+    for (const a of state.adjustments) a.mask = new Uint8Array(w * h);
+    state.colorways = [];
+    state.activeColorwayId = null;
+    // Defer resetView so the wrap has correct dimensions after layout.
+    requestAnimationFrame(resetView);
+    statusEl.textContent = `${w}×${h}px loaded — cleaning background…`;
+    render(); drawOverlay(); renderColorways();
+    // Auto-run AI background removal on every upload. Smart Click works far
+    // better when the mannequin/backdrop is already stripped.
+    runAiClean();
+  };
+  img.src = src;
+}
+
+function addAdjustment() {
+  const id = nextId++;
+  const adj = {
+    id,
+    name: `Panel ${state.adjustments.length + 1}`,
+    source: null,
+    target: { hex: "#0072ce" },
+    mode: "tint", // tint | flat | multiply
+    mask: state.width ? new Uint8Array(state.width * state.height) : null,
+  };
+  state.adjustments.push(adj);
+  state.activeId = id;
+  renderList();
+  drawOverlay();
+}
+
+// ---------- mask ops ----------
+function invalidateFeather(adj) { if (adj) adj._featherCache = null; }
+
+// Compute color-aware edge magnitude map (Sobel over RGB channels). Stored in
+// state.edgeMap once per image load; used by Smart Click for seam-bounded
+// flood fill.
+function computeEdgeMap(data, w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x;
+      const tl = (p - w - 1) * 4, tc = (p - w) * 4, tr = (p - w + 1) * 4;
+      const ml = (p - 1) * 4,                       mr = (p + 1) * 4;
+      const bl = (p + w - 1) * 4, bc = (p + w) * 4, br = (p + w + 1) * 4;
+      const gxR = -data[tl]   + data[tr]   - 2*data[ml]   + 2*data[mr]   - data[bl]   + data[br];
+      const gxG = -data[tl+1] + data[tr+1] - 2*data[ml+1] + 2*data[mr+1] - data[bl+1] + data[br+1];
+      const gxB = -data[tl+2] + data[tr+2] - 2*data[ml+2] + 2*data[mr+2] - data[bl+2] + data[br+2];
+      const gyR = -data[tl]   - 2*data[tc]   - data[tr]   + data[bl]   + 2*data[bc]   + data[br];
+      const gyG = -data[tl+1] - 2*data[tc+1] - data[tr+1] + data[bl+1] + 2*data[bc+1] + data[br+1];
+      const gyB = -data[tl+2] - 2*data[tc+2] - data[tr+2] + data[bl+2] + 2*data[bc+2] + data[br+2];
+      const mag = Math.sqrt(
+        gxR*gxR + gxG*gxG + gxB*gxB +
+        gyR*gyR + gyG*gyG + gyB*gyB
+      ) / 11;
+      out[p] = Math.min(255, Math.round(mag));
+    }
+  }
+  return out;
+}
+
+// Edge-aware flood fill from a seed point. Stops at strong gradient edges
+// (seams) AND at pixels whose color differs from the seed's by more than
+// the adaptive tolerance. Returns a Uint8Array mask.
+function smartFloodFill(seedX, seedY) {
+  const w = state.width, h = state.height;
+  const data = state.baseData.data;
+  const edgeMap = state.edgeMap;
+  if (!data || !edgeMap) return null;
+  const total = w * h;
+  const mask = new Uint8Array(total);
+  const seedP = seedY * w + seedX;
+  if (seedP < 0 || seedP >= total) return null;
+  const si = seedP * 4;
+  const sr = data[si], sg = data[si+1], sb = data[si+2];
+  // Compute LOCAL color variance (5x5 around seed) for adaptive tolerance.
+  // A low-variance seed (e.g. flat zipper tape) should get a tight tolerance
+  // to avoid leaking. A high-variance seed (noisy fleece) needs a looser one.
+  let vSum = 0, vN = 0;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const nx = seedX + dx, ny = seedY + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = (ny * w + nx) * 4;
+      const dr = data[ni] - sr, dg = data[ni+1] - sg, db = data[ni+2] - sb;
+      vSum += dr*dr + dg*dg + db*db;
+      vN++;
+    }
+  }
+  const localStd = Math.sqrt(vSum / Math.max(1, vN));
+  const tolerance = Math.max(22, Math.min(65, localStd * 3 + 15));
+  const tolSq = tolerance * tolerance;
+  const edgeWall = 48; // gradient magnitude threshold — seams register here
+  // BFS flood fill
+  const queue = new Int32Array(total);
+  let head = 0, tail = 0;
+  queue[tail++] = seedP;
+  mask[seedP] = 255;
+  while (head < tail) {
+    const p = queue[head++];
+    const cx = p % w, cy = (p / w) | 0;
+    const neigh = [
+      cx > 0 ? p - 1 : -1,
+      cx < w - 1 ? p + 1 : -1,
+      cy > 0 ? p - w : -1,
+      cy < h - 1 ? p + w : -1,
+    ];
+    for (const np of neigh) {
+      if (np < 0 || mask[np]) continue;
+      if (edgeMap[np] > edgeWall) continue; // seam boundary
+      const ni = np * 4;
+      const dr = data[ni] - sr, dg = data[ni+1] - sg, db = data[ni+2] - sb;
+      if (dr*dr + dg*dg + db*db > tolSq) continue;
+      mask[np] = 255;
+      queue[tail++] = np;
+    }
+  }
+  return { mask, seedColor: { r: sr, g: sg, b: sb }, tolerance, pixelCount: tail };
+}
+
+// Create a fresh adjustment from a smart-click mask, auto-named by position
+// and shape. Returns the new adjustment.
+function createRegionFromSmartClick(mask, seedColor, seedX, seedY) {
+  const w = state.width, h = state.height;
+  // Compute bbox + centroid
+  let mnX = w, mxX = 0, mnY = h, mxY = 0, cnt = 0, sumX = 0, sumY = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!mask[y * w + x]) continue;
+      if (x < mnX) mnX = x; if (x > mxX) mxX = x;
+      if (y < mnY) mnY = y; if (y > mxY) mxY = y;
+      sumX += x; sumY += y; cnt++;
+    }
+  }
+  if (cnt === 0) return null;
+  const cx = sumX / cnt, cy = sumY / cnt;
+  const bw = mxX - mnX + 1, bh = mxY - mnY + 1;
+  const aspect = Math.max(bw, bh) / Math.max(1, Math.min(bw, bh));
+  const ny = cy / h;
+  const hSpan = bh / h, wSpan = bw / w;
+  // Determine role name
+  let roleName;
+  if (aspect >= 4 && bh > bw && hSpan >= 0.45) roleName = "Zipper";
+  else if (aspect >= 4 && bh > bw) roleName = "Placket";
+  else if (aspect >= 4 && bw > bh) roleName = "Trim";
+  else if (ny < 0.22 && bh / h > 0.12) roleName = "Hood";
+  else if (ny < 0.22) roleName = "Collar";
+  else if (ny < 0.42) roleName = "Yoke";
+  else if (ny < 0.72) roleName = "Body";
+  else roleName = "Hem";
+  // De-duplicate name
+  const existing = state.adjustments.filter(a => a.name.startsWith(roleName)).length;
+  const name = existing ? `${roleName} ${existing + 1}` : roleName;
+  const hex = rgbToHex(seedColor.r, seedColor.g, seedColor.b);
+  const adj = {
+    id: nextId++,
+    name,
+    source: { hex },
+    target: { hex },
+    mode: "tint",
+    mask,
+  };
+  state.adjustments.push(adj);
+  state.activeId = adj.id;
+  return adj;
+}
+
+function dilateMask(mask, w, h) {
+  const out = new Uint8Array(mask);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (mask[p]) continue;
+      if ((x > 0 && mask[p - 1]) ||
+          (x < w - 1 && mask[p + 1]) ||
+          (y > 0 && mask[p - w]) ||
+          (y < h - 1 && mask[p + w])) out[p] = 255;
+    }
+  }
+  return out;
+}
+
+function erodeMask(mask, w, h) {
+  const out = new Uint8Array(mask);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (!mask[p]) continue;
+      if ((x === 0 || !mask[p - 1]) ||
+          (x === w - 1 || !mask[p + 1]) ||
+          (y === 0 || !mask[p - w]) ||
+          (y === h - 1 || !mask[p + w])) out[p] = 0;
+    }
+  }
+  return out;
+}
+
+// ---------- zoom + pan ----------
+// Coordinate system: view.panX/panY is the stack's top-left in canvasWrap
+// pixels, view.zoom is the uniform scale factor. transform-origin is (0,0),
+// so a point (sx, sy) inside the unscaled stack appears at
+//   (panX + sx*zoom, panY + sy*zoom) within the wrap.
+// To keep a wrap-point (mx, my) anchored when changing zoom: solve
+//   mx = newPanX + ((mx - oldPanX) / oldZoom) * newZoom
+// which gives newPanX = mx - (mx - oldPanX) * (newZoom / oldZoom).
+function applyViewTransform() {
+  stackEl.style.transform = `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`;
+  if (zoomHint) zoomHint.textContent = `${Math.round(view.zoom * 100)}% · scroll to zoom · space+drag to pan · double-click to fit`;
+}
+
+// Fit the stack to the canvas wrap with a small margin, centered.
+function resetView() {
+  if (!state.width || !state.height) {
+    view.zoom = 1; view.panX = 0; view.panY = 0;
+    applyViewTransform();
+    return;
+  }
+  const rect = canvasWrap.getBoundingClientRect();
+  const margin = 16;
+  const fitZoom = Math.min(
+    (rect.width  - margin * 2) / state.width,
+    (rect.height - margin * 2) / state.height,
+    1 // never upscale past native on fit — user can wheel up if they want
+  );
+  view.zoom = Math.max(0.05, fitZoom);
+  view.panX = (rect.width  - state.width  * view.zoom) / 2;
+  view.panY = (rect.height - state.height * view.zoom) / 2;
+  applyViewTransform();
+}
+
+// Clamp pan so the image can't get fully dragged off-screen — always leave
+// at least 80 px visible against the edges.
+function clampPan() {
+  if (!state.width) return;
+  const rect = canvasWrap.getBoundingClientRect();
+  const sw = state.width * view.zoom;
+  const sh = state.height * view.zoom;
+  const minVisible = 80;
+  view.panX = Math.max(minVisible - sw, Math.min(rect.width - minVisible, view.panX));
+  view.panY = Math.max(minVisible - sh, Math.min(rect.height - minVisible, view.panY));
+}
+
+canvasWrap.addEventListener("wheel", e => {
+  if (!state.img) return;
+  e.preventDefault();
+  const rect = canvasWrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const oldZoom = view.zoom;
+  // Trackpad pinch sends ctrlKey=true with small deltas; mouse wheel sends
+  // large chunked deltas. Unify: map deltaY to a continuous multiplicative
+  // factor so both feel smooth. Negative deltaY = zoom in.
+  // Use exp() so repeated small ticks compound linearly in log-zoom.
+  const sensitivity = e.ctrlKey ? 0.012 : 0.0022; // pinch zooms faster
+  const factor = Math.exp(-e.deltaY * sensitivity);
+  view.zoom = Math.max(0.05, Math.min(16, oldZoom * factor));
+  const ratio = view.zoom / oldZoom;
+  view.panX = mx - (mx - view.panX) * ratio;
+  view.panY = my - (my - view.panY) * ratio;
+  clampPan();
+  applyViewTransform();
+}, { passive: false });
+
+canvasWrap.addEventListener("dblclick", e => {
+  // Double-click anywhere inside the wrap (including on the canvas) fits to
+  // window. Previously this only fired for direct canvasWrap clicks, which
+  // was impossible because the stack covers the whole area.
+  resetView();
+});
+
+// Keyboard zoom shortcuts: + / - / 0 (fit), 1 (actual size).
+window.addEventListener("keydown", e => {
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  if (!state.img) return;
+  if (e.key === "0") { e.preventDefault(); resetView(); return; }
+  if (e.key === "1") {
+    e.preventDefault();
+    const rect = canvasWrap.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const oldZoom = view.zoom;
+    view.zoom = 1;
+    const ratio = view.zoom / oldZoom;
+    view.panX = cx - (cx - view.panX) * ratio;
+    view.panY = cy - (cy - view.panY) * ratio;
+    clampPan();
+    applyViewTransform();
+    return;
+  }
+  if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_") {
+    e.preventDefault();
+    const rect = canvasWrap.getBoundingClientRect();
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const oldZoom = view.zoom;
+    const factor = (e.key === "+" || e.key === "=") ? 1.2 : 0.833;
+    view.zoom = Math.max(0.05, Math.min(16, oldZoom * factor));
+    const ratio = view.zoom / oldZoom;
+    view.panX = cx - (cx - view.panX) * ratio;
+    view.panY = cy - (cy - view.panY) * ratio;
+    clampPan();
+    applyViewTransform();
+  }
+});
+
+// Re-fit when the wrap resizes (e.g. window resize, sidebar toggle).
+let _resizeRaf = 0;
+window.addEventListener("resize", () => {
+  if (_resizeRaf) return;
+  _resizeRaf = requestAnimationFrame(() => {
+    _resizeRaf = 0;
+    clampPan();
+    applyViewTransform();
+  });
+});
+
+window.addEventListener("keydown", e => {
+  if (e.code !== "Space") return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  e.preventDefault();
+  spaceHeld = true;
+  canvasWrap.classList.add("panning");
+});
+window.addEventListener("keyup", e => {
+  if (e.code !== "Space") return;
+  spaceHeld = false;
+  canvasWrap.classList.remove("panning");
+});
+
+function stamp(mask, cx, cy, size, value) {
+  const r = size / 2;
+  const r2 = r * r;
+  const x0 = Math.max(0, Math.floor(cx - r));
+  const x1 = Math.min(state.width - 1, Math.ceil(cx + r));
+  const y0 = Math.max(0, Math.floor(cy - r));
+  const y1 = Math.min(state.height - 1, Math.ceil(cy + r));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx, dy = y - cy;
+      if (dx*dx + dy*dy <= r2) mask[y * state.width + x] = value;
+    }
+  }
+}
+
+function magicWand(mask, sx, sy, tol, contiguous) {
+  const src = state.baseData.data;
+  const w = state.width, h = state.height;
+  const si = (sy * w + sx) * 4;
+  const sr = src[si], sg = src[si+1], sb = src[si+2];
+  const tol2 = tol * tol * 3;
+  const match = (idx4) => {
+    const dr = src[idx4] - sr, dg = src[idx4+1] - sg, db = src[idx4+2] - sb;
+    return dr*dr + dg*dg + db*db <= tol2;
+  };
+  if (!contiguous) {
+    for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+      if (match(i)) mask[p] = 255;
+    }
+    return;
+  }
+  // flood fill, scanline
+  const stack = [[sx, sy]];
+  while (stack.length) {
+    const [x, y0] = stack.pop();
+    let y = y0;
+    while (y >= 0 && match((y * w + x) * 4) && mask[y * w + x] !== 255) y--;
+    y++;
+    let spanLeft = false, spanRight = false;
+    while (y < h && match((y * w + x) * 4) && mask[y * w + x] !== 255) {
+      mask[y * w + x] = 255;
+      if (x > 0) {
+        const leftIdx = (y * w + (x - 1)) * 4;
+        if (!spanLeft && match(leftIdx) && mask[y * w + (x - 1)] !== 255) { stack.push([x - 1, y]); spanLeft = true; }
+        else if (spanLeft && (!match(leftIdx) || mask[y * w + (x - 1)] === 255)) { spanLeft = false; }
+      }
+      if (x < w - 1) {
+        const rightIdx = (y * w + (x + 1)) * 4;
+        if (!spanRight && match(rightIdx) && mask[y * w + (x + 1)] !== 255) { stack.push([x + 1, y]); spanRight = true; }
+        else if (spanRight && (!match(rightIdx) || mask[y * w + (x + 1)] === 255)) { spanRight = false; }
+      }
+      y++;
+    }
+  }
+}
+
+// ---------- auto-detect regions via k-means + background removal ----------
+// Features = [Y*0.35, Cb, Cr] so shadows/highlights of the same hue cluster together.
+// Map an RGB triple to a rough color family name for auto-labeling.
+function colorFamily(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 510;
+  const s = max === 0 ? 0 : (max - min) / max;
+  if (l < 0.12) return "Black";
+  if (l > 0.92 && s < 0.08) return "White";
+  if (s < 0.16) return l < 0.35 ? "Charcoal" : l < 0.65 ? "Gray" : "Light gray";
+  let h;
+  const d = max - min || 1;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  if (h < 15 || h >= 345) return l < 0.35 ? "Maroon" : "Red";
+  if (h < 38)  return l < 0.4 ? "Rust" : "Orange";
+  if (h < 52)  return l < 0.45 ? "Tan" : "Gold";
+  if (h < 68)  return "Yellow";
+  if (h < 85)  return l < 0.4 ? "Olive" : "Lime";
+  if (h < 160) return l < 0.3 ? "Forest" : "Green";
+  if (h < 190) return "Teal";
+  if (h < 215) return l < 0.35 ? "Navy" : "Cyan";
+  if (h < 250) return l < 0.3 ? "Navy" : "Blue";
+  if (h < 290) return "Purple";
+  if (h < 330) return "Magenta";
+  return "Pink";
+}
+
+// Feathered version of a boolean mask — fades the outer ring to 0 so the
+// recolor doesn't have hard-edged transitions against neighboring fabrics.
+// Cached per-adjustment; invalidated by invalidateFeather when the mask changes.
+function getFeatheredMask(adj) {
+  if (adj._featherCache) return adj._featherCache;
+  const mask = adj.mask;
+  if (!mask) return null;
+  const w = state.width, h = state.height;
+  const out = new Uint8ClampedArray(mask.length);
+  const R = 2;
+  const R2 = R * R;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      if (!mask[p]) continue;
+      // Find distance to nearest zero-pixel within R, in squared units.
+      let minD2 = R2 + 1;
+      for (let dy = -R; dy <= R; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (let dx = -R; dx <= R; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          if (!mask[yy * w + xx]) {
+            const d2 = dx*dx + dy*dy;
+            if (d2 < minD2) minD2 = d2;
+          }
+        }
+      }
+      if (minD2 > R2) { out[p] = 255; continue; }
+      const t = Math.sqrt(minD2) / R; // 0..1 at edge → 1 interior
+      out[p] = Math.round(255 * t);
+    }
+  }
+  adj._featherCache = out;
+  return out;
+}
+
+function maskHasPixels(mask) {
+  if (!mask) return false;
+  for (let i = 0; i < mask.length; i++) if (mask[i]) return true;
+  return false;
+}
+
+// ---------- render ----------
+function render() {
+  if (!state.baseData) return;
+  const src = state.baseData;
+  const out = new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
+  const data = out.data;
+
+  for (const adj of state.adjustments) {
+    if (!adj.mask || !adj.target) continue;
+    if (!maskHasPixels(adj.mask)) continue;
+    const t = hexToRgb(adj.target.hex);
+    const tHsl = rgbToHsl(t.r, t.g, t.b);
+    const mode = adj.mode || "tint";
+    const feather = getFeatheredMask(adj);
+
+    // reference luminance = average perceived brightness of masked source pixels (for tint mode)
+    let refLum = 0.5;
+    if (mode === "tint") {
+      let sum = 0, n = 0;
+      for (let p = 0; p < adj.mask.length; p++) {
+        if (!adj.mask[p]) continue;
+        const i = p * 4;
+        sum += (src.data[i] * 0.299 + src.data[i+1] * 0.587 + src.data[i+2] * 0.114) / 255;
+        n++;
+      }
+      if (n) refLum = Math.max(0.05, sum / n);
+    }
+
+    for (let p = 0; p < adj.mask.length; p++) {
+      const a = feather ? feather[p] : adj.mask[p];
+      if (!a) continue;
+      const i = p * 4;
+      const sr = src.data[i], sg = src.data[i+1], sb = src.data[i+2];
+      let nr, ng, nb;
+      if (mode === "flat") {
+        nr = t.r; ng = t.g; nb = t.b;
+      } else if (mode === "multiply") {
+        nr = (sr * t.r) / 255;
+        ng = (sg * t.g) / 255;
+        nb = (sb * t.b) / 255;
+      } else {
+        // tint: scale target RGB by this pixel's brightness relative to the region mean.
+        // ensures any region with the same target hex converges on the same mean color.
+        const pixLum = (sr * 0.299 + sg * 0.587 + sb * 0.114) / 255;
+        const scale = pixLum / refLum; // 1.0 at region mean, <1 in shadow, >1 in highlights
+        nr = Math.min(255, t.r * scale);
+        ng = Math.min(255, t.g * scale);
+        nb = Math.min(255, t.b * scale);
+      }
+      const w = a / 255;
+      data[i]   = Math.round(sr + (nr - sr) * w);
+      data[i+1] = Math.round(sg + (ng - sg) * w);
+      data[i+2] = Math.round(sb + (nb - sb) * w);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+function drawOverlay() {
+  if (!state.baseData) return;
+  const w = overlay.width, h = overlay.height;
+  octx.clearRect(0, 0, w, h);
+  if (!state.showMask) return;
+
+  const anySolo = state.adjustments.some(a => a.solo);
+  const isVisible = (adj) => !anySolo || adj.solo;
+
+  // 1. Tinted fill per region (low opacity, screen blend handled by CSS).
+  const img = octx.createImageData(w, h);
+  const data = img.data;
+  state.adjustments.forEach((adj, idx) => {
+    if (!adj.mask || !isVisible(adj)) return;
+    const hue = OVERLAY_HUES[idx % OVERLAY_HUES.length];
+    const rgb = hslToRgb(hue / 360, 0.85, 0.55);
+    const isActive = adj.id === state.activeId;
+    const fillAlpha = isActive ? 120 : 55;
+    for (let p = 0; p < adj.mask.length; p++) {
+      if (!adj.mask[p]) continue;
+      const i = p * 4;
+      data[i] = rgb.r; data[i+1] = rgb.g; data[i+2] = rgb.b; data[i+3] = fillAlpha;
+    }
+  });
+  octx.putImageData(img, 0, 0);
+
+  // 2. Bold outlines: edge pixels painted directly on top.
+  state.adjustments.forEach((adj, idx) => {
+    if (!adj.mask || !isVisible(adj)) return;
+    const hue = OVERLAY_HUES[idx % OVERLAY_HUES.length];
+    const isActive = adj.id === state.activeId;
+    const strokeW = isActive ? 3 : 2;
+    octx.fillStyle = `hsl(${hue} 90% 55%)`;
+    const mask = adj.mask;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const p = y * w + x;
+        if (!mask[p]) continue;
+        if (!mask[p-1] || !mask[p+1] || !mask[p-w] || !mask[p+w]) {
+          octx.fillRect(x - (strokeW >> 1), y - (strokeW >> 1), strokeW, strokeW);
+        }
+      }
+    }
+  });
+
+  // 3. Numbered badge + name pill — staggered left/right with leader lines
+  //    to an off-center point inside each region so callouts never land on
+  //    the jacket's vertical centerline.
+  const regionData = [];
+  state.adjustments.forEach((adj, idx) => {
+    if (!adj.mask || !isVisible(adj)) return;
+    // Full centroid + bbox + two half-centroids (left half / right half of image).
+    let sx = 0, sy = 0, n = 0;
+    let lsx = 0, lsy = 0, ln = 0; // left half
+    let rsx = 0, rsy = 0, rn = 0; // right half
+    let minX = w, maxX = 0, minY = h, maxY = 0;
+    const midX = w / 2;
+    for (let y = 0; y < h; y += 4) {
+      for (let x = 0; x < w; x += 4) {
+        if (!adj.mask[y * w + x]) continue;
+        sx += x; sy += y; n++;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x < midX) { lsx += x; lsy += y; ln++; }
+        else          { rsx += x; rsy += y; rn++; }
+      }
+    }
+    if (!n) return;
+    regionData.push({
+      idx, adj,
+      cx: sx / n, cy: sy / n,
+      leftCx:  ln ? lsx / ln : sx / n,
+      leftCy:  ln ? lsy / ln : sy / n,
+      rightCx: rn ? rsx / rn : sx / n,
+      rightCy: rn ? rsy / rn : sy / n,
+      bw: maxX - minX, bh: maxY - minY,
+      wide: (maxX - minX) > w * 0.35,
+    });
+  });
+  // Sort by vertical position so badges stack cleanly from top to bottom.
+  regionData.sort((a, b) => a.cy - b.cy);
+
+  const r = Math.max(16, Math.min(w, h) * 0.032);
+  const minGap = r * 3.2;
+  // Alternate left / right columns; anchor each badge to the image margin.
+  const leftX = w * 0.06;
+  const rightX = w * 0.94;
+  regionData.forEach((rd, i) => {
+    rd.left = i % 2 === 0;
+    rd.bx = rd.left ? leftX : rightX;
+    // Wide masks: point at the half-centroid on the same side as the badge
+    // so the leader line stays inside the fabric and off the centerline.
+    if (rd.wide) {
+      rd.tx = rd.left ? rd.leftCx : rd.rightCx;
+      rd.ty = rd.left ? rd.leftCy : rd.rightCy;
+    } else {
+      rd.tx = rd.cx;
+      rd.ty = rd.cy;
+    }
+    rd.by = rd.ty;
+  });
+  // Resolve vertical collisions within each column by pushing down.
+  for (const side of [true, false]) {
+    const col = regionData.filter(rd => rd.left === side).sort((a, b) => a.by - b.by);
+    for (let i = 1; i < col.length; i++) {
+      if (col[i].by - col[i - 1].by < minGap) col[i].by = col[i - 1].by + minGap;
+    }
+  }
+
+  // Draw leader lines first (behind badges). Endpoint is the off-center target.
+  regionData.forEach(rd => {
+    const hue = OVERLAY_HUES[rd.idx % OVERLAY_HUES.length];
+    octx.strokeStyle = `hsla(${hue}, 90%, 55%, 0.9)`;
+    octx.lineWidth = Math.max(2, r * 0.15);
+    octx.beginPath();
+    octx.moveTo(rd.bx, rd.by);
+    octx.lineTo(rd.tx, rd.ty);
+    octx.stroke();
+    // anchor dot at the target point inside the mask
+    octx.beginPath();
+    octx.arc(rd.tx, rd.ty, r * 0.3, 0, Math.PI * 2);
+    octx.fillStyle = `hsl(${hue} 90% 55%)`;
+    octx.fill();
+    octx.lineWidth = Math.max(1.5, r * 0.12);
+    octx.strokeStyle = "#0a0c10";
+    octx.stroke();
+  });
+
+  // Draw each badge + pill.
+  regionData.forEach(rd => {
+    const { adj, idx, bx, by, left } = rd;
+    const hue = OVERLAY_HUES[idx % OVERLAY_HUES.length];
+    const isActive = adj.id === state.activeId;
+    const fontPx = Math.round(r * 1.25);
+    const labelFontPx = Math.round(r * 1.1);
+    const label = (adj.name || `Region ${idx + 1}`).toUpperCase();
+
+    octx.font = `bold ${labelFontPx}px -apple-system, sans-serif`;
+    const textW = octx.measureText(label).width;
+    const padX = r * 0.55;
+    const pillH = r * 1.7;
+    const pillW = textW + padX * 2;
+    // Pill sits on the opposite side of the badge depending on column.
+    const pillX = left ? bx + r * 1.05 : bx - r * 1.05 - pillW;
+    const pillY = by - pillH / 2;
+
+    // Pill with drop shadow.
+    octx.save();
+    octx.shadowColor = "rgba(0,0,0,0.55)";
+    octx.shadowBlur = 8;
+    octx.shadowOffsetY = 2;
+    roundRect(octx, pillX, pillY, pillW, pillH, pillH / 2);
+    octx.fillStyle = `hsl(${hue} 90% ${isActive ? 52 : 45}%)`;
+    octx.fill();
+    octx.restore();
+    octx.lineWidth = Math.max(2, r * 0.18);
+    octx.strokeStyle = "#0a0c10";
+    roundRect(octx, pillX, pillY, pillW, pillH, pillH / 2);
+    octx.stroke();
+    octx.fillStyle = "#ffffff";
+    octx.textAlign = "left";
+    octx.textBaseline = "middle";
+    octx.fillText(label, pillX + padX, by + 1);
+
+    // Numbered badge.
+    octx.save();
+    octx.shadowColor = "rgba(0,0,0,0.55)";
+    octx.shadowBlur = 8;
+    octx.shadowOffsetY = 2;
+    octx.beginPath();
+    octx.arc(bx, by, r, 0, Math.PI * 2);
+    octx.fillStyle = `hsl(${hue} 95% 55%)`;
+    octx.fill();
+    octx.restore();
+    octx.lineWidth = Math.max(2, r * 0.22);
+    octx.strokeStyle = "#0a0c10";
+    octx.beginPath();
+    octx.arc(bx, by, r, 0, Math.PI * 2);
+    octx.stroke();
+    octx.fillStyle = "#ffffff";
+    octx.font = `bold ${fontPx}px -apple-system, sans-serif`;
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+    octx.fillText(String(idx + 1), bx, by + 1);
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ---------- region merging ----------
+function mergeSelectedRegions() {
+  const ids = [...state.mergeSelection];
+  if (ids.length < 2) return;
+  // Preserve sidebar order for "primary"; first matching adjustment wins.
+  const regions = state.adjustments.filter(a => state.mergeSelection.has(a.id));
+  if (regions.length < 2) return;
+  const primary = regions[0];
+  for (let i = 1; i < regions.length; i++) {
+    const other = regions[i];
+    if (!other.mask || !primary.mask) continue;
+    for (let p = 0; p < primary.mask.length; p++) {
+      if (other.mask[p]) primary.mask[p] = 255;
+    }
+  }
+  const removeIds = new Set(regions.slice(1).map(r => r.id));
+  state.adjustments = state.adjustments.filter(a => !removeIds.has(a.id));
+  if (removeIds.has(state.activeId)) state.activeId = primary.id;
+  // Remove merged ids from any colorway assignments so the tech pack stays clean.
+  for (const cw of state.colorways) {
+    for (const rid of removeIds) delete cw.assignments[rid];
+  }
+  state.mergeSelection.clear();
+  invalidateFeather(primary);
+  refreshMergeButton();
+  renderList();
+  render();
+  drawOverlay();
+  markColorwayDirty();
+}
+
+function refreshMergeButton() {
+  const btn = document.getElementById("mergeBtn");
+  const bulk = document.getElementById("applyBulkBtn");
+  if (!btn) return;
+  const n = state.mergeSelection.size;
+  btn.textContent = `Merge ${n}`;
+  btn.style.display = n >= 2 ? "" : "none";
+  if (bulk) bulk.style.display = n >= 2 ? "" : "none";
+}
+
+// ---------- nearest Pantone matches ----------
+function nearestPantones(hex, n = 3) {
+  const t = hexToRgb(hex);
+  const ranked = PANTONE.map(([name, phex]) => {
+    const p = hexToRgb(phex);
+    const dr = t.r - p.r, dg = t.g - p.g, db = t.b - p.b;
+    return { name, hex: phex, d: Math.sqrt(dr*dr + dg*dg + db*db) };
+  }).sort((a, b) => a.d - b.d);
+  return ranked.slice(0, n);
+}
+
+// ---------- colorways ----------
+function snapshotCurrentToActiveColorway() {
+  const cw = state.colorways.find(c => c.id === state.activeColorwayId);
+  if (!cw) return;
+  cw.assignments = {};
+  for (const adj of state.adjustments) {
+    cw.assignments[adj.id] = { hex: adj.target.hex, mode: adj.mode || "tint" };
+  }
+  cw.thumb = makeThumbnail();
+}
+
+function applyColorwayToAdjustments(cw) {
+  if (!cw) return;
+  for (const adj of state.adjustments) {
+    const a = cw.assignments[adj.id];
+    if (a) { adj.target.hex = a.hex; adj.mode = a.mode || "tint"; }
+  }
+}
+
+function createColorway(name) {
+  const id = nextColorwayId++;
+  // duplicate current assignments
+  const assignments = {};
+  for (const adj of state.adjustments) {
+    assignments[adj.id] = { hex: adj.target.hex, mode: adj.mode || "tint" };
+  }
+  const cw = { id, name, assignments, thumb: makeThumbnail() };
+  state.colorways.push(cw);
+  state.activeColorwayId = id;
+  renderColorways();
+  renderList();
+}
+
+function switchColorway(id) {
+  if (state.activeColorwayId === id) return;
+  snapshotCurrentToActiveColorway();
+  const cw = state.colorways.find(c => c.id === id);
+  if (!cw) return;
+  state.activeColorwayId = id;
+  applyColorwayToAdjustments(cw);
+  render();
+  drawOverlay();
+  renderColorways();
+  renderList();
+}
+
+function deleteColorway(id) {
+  const idx = state.colorways.findIndex(c => c.id === id);
+  if (idx < 0) return;
+  state.colorways.splice(idx, 1);
+  if (state.activeColorwayId === id) {
+    const next = state.colorways[Math.min(idx, state.colorways.length - 1)];
+    state.activeColorwayId = next ? next.id : null;
+    if (next) applyColorwayToAdjustments(next);
+    render();
+    drawOverlay();
+  }
+  renderColorways();
+  renderList();
+}
+
+function makeThumbnail() {
+  if (!state.img) return null;
+  const t = document.createElement("canvas");
+  const maxDim = 160;
+  const scale = Math.min(1, maxDim / Math.max(canvas.width, canvas.height));
+  t.width = Math.round(canvas.width * scale);
+  t.height = Math.round(canvas.height * scale);
+  t.getContext("2d").drawImage(canvas, 0, 0, t.width, t.height);
+  return t.toDataURL("image/png");
+}
+
+function renderColorways() {
+  colorwayList.innerHTML = "";
+  state.colorways.forEach(cw => {
+    const card = document.createElement("div");
+    card.className = "colorway-card" + (cw.id === state.activeColorwayId ? " active" : "");
+    card.innerHTML = `
+      <img src="${cw.thumb || ""}" style="width:100%;height:90px;display:block;object-fit:cover;background:#0a0c10" />
+      <div class="cw-name" contenteditable="true" spellcheck="false">${escapeHtml(cw.name)}</div>
+      <button class="cw-del" title="Delete">×</button>
+    `;
+    card.addEventListener("click", e => {
+      if (e.target.classList.contains("cw-del") || e.target.isContentEditable) return;
+      switchColorway(cw.id);
+    });
+    card.querySelector(".cw-name").addEventListener("blur", e => {
+      cw.name = e.target.textContent.trim() || "Unnamed";
+    });
+    card.querySelector(".cw-name").addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+    });
+    card.querySelector(".cw-del").addEventListener("click", e => {
+      e.stopPropagation();
+      deleteColorway(cw.id);
+    });
+    colorwayList.appendChild(card);
+  });
+}
+
+// Refresh the active colorway's snapshot whenever the user edits adjustments.
+function markColorwayDirty() {
+  if (!state.activeColorwayId) return;
+  const cw = state.colorways.find(c => c.id === state.activeColorwayId);
+  if (!cw) return;
+  for (const adj of state.adjustments) {
+    cw.assignments[adj.id] = { hex: adj.target.hex, mode: adj.mode || "tint" };
+  }
+  cw.thumb = makeThumbnail();
+  // Re-render strip to refresh thumbnails (but debounce so we don't thrash).
+  clearTimeout(markColorwayDirty._t);
+  markColorwayDirty._t = setTimeout(renderColorways, 120);
+}
+
+// ---------- tech pack export ----------
+function exportTechPack() {
+  // ensure the current state is captured in a colorway; if none, create one
+  if (!state.colorways.length) createColorway("Colorway 1");
+  else snapshotCurrentToActiveColorway();
+
+  const rowCount = state.colorways.length;
+  const thumbW = 280;
+  const thumbH = Math.round(thumbW * (state.height / state.width));
+  const rowH = Math.max(thumbH, 40 + state.adjustments.length * 28) + 40;
+  const pad = 32;
+  const headerH = 90;
+  const totalW = pad * 2 + thumbW + 40 + 520;
+  const totalH = headerH + pad + rowCount * rowH + pad;
+
+  const c = document.createElement("canvas");
+  c.width = totalW;
+  c.height = totalH;
+  const g = c.getContext("2d");
+
+  // background
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, totalW, totalH);
+
+  // header
+  g.fillStyle = "#111827";
+  g.font = "bold 28px -apple-system, sans-serif";
+  g.fillText("Jacket Colorway Tech Pack", pad, pad + 28);
+  g.fillStyle = "#6b7280";
+  g.font = "13px -apple-system, sans-serif";
+  g.fillText(new Date().toLocaleDateString() + "  ·  " + state.adjustments.length + " regions  ·  " + rowCount + " colorways", pad, pad + 50);
+  g.strokeStyle = "#e5e7eb";
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(pad, headerH);
+  g.lineTo(totalW - pad, headerH);
+  g.stroke();
+
+  // snapshot current state so we can restore after
+  const saved = state.adjustments.map(a => ({ hex: a.target.hex, mode: a.mode }));
+
+  // each colorway row
+  state.colorways.forEach((cw, i) => {
+    const y0 = headerH + pad + i * rowH;
+
+    // apply this colorway temporarily
+    applyColorwayToAdjustments(cw);
+    render();
+
+    // draw jacket thumb
+    g.drawImage(canvas, pad, y0, thumbW, thumbH);
+    g.strokeStyle = "#e5e7eb";
+    g.strokeRect(pad, y0, thumbW, thumbH);
+
+    // colorway name
+    const tableX = pad + thumbW + 40;
+    g.fillStyle = "#111827";
+    g.font = "bold 18px -apple-system, sans-serif";
+    g.fillText(cw.name, tableX, y0 + 20);
+
+    // region rows
+    g.font = "13px -apple-system, sans-serif";
+    state.adjustments.forEach((adj, j) => {
+      const ry = y0 + 48 + j * 28;
+      // swatch
+      g.fillStyle = adj.target.hex;
+      g.fillRect(tableX, ry - 12, 22, 22);
+      g.strokeStyle = "#e5e7eb";
+      g.strokeRect(tableX + 0.5, ry - 11.5, 22, 22);
+      // name
+      g.fillStyle = "#111827";
+      g.fillText(adj.name, tableX + 34, ry + 4);
+      // mode
+      g.fillStyle = "#6b7280";
+      g.fillText(`(${adj.mode || "tint"})`, tableX + 200, ry + 4);
+      // hex
+      g.fillStyle = "#111827";
+      g.font = "13px ui-monospace, Menlo, monospace";
+      g.fillText(adj.target.hex.toUpperCase(), tableX + 280, ry + 4);
+      g.font = "13px -apple-system, sans-serif";
+    });
+
+    // divider
+    if (i < rowCount - 1) {
+      g.strokeStyle = "#f3f4f6";
+      g.beginPath();
+      g.moveTo(pad, y0 + rowH - 8);
+      g.lineTo(totalW - pad, y0 + rowH - 8);
+      g.stroke();
+    }
+  });
+
+  // restore original state
+  state.adjustments.forEach((a, i) => { a.target.hex = saved[i].hex; a.mode = saved[i].mode; });
+  render();
+
+  const a = document.createElement("a");
+  a.download = "jacket-techpack.png";
+  a.href = c.toDataURL("image/png");
+  a.click();
+}
+
+// ---------- UI list ----------
+function renderList() {
+  adjList.innerHTML = "";
+  emptyMsg.style.display = state.adjustments.length ? "none" : "";
+  // Drop any merge-selection ids for regions that no longer exist.
+  const live = new Set(state.adjustments.map(a => a.id));
+  for (const id of [...state.mergeSelection]) if (!live.has(id)) state.mergeSelection.delete(id);
+  refreshMergeButton();
+  state.adjustments.forEach((adj, idx) => {
+    const el = document.createElement("div");
+    el.className = "adj" + (adj.id === state.activeId ? " active" : "");
+    const hue = OVERLAY_HUES[idx % OVERLAY_HUES.length];
+    const ringColor = `hsl(${hue} 85% 55%)`;
+    const hasMask = maskHasPixels(adj.mask);
+    const checked = state.mergeSelection.has(adj.id) ? "checked" : "";
+    el.innerHTML = `
+      <div class="top">
+        <input type="checkbox" data-act="merge-chk" ${checked} title="Select for merge" />
+        <div class="swatch" style="background:${adj.target?.hex || "#222"};box-shadow:0 0 0 2px ${ringColor}"></div>
+        <input class="name" type="text" value="${escapeHtml(adj.name)}" />
+        <span class="mask-dot ${hasMask ? "has" : ""}" title="${hasMask ? "Region defined" : "No region"}"></span>
+        <button data-act="solo" class="${adj.solo ? "on" : ""}" title="Show only this region in the overlay">Solo</button>
+        <button data-act="select" title="Make active">${adj.id === state.activeId ? "✓" : "Select"}</button>
+        <button data-act="del" title="Remove">✕</button>
+      </div>
+      <div class="target-row">
+        <label class="small" style="width:58px">Source</label>
+        <div class="swatch small" style="background:${adj.source?.hex || "transparent"};border-style:${adj.source ? "solid" : "dashed"}"></div>
+        <span class="meta">${adj.source?.hex || "auto from region"}</span>
+      </div>
+      <div class="target-row">
+        <label class="small" style="width:58px">Replace</label>
+        <input type="color" data-act="color" value="${adj.target.hex}" />
+        <input type="text" data-act="hex" value="${adj.target.hex}" style="max-width:90px" />
+      </div>
+      <div class="target-row" data-pantone-matches>
+        <label class="small" style="width:58px">Nearest</label>
+        <div data-nearest style="display:flex;gap:4px;flex:1;flex-wrap:wrap"></div>
+      </div>
+      <div class="target-row">
+        <label class="small" style="width:58px">Mode</label>
+        <div class="tabs" style="flex:1">
+          <button data-act="mode-tint" class="${(adj.mode||'tint')==='tint'?'on':''}" title="Preserve shading, swap hue">Tint</button>
+          <button data-act="mode-flat" class="${adj.mode==='flat'?'on':''}" title="Solid fill, ignore original">Flat</button>
+          <button data-act="mode-multiply" class="${adj.mode==='multiply'?'on':''}" title="Multiply over original (darken only)">Multiply</button>
+        </div>
+      </div>
+      <div class="tabs">
+        <button data-act="tab-pantone" class="on">Pantone</button>
+        <button data-act="tab-swatch">Swatch image</button>
+      </div>
+      <div data-pane="pantone">
+        <select data-act="pdropdown" style="width:100%;background:#0c0f14;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font:inherit;margin-bottom:6px">
+          <option value="">-- Pick a Pantone color --</option>
+          ${PANTONE.map(([name, hex]) => `<option value="${hex}">${escapeHtml(name)} — ${hex.toUpperCase()}</option>`).join("")}
+        </select>
+        <input type="text" placeholder="Search Pantone…" data-act="psearch" />
+        <div class="pantone-grid" data-grid></div>
+      </div>
+      <div data-pane="swatch" hidden>
+        <label class="btn">Upload swatch image<input type="file" accept="image/*" hidden data-act="swatch" /></label>
+        <div class="hint" style="margin-top:6px">Dominant color from the image becomes the replacement.</div>
+      </div>
+    `;
+
+    el.addEventListener("mousedown", e => {
+      // Skip activation if the click landed on any interactive content inside
+      // the card — buttons, inputs, the Pantone grid, nearest-match chips,
+      // tabs, or the search box — so those controls' own handlers run without
+      // triggering a sidebar re-render that would reset their scroll state.
+      if (e.target.closest("button,input,.p,[data-grid],[data-nearest],[data-pane]")) return;
+      if (adj.id === state.activeId) return;
+      state.activeId = adj.id; renderList(); drawOverlay();
+    });
+    el.querySelector(".name").addEventListener("input", e => { adj.name = e.target.value; });
+    el.querySelector('[data-act="merge-chk"]').addEventListener("change", e => {
+      if (e.target.checked) state.mergeSelection.add(adj.id);
+      else state.mergeSelection.delete(adj.id);
+      refreshMergeButton();
+    });
+    el.querySelector('[data-act="solo"]').addEventListener("click", () => {
+      adj.solo = !adj.solo;
+      renderList();
+      drawOverlay();
+    });
+    el.querySelector('[data-act="select"]').addEventListener("click", () => {
+      state.activeId = adj.id; renderList(); drawOverlay();
+    });
+    el.querySelector('[data-act="del"]').addEventListener("click", () => {
+      state.adjustments = state.adjustments.filter(a => a.id !== adj.id);
+      if (state.activeId === adj.id) state.activeId = state.adjustments[0]?.id || null;
+      renderList(); render(); drawOverlay();
+    });
+    const colorInput = el.querySelector('[data-act="color"]');
+    const hexInput = el.querySelector('[data-act="hex"]');
+    const updateNearest = () => renderNearestPantones(el, adj, colorInput, hexInput);
+    colorInput.addEventListener("input", e => { adj.target.hex = e.target.value; hexInput.value = e.target.value; render(); renderSwatch(el, adj); markColorwayDirty(); updateNearest(); });
+    hexInput.addEventListener("change", e => {
+      const v = normalizeHex(e.target.value);
+      if (v) { adj.target.hex = v; colorInput.value = v; render(); renderSwatch(el, adj); markColorwayDirty(); updateNearest(); }
+    });
+    updateNearest();
+
+    const modeButtons = {
+      tint: el.querySelector('[data-act="mode-tint"]'),
+      flat: el.querySelector('[data-act="mode-flat"]'),
+      multiply: el.querySelector('[data-act="mode-multiply"]'),
+    };
+    for (const [m, btn] of Object.entries(modeButtons)) {
+      btn.addEventListener("click", () => {
+        adj.mode = m;
+        for (const [mm, bb] of Object.entries(modeButtons)) bb.classList.toggle("on", mm === m);
+        render();
+        markColorwayDirty();
+      });
+    }
+
+    const tabPantone = el.querySelector('[data-act="tab-pantone"]');
+    const tabSwatch = el.querySelector('[data-act="tab-swatch"]');
+    const paneP = el.querySelector('[data-pane="pantone"]');
+    const paneS = el.querySelector('[data-pane="swatch"]');
+    tabPantone.addEventListener("click", () => { tabPantone.classList.add("on"); tabSwatch.classList.remove("on"); paneP.hidden = false; paneS.hidden = true; });
+    tabSwatch.addEventListener("click", () => { tabSwatch.classList.add("on"); tabPantone.classList.remove("on"); paneP.hidden = true; paneS.hidden = false; });
+
+    const grid = el.querySelector("[data-grid]");
+    const searchEl = el.querySelector('[data-act="psearch"]');
+    const pdropdown = el.querySelector('[data-act="pdropdown"]');
+    if (pdropdown) {
+      pdropdown.addEventListener("change", (e) => {
+        const v = e.target.value;
+        if (!v) return;
+        adj.target.hex = v;
+        colorInput.value = v;
+        hexInput.value = v;
+        renderSwatch(el, adj);
+        render();
+        markColorwayDirty();
+        updateNearest();
+      });
+    }
+    const drawPantone = (filter) => {
+      grid.innerHTML = "";
+      const q = (filter || "").trim().toLowerCase();
+      // Keep the grid empty until the user types a search — avoids overwhelming
+      // the sidebar with 120+ swatches by default.
+      if (!q) return;
+      for (const [name, hex] of PANTONE) {
+        if (!name.toLowerCase().includes(q)) continue;
+        const p = document.createElement("div");
+        p.className = "p";
+        p.innerHTML = `<div class="swatch small" style="background:${hex}"></div><span>${name}</span>`;
+        p.addEventListener("click", () => {
+          adj.target.hex = hex;
+          colorInput.value = hex; hexInput.value = hex;
+          renderSwatch(el, adj); render(); markColorwayDirty();
+        });
+        grid.appendChild(p);
+      }
+    };
+    // Start empty; populate as the user types.
+    drawPantone("");
+    searchEl.addEventListener("input", e => drawPantone(e.target.value));
+
+    el.querySelector('[data-act="swatch"]').addEventListener("change", async e => {
+      const f = e.target.files?.[0]; if (!f) return;
+      const hex = await dominantColorFromFile(f);
+      adj.target.hex = hex;
+      colorInput.value = hex; hexInput.value = hex;
+      renderSwatch(el, adj); render(); markColorwayDirty();
+    });
+
+    adjList.appendChild(el);
+  });
+}
+
+function renderNearestPantones(el, adj, colorInput, hexInput) {
+  const holder = el.querySelector('[data-nearest]');
+  if (!holder) return;
+  holder.innerHTML = "";
+  const matches = nearestPantones(adj.target.hex, 3);
+  for (const m of matches) {
+    const chip = document.createElement("button");
+    chip.className = "btn";
+    chip.style.cssText = "display:flex;align-items:center;gap:4px;padding:3px 6px;font-size:10px;line-height:1;max-width:100%";
+    chip.title = `${m.name}  ΔRGB ${m.d.toFixed(0)}`;
+    chip.innerHTML = `<span class="swatch small" style="width:14px;height:14px;background:${m.hex}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px">${escapeHtml(m.name)}</span>`;
+    chip.addEventListener("click", () => {
+      adj.target.hex = m.hex;
+      colorInput.value = m.hex;
+      hexInput.value = m.hex;
+      renderSwatch(el, adj);
+      render();
+      markColorwayDirty();
+      renderNearestPantones(el, adj, colorInput, hexInput);
+    });
+    holder.appendChild(chip);
+  }
+}
+
+function renderSwatch(el, adj) {
+  const sw = el.querySelector(".swatch");
+  sw.style.background = adj.target.hex;
+}
+
+// ---------- color utils ----------
+function hexToRgb(hex) {
+  hex = hex.replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+  const n = parseInt(hex, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex(r, g, b) { return "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join(""); }
+function normalizeHex(v) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  let h = m[1]; if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  return "#" + h.toLowerCase();
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    h /= 6;
+  }
+  return { h, s, l };
+}
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+  }
+  return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+}
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+function dominantColorFromFile(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      const size = 64;
+      c.width = size; c.height = size;
+      const cx = c.getContext("2d");
+      cx.drawImage(img, 0, 0, size, size);
+      const d = cx.getImageData(0, 0, size, size).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 128) continue;
+        r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+      }
+      if (!n) return resolve("#000000");
+      resolve(rgbToHex(Math.round(r / n), Math.round(g / n), Math.round(b / n)));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+renderList();
+</script>
+</body>
+</html>

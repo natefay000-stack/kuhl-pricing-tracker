@@ -300,8 +300,11 @@ export async function POST(request: NextRequest) {
               unitsShipped: Number(item.unitsShipped || 0),
               unitsReturned: Number(item.unitsReturned || 0),
             }));
-            await tx.invoice.createMany({ data: batch });
-            count += batch.length;
+            // skipDuplicates honors the @@unique([invoiceNumber, styleNumber,
+            // colorCode, customer]) composite key on Invoice — re-imports
+            // of the same file become idempotent.
+            const result = await tx.invoice.createMany({ data: batch, skipDuplicates: true });
+            count += result.count;
           }
           break;
       }

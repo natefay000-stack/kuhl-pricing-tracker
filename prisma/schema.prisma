@@ -168,6 +168,10 @@ model Invoice {
   @@index([shipToState])
   @@index([invoiceDate])
   @@index([customer])
+  // Composite unique key — prevents duplicate rows when re-importing the
+  // same invoice file. Combined with skipDuplicates on createMany, lets
+  // imports be idempotent without delete-then-insert.
+  @@unique([invoiceNumber, styleNumber, colorCode, customer], name: "invoice_natural_key")
 }
 
 // Pricing by season (from pricebyseason file)
