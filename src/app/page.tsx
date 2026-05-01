@@ -1332,6 +1332,14 @@ export default function Home() {
         invoicesBySeason[season].push(inv);
       }
 
+      // ── APPEND-ONLY for invoice imports ──
+      // Previously the first batch of each season ran with replaceExisting=true,
+      // which deletes every existing Invoice row for that season before
+      // inserting the new batch. That's destructive for invoice data because
+      // invoices are time-based, not season-based — importing just Q1 2024
+      // would wipe Q2-Q4 2024 invoices that share the same '24SP' tag.
+      // We now always append, leaving DB de-duplication to a separate concern
+      // (composite unique index on invoiceNumber+styleNumber+colorCode).
       for (const season of Object.keys(invoicesBySeason)) {
         const seasonInvoices = invoicesBySeason[season];
         const totalBatches = Math.ceil(seasonInvoices.length / BATCH_SIZE);
@@ -1339,9 +1347,8 @@ export default function Home() {
         for (let i = 0; i < seasonInvoices.length; i += BATCH_SIZE) {
           const batch = seasonInvoices.slice(i, i + BATCH_SIZE);
           const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-          const isFirstBatch = i === 0;
 
-          console.log(`Invoice ${season} batch ${batchNum}/${totalBatches} (${batch.length} records${isFirstBatch ? ', replacing' : ''})`);
+          console.log(`Invoice ${season} batch ${batchNum}/${totalBatches} (${batch.length} records, appending)`);
 
           await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
@@ -1351,11 +1358,11 @@ export default function Home() {
               season,
               data: batch,
               fileName: `invoice_${season}_batch_${batchNum}`,
-              replaceExisting: isFirstBatch,
+              replaceExisting: false, // never wipe — invoices are time-based, not season-based
             }),
           });
         }
-        console.log(`✓ Invoice ${season}: ${seasonInvoices.length} records saved`);
+        console.log(`✓ Invoice ${season}: ${seasonInvoices.length} records appended`);
       }
       console.log('Invoice import complete');
       try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
