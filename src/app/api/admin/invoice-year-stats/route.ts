@@ -44,6 +44,24 @@ export async function GET() {
       LIMIT 20
     `);
 
+    // Year × month breakdown so we can see exactly when 2024 invoices live
+    const byYearMonth = await prisma.$queryRawUnsafe<Array<{
+      yr: number | null;
+      mo: number | null;
+      cnt: bigint;
+      net: number | null;
+    }>>(`
+      SELECT
+        EXTRACT(YEAR FROM "invoiceDate")::int AS yr,
+        EXTRACT(MONTH FROM "invoiceDate")::int AS mo,
+        COUNT(*)::bigint AS cnt,
+        (SUM("shippedAtNet") - SUM("returnedAtNet"))::float AS net
+      FROM "Invoice"
+      WHERE "invoiceDate" IS NOT NULL
+      GROUP BY EXTRACT(YEAR FROM "invoiceDate"), EXTRACT(MONTH FROM "invoiceDate")
+      ORDER BY yr, mo
+    `);
+
     return NextResponse.json({
       totalInvoiceRows: total,
       byYear: byYear.map(r => ({
@@ -53,6 +71,12 @@ export async function GET() {
         shippedSum: r.shipped,
         returnedSum: r.returned,
         netInvoiced: (r.shipped ?? 0) - (r.returned ?? 0),
+      })),
+      byYearMonth: byYearMonth.map(r => ({
+        year: r.yr,
+        month: r.mo,
+        count: Number(r.cnt),
+        netInvoiced: r.net ?? 0,
       })),
       nullInvoiceDateBySeason: nullDateBySeason.map(r => ({
         season: r.season,
