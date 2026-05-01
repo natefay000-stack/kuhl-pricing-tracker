@@ -19,7 +19,8 @@ import { InvoiceRecord, Product, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
 import MultiSelect from '@/components/MultiSelect';
-import { Search, Filter, X, Calendar, ChevronRight } from 'lucide-react';
+import { Search, Filter, X, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
+import { clearInvoiceCache } from '@/lib/invoice-cache';
 
 interface InvoiceMonthViewProps {
   invoices: InvoiceRecord[];
@@ -564,6 +565,23 @@ export default function InvoiceMonthView({
             {invoices.length.toLocaleString()} invoice records · click any style or customer row to cross-filter the pivot
           </p>
         </div>
+        <button
+          onClick={async () => {
+            const ok = window.confirm(
+              'Force-refresh from database?\n\nThis clears the local cache and re-streams every invoice row fresh from the server (~30 seconds for 1M+ rows). Use this if the page seems out of sync after an import.',
+            );
+            if (!ok) return;
+            try {
+              await clearInvoiceCache();
+            } catch { /* non-fatal */ }
+            window.location.reload();
+          }}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-700 dark:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors"
+          title="Clear local cache and re-fetch all invoice records from the database. Useful after an import if the view looks stale."
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh from DB
+        </button>
       </div>
 
       {/* Empty-state banner: season filter has no matching invoice records */}
