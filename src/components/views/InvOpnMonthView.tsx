@@ -126,6 +126,8 @@ export default function InvOpnMonthView({
   // Click-to-cross-filter: when a row is clicked, scope all other panels
   const [clickedStyle, setClickedStyle] = useState<string | null>(null);
   const [clickedCustomer, setClickedCustomer] = useState<string | null>(null);
+  // Cell click: lock breakdowns to one year+month (m is 0-indexed). null = off.
+  const [clickedYearMonth, setClickedYearMonth] = useState<{ y: number; m: number } | null>(null);
 
   // ── Lookup: styleNumber → categoryDesc (since invoices don't carry it directly) ──
   const styleToCategory = useMemo(() => {
@@ -281,6 +283,13 @@ export default function InvOpnMonthView({
     // so the table doesn't filter itself out.
     if (clickedStyle && scope !== 'forStyleTable' && inv.styleNumber !== clickedStyle) return false;
     if (clickedCustomer && scope !== 'forCustomerTable' && inv.customer !== clickedCustomer) return false;
+    // Year+month cell filter applies to byStyle / byCustomer breakdowns,
+    // not the pivot itself (we still want the full grid clickable).
+    if (clickedYearMonth && scope !== 'forPivot') {
+      const bucket = resolveBucket(inv);
+      if (!bucket) return false;
+      if (bucket.y !== clickedYearMonth.y || bucket.m !== clickedYearMonth.m) return false;
+    }
     return true;
   };
 
@@ -360,7 +369,7 @@ export default function InvOpnMonthView({
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
-    clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+    clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
   ]);
 
   // ── Style breakdown ──
@@ -384,7 +393,7 @@ export default function InvOpnMonthView({
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
-    clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+    clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
   ]);
 
   // ── Color breakdown for the currently expanded style (if any) ──
@@ -438,7 +447,7 @@ export default function InvOpnMonthView({
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
-    clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+    clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
   ]);
 
   // Detect: a season is being filtered for, but no invoice records exist for it.
@@ -473,7 +482,7 @@ export default function InvOpnMonthView({
     invoices,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
-    clickedStyle, clickedCustomer, globalSeason, styleToCategory,
+    clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
   ]);
 
   const hasAnyFilter =
@@ -487,7 +496,8 @@ export default function InvOpnMonthView({
     colorFilter.length > 0 ||
     styleSearch !== '' ||
     clickedStyle !== null ||
-    clickedCustomer !== null;
+    clickedCustomer !== null ||
+    clickedYearMonth !== null;
 
   const clearAll = () => {
     setMonthFilter([]);
@@ -501,6 +511,7 @@ export default function InvOpnMonthView({
     setStyleSearch('');
     setClickedStyle(null);
     setClickedCustomer(null);
+    setClickedYearMonth(null);
   };
 
   // Compute year-row totals + month-column totals for the pivot
@@ -554,9 +565,18 @@ export default function InvOpnMonthView({
       )}
 
       {/* Click-active filter chips */}
-      {(clickedStyle || clickedCustomer) && (
+      {(clickedStyle || clickedCustomer || clickedYearMonth) && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs uppercase tracking-wide text-text-muted font-semibold">Cross-filtered:</span>
+          {clickedYearMonth && (
+            <button
+              onClick={() => setClickedYearMonth(null)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+            >
+              Month: <span className="font-mono">{MONTHS_SHORT[clickedYearMonth.m]} {clickedYearMonth.y}</span>
+              <X className="w-3 h-3" />
+            </button>
+          )}
           {clickedStyle && (
             <button
               onClick={() => setClickedStyle(null)}
@@ -667,11 +687,29 @@ export default function InvOpnMonthView({
                     <td className="px-3 py-1.5 font-mono font-semibold text-text-primary sticky left-0 bg-surface">
                       {y}
                     </td>
-                    {row.map((v, i) => (
-                      <td key={i} className={`px-2 py-1.5 text-right font-mono ${v === 0 ? 'text-text-faint' : 'text-text-primary'}`}>
-                        {v === 0 ? '—' : fmtMillions(v)}
-                      </td>
-                    ))}
+                    {row.map((v, i) => {
+                      const isActive = clickedYearMonth?.y === y && clickedYearMonth?.m === i;
+                      const isEmpty = v === 0;
+                      return (
+                        <td
+                          key={i}
+                          onClick={() => {
+                            if (isEmpty) return;
+                            setClickedYearMonth(isActive ? null : { y, m: i });
+                          }}
+                          className={`px-2 py-1.5 text-right font-mono transition-colors ${
+                            isEmpty
+                              ? 'text-text-faint'
+                              : isActive
+                                ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 ring-1 ring-cyan-500/40 cursor-pointer'
+                                : 'text-text-primary cursor-pointer hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400'
+                          }`}
+                          title={isEmpty ? '' : `Click to filter Style + Customer breakdowns to ${MONTHS_SHORT[i]} ${y}`}
+                        >
+                          {isEmpty ? '—' : fmtMillions(v)}
+                        </td>
+                      );
+                    })}
                     <td className="px-3 py-1.5 text-right font-mono font-bold text-text-primary border-l-2 border-border-strong bg-surface-secondary">
                       {fmtMillions(total)}
                     </td>
