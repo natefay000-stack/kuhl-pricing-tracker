@@ -14,7 +14,7 @@
  * table. Click again to deselect.
  */
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { InvoiceRecord, Product, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
@@ -130,6 +130,31 @@ export default function InvoiceMonthView({
   // Cell click: lock the byStyle / byCustomer breakdowns to one year+month.
   // Stored as { y, m } (m is 0-indexed). null = no filter.
   const [clickedYearMonth, setClickedYearMonth] = useState<{ y: number; m: number } | null>(null);
+
+  // ── Server-side aggregates (DB truth) ──
+  // Independent of the in-memory invoice array, this hits a small endpoint
+  // (~50KB) that pre-aggregates by year × month server-side. Loads in ~3s
+  // even when the full row stream takes minutes. Used to show authoritative
+  // DB totals next to the in-memory pivot so we can spot when local data
+  // is stale.
+  const [serverAggregates, setServerAggregates] = useState<{
+    yearMonth: { y: number; m: number; count: number; net: number }[];
+    generatedAt: string;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/data/invoice-aggregates');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setServerAggregates({ yearMonth: data.yearMonth, generatedAt: data.generatedAt });
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Lookup: styleNumber → categoryDesc (since invoices don't carry it directly) ──
   const styleToCategory = useMemo(() => {
@@ -729,6 +754,36 @@ export default function InvoiceMonthView({
           )}
         </div>
       )}
+
+      {/* Server-truth banner — DB year totals, independent of in-memory load */}
+      {serverAggregates && (() => {
+        const byYear = new Map<number, number>();
+        serverAggregates.yearMonth.forEach((r) => {
+          byYear.set(r.y, (byYear.get(r.y) ?? 0) + r.net);
+        });
+        const inMemByYear = new Map<number, number>();
+        yearMonthGrid.years.forEach((y) => {
+          const row = yearMonthGrid.grid.get(y) ?? [];
+          inMemByYear.set(y, row.reduce((s, v) => s + v, 0));
+        });
+        const yrs = Array.from(byYear.keys()).sort();
+        return (
+          <div className="text-xs bg-surface-secondary rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 border border-border-primary">
+            <span className="font-semibold text-text-secondary">DB truth (server):</span>
+            {yrs.map((y) => {
+              const dbVal = byYear.get(y) ?? 0;
+              const localVal = inMemByYear.get(y) ?? 0;
+              const matches = Math.abs(dbVal - localVal) / Math.abs(dbVal || 1) < 0.01;
+              return (
+                <span key={y} className="font-mono">
+                  {y}: <span className={matches ? 'text-emerald-500' : 'text-amber-500'}>{fmtMillions(dbVal)}</span>
+                  {!matches && <span className="text-text-faint"> (in-memory: {fmtMillions(localVal)})</span>}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Year × Month pivot */}
       <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
