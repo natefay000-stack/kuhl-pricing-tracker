@@ -38,7 +38,7 @@ export async function GET() {
         SUM(group_net - min_net) FILTER (WHERE cnt > 1)::float AS inflation_net
       FROM grouped
     `);
-    const r = dups[0] ?? { total_rows: 0n, dup_groups: 0n, dup_rows: 0n, inflation_net: 0 };
+    const r = dups[0] ?? { total_rows: BigInt(0), dup_groups: BigInt(0), dup_rows: BigInt(0), inflation_net: 0 };
 
     // Also: rows with NULL invoiceNumber (which the unique index can't catch)
     const nullInv = await prisma.invoice.count({
