@@ -171,7 +171,21 @@ model Invoice {
   // Composite unique key — prevents duplicate rows when re-importing the
   // same invoice file. Combined with skipDuplicates on createMany, lets
   // imports be idempotent without delete-then-insert.
-  @@unique([invoiceNumber, styleNumber, colorCode, customer], name: "invoice_natural_key")
+  //
+  // Wider than the obvious (invoiceNumber, styleNumber, colorCode, customer)
+  // because real distinct line items often share those four fields — same
+  // invoice can have separate lines per warehouse, ship-to location, or
+  // size pricing tier. The xlsx export carries no line-item-id, so we have
+  // to reconstruct uniqueness from the discriminating columns it does
+  // provide. Truly identical rows across all of these are real duplicates
+  // and get skipped; anything else lands.
+  //
+  // The DB index is created with NULLS NOT DISTINCT (Postgres 15+) — see
+  // src/app/api/admin/add-invoice-unique-key/route.ts. Prisma's @@unique
+  // can't express that, but it's required: many invoice rows have NULL
+  // warehouse, and Postgres's default NULLS DISTINCT lets identical
+  // rows-with-NULLs slip through skipDuplicates and double-count.
+  @@unique([invoiceNumber, styleNumber, colorCode, customer, shippedAtNet, returnedAtNet, warehouse, shipToCity, shipToState], name: "invoice_natural_key")
 }
 
 // Pricing by season (from pricebyseason file)

@@ -53,7 +53,16 @@ export async function POST(request: Request) {
            WHERE ctid IN (
              SELECT ctid FROM (
                SELECT ctid, ROW_NUMBER() OVER (
-                 PARTITION BY "invoiceNumber", "styleNumber", "colorCode", "customer"
+                 PARTITION BY
+                   "invoiceNumber",
+                   "styleNumber",
+                   COALESCE("colorCode",   '__NULL__'),
+                   COALESCE("customer",    '__NULL__'),
+                   "shippedAtNet",
+                   "returnedAtNet",
+                   COALESCE("warehouse",   '__NULL__'),
+                   COALESCE("shipToCity",  '__NULL__'),
+                   COALESCE("shipToState", '__NULL__')
                  ORDER BY id
                ) AS rn
                FROM "Invoice"
@@ -71,11 +80,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create the composite unique index. Postgres treats NULLs as distinct
-    // by default, so partial keys with null fields don't collide.
+    // Create the composite unique index.
+    //
+    // 9 columns (not 4) — see prisma/schema.prisma for why the narrow form
+    // silently dropped real distinct line items during skipDuplicates imports.
+    //
+    // NULLS NOT DISTINCT (Postgres 15+) — without it, two rows that match
+    // on all non-NULL fields but have NULL warehouse (or city/state) are
+    // treated as distinct by Postgres and slip past skipDuplicates,
+    // causing exact-row duplication. NULL-warehouse rows are common
+    // (e-commerce orders), so this is load-bearing, not a nicety.
     await prisma.$executeRawUnsafe(
       `CREATE UNIQUE INDEX IF NOT EXISTS "invoice_natural_key"
-       ON "Invoice" ("invoiceNumber", "styleNumber", "colorCode", "customer")`,
+       ON "Invoice" ("invoiceNumber", "styleNumber", "colorCode", "customer",
+                     "shippedAtNet", "returnedAtNet", "warehouse",
+                     "shipToCity", "shipToState") NULLS NOT DISTINCT`,
     );
 
     const after = await prisma.invoice.count();

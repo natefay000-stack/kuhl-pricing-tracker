@@ -15,7 +15,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { InvoiceRecord, Product, SalesRecord } from '@/types/product';
+import { InvoiceRecord, Product } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
 import MultiSelect from '@/components/MultiSelect';
@@ -24,7 +24,6 @@ import { clearInvoiceCache } from '@/lib/invoice-cache';
 
 interface InvoiceMonthViewProps {
   invoices: InvoiceRecord[];
-  sales?: SalesRecord[];
   products: Product[];
   selectedSeason?: string;
   onStyleClick?: (styleNumber: string) => void;
@@ -45,74 +44,14 @@ const fmtFull = (v: number) => {
 };
 
 export default function InvoiceMonthView({
-  invoices: invoicesProp,
-  sales = [],
+  invoices,
   products,
   selectedSeason: globalSeason = '',
   onStyleClick,
 }: InvoiceMonthViewProps) {
-  // Union sales + invoices into a single record set. Sales records have the
-  // same shape (openAtNet, shippedAtNet, returnedAtNet, invoiceDate, season,
-  // customer…) as invoice records — they're often imported from a different
-  // xlsx file but represent the same booked/shipped activity. We dedupe on
-  // a composite key (invoiceNumber|styleNumber|colorCode|customer) when
-  // available so the same physical line doesn't get double-counted.
-  const invoices: InvoiceRecord[] = useMemo(() => {
-    const out: InvoiceRecord[] = [];
-    const seen = new Set<string>();
-    const push = (r: InvoiceRecord) => {
-      const key = r.invoiceNumber
-        ? `${r.invoiceNumber}|${r.styleNumber}|${r.colorCode ?? ''}|${r.customer ?? ''}`
-        : '';
-      if (key && seen.has(key)) return;
-      if (key) seen.add(key);
-      out.push(r);
-    };
-    invoicesProp.forEach(push);
-    sales.forEach((s) => {
-      // A Sale row can represent either a shipped invoice line OR a booked-
-      // but-not-yet-shipped order. The "Booked Net" report typically only
-      // populates `revenue` (booked $), while the "Detailed/Invoiced" report
-      // populates shippedAtNet / openAtNet / returnedAtNet. To avoid losing
-      // open orders for future seasons, we infer open$ = revenue when the
-      // detailed open$ field isn't set.
-      const shipped = s.shippedAtNet ?? s.shipped ?? 0;
-      const returned = s.returnedAtNet ?? 0;
-      const explicitOpen = s.openAtNet ?? 0;
-      // If openAtNet wasn't populated AND the row hasn't shipped yet, the
-      // revenue (Booked Net) IS the open amount.
-      const inferredOpen = explicitOpen > 0
-        ? explicitOpen
-        : Math.max(0, (s.revenue ?? 0) - shipped - returned);
-      push({
-        id: s.id,
-        styleNumber: s.styleNumber,
-        styleDesc: s.styleDesc,
-        colorCode: s.colorCode,
-        colorDesc: s.colorDesc,
-        season: s.season,
-        customer: s.customer,
-        customerType: s.customerType,
-        gender: s.gender,
-        orderType: s.orderType,
-        shipToState: s.shipToState,
-        shipToCity: s.shipToCity,
-        shipToZip: s.shipToZip,
-        billToState: s.billToState,
-        billToCity: s.billToCity,
-        billToZip: s.billToZip,
-        invoiceNumber: s.invoiceNumber,
-        invoiceDate: s.invoiceDate,
-        accountingPeriod: s.accountingPeriod,
-        shippedAtNet: shipped,
-        returnedAtNet: returned,
-        openAtNet: inferredOpen,
-        unitsShipped: s.unitsShipped,
-        unitsReturned: s.unitsReturned,
-      } as InvoiceRecord);
-    });
-    return out;
-  }, [invoicesProp, sales]);
+  // Source: Invoice table only. The Sale table holds booked/open orders,
+  // which dilute the "what was actually invoiced" question this view
+  // exists to answer.
   // ── Local filter state (multi-select arrays) ──
   const [monthFilter, setMonthFilter] = useState<string[]>([]);
   const [seasonFilter, setSeasonFilter] = useState<string[]>([]);

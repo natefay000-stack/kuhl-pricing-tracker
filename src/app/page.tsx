@@ -2141,7 +2141,6 @@ export default function Home() {
             <ErrorBoundary viewName="Invoice Month">
               <InvoiceMonthView
                 invoices={invoices}
-                sales={sales}
                 products={products}
                 selectedSeason={selectedSeason}
                 onStyleClick={handleStyleClick}
