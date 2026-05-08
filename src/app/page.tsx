@@ -862,17 +862,39 @@ export default function Home() {
     // response limit. The API returns pages of ~4k rows; we loop until done
     // and progressively update state so the UI can start rendering partway.
     const loadInvoicesFromAnySource = async (opts?: { skipCache?: boolean }) => {
+      // Probe the server's lightweight version endpoint up-front. If our
+      // cached data carries the same version string, the DB hasn't changed
+      // since we wrote it and we can skip the 30-90s pagination entirely.
+      let serverVersion: string | null = null;
+      try {
+        const vRes = await fetch('/api/data/invoices/version');
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          serverVersion = vData?.version ?? null;
+        }
+      } catch { /* non-fatal — proceed without version check */ }
+
       // Try 0: IndexedDB cache from a prior session.
       let hasCached = false;
+      let cacheIsCurrent = false;
       if (!opts?.skipCache) {
         try {
           const cached = await loadInvoicesFromCache();
           if (cached && cached.invoices.length > 0) {
             setInvoices(cached.invoices);
             hasCached = true;
-            console.log(`Invoices loaded from IndexedDB cache: ${cached.invoices.length} (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale})`);
-            if (!cached.stale) return; // fresh cache wins, no API call
-            // Stale: refresh in background without clobbering the rendered set
+            // Cache is "current" when the server's version matches what we
+            // saved AND the cache was a complete (non-partial) write. A
+            // partial cache (interrupted load) always re-fetches to top up.
+            cacheIsCurrent = !!serverVersion && cached.version === serverVersion && !cached.partial;
+            console.log(
+              `Invoices loaded from IndexedDB cache: ${cached.invoices.length}` +
+              ` (age: ${Math.round(cached.ageMs / 1000)}s, stale: ${cached.stale},` +
+              ` version: ${cached.version ?? 'pre-versioning'} vs server ${serverVersion ?? '?'},` +
+              ` partial: ${cached.partial})`,
+            );
+            if (cacheIsCurrent) return; // server version matches → skip fetch
+            // Otherwise: refresh in background without clobbering the rendered set
           }
         } catch { /* non-fatal */ }
       }
@@ -892,11 +914,16 @@ export default function Home() {
         firstBatch.forEach((inv, i) => { all[i] = inv; });
         if (!hasCached) setInvoices(firstBatch);
 
-        // Fetch remaining pages in parallel windows of 4
+        // Fetch remaining pages in parallel windows of 4. Checkpoint the
+        // cache every CHECKPOINT_WINDOWS so an interrupted load (closed
+        // tab, network drop) leaves usable data behind. Marked partial so
+        // the next visit re-fetches to top up rather than trusting it.
         const PARALLEL = 4;
+        const CHECKPOINT_WINDOWS = 10; // ~200K rows between checkpoint writes
         const pagesNeeded: number[] = [];
         for (let p = 2; p <= totalPages; p++) pagesNeeded.push(p);
         let writeCursor = firstBatch.length;
+        let windowsSinceCheckpoint = 0;
         while (pagesNeeded.length > 0) {
           const window = pagesNeeded.splice(0, PARALLEL);
           const results = await Promise.all(
@@ -912,11 +939,20 @@ export default function Home() {
             }
           }
           if (!hasCached) setInvoices(all.slice(0, writeCursor));
+          windowsSinceCheckpoint++;
+          if (windowsSinceCheckpoint >= CHECKPOINT_WINDOWS && pagesNeeded.length > 0) {
+            windowsSinceCheckpoint = 0;
+            const checkpointSlice = all.slice(0, writeCursor).filter(Boolean);
+            // Fire-and-forget — don't block pagination on disk I/O
+            saveInvoicesToCache(checkpointSlice, { version: serverVersion, partial: true })
+              .catch(() => { /* non-fatal */ });
+          }
         }
         const final = all.slice(0, writeCursor).filter(Boolean);
         console.log(`Invoices loaded from DB API: ${final.length} (parallel x${PARALLEL}, pageSize ${pageSize})`);
         setInvoices(final);
-        saveInvoicesToCache(final).catch(() => { /* non-fatal */ });
+        saveInvoicesToCache(final, { version: serverVersion, partial: false })
+          .catch(() => { /* non-fatal */ });
         return;
       } catch (err) {
         console.warn('DB API invoice load failed, trying snapshot:', err);

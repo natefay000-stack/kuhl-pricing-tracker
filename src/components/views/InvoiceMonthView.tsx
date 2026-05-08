@@ -71,13 +71,18 @@ export default function InvoiceMonthView({
   const [clickedYearMonth, setClickedYearMonth] = useState<{ y: number; m: number } | null>(null);
 
   // ── Server-side aggregates (DB truth) ──
-  // Independent of the in-memory invoice array, this hits a small endpoint
-  // (~50KB) that pre-aggregates by year × month server-side. Loads in ~3s
-  // even when the full row stream takes minutes. Used to show authoritative
-  // DB totals next to the in-memory pivot so we can spot when local data
-  // is stale.
+  // Hits a small endpoint (~50KB) that pre-aggregates everything this view
+  // needs server-side. Loads in ~2s even when the full row stream takes
+  // minutes. Used as the *primary* data source for the pivot, top styles,
+  // and top customers so the page is useful immediately. Once row-level
+  // data finishes loading in the background, the view switches to
+  // in-memory computation so filters and cross-filtering work.
   const [serverAggregates, setServerAggregates] = useState<{
     yearMonth: { y: number; m: number; count: number; net: number }[];
+    topStyles: { styleNumber: string; styleDesc: string; shipped: number; returned: number; net: number }[];
+    topCustomers: { customer: string; shipped: number; returned: number; net: number }[];
+    seasons: string[];
+    customerTypes: string[];
     generatedAt: string;
   } | null>(null);
   useEffect(() => {
@@ -88,12 +93,32 @@ export default function InvoiceMonthView({
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data.success) {
-          setServerAggregates({ yearMonth: data.yearMonth, generatedAt: data.generatedAt });
+          setServerAggregates({
+            yearMonth: data.yearMonth,
+            topStyles: data.topStyles ?? [],
+            topCustomers: data.topCustomers ?? [],
+            seasons: data.seasons ?? [],
+            customerTypes: data.customerTypes ?? [],
+            generatedAt: data.generatedAt,
+          });
         }
       } catch { /* non-fatal */ }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Total invoice rows the server aggregates account for. Used to detect
+  // when in-memory row data is "complete enough" to take over rendering.
+  const aggregatesRowCount = useMemo(() => {
+    if (!serverAggregates) return 0;
+    return serverAggregates.yearMonth.reduce((s, r) => s + r.count, 0);
+  }, [serverAggregates]);
+
+  // Switch from aggregates → in-memory when at least 95% of expected rows
+  // have arrived. Below that, the in-memory pivot would lie about totals.
+  const rowDataReady = invoices.length > 0 && (
+    aggregatesRowCount === 0 || invoices.length >= aggregatesRowCount * 0.95
+  );
 
   // ── Lookup: styleNumber → categoryDesc (since invoices don't carry it directly) ──
   const styleToCategory = useMemo(() => {
@@ -323,6 +348,26 @@ export default function InvoiceMonthView({
   };
 
   const yearMonthGrid = useMemo(() => {
+    // Aggregates path: row data not yet loaded → render unfiltered totals
+    // straight from the server's pre-aggregated yearMonth array. Filters
+    // are intentionally ignored here; once row data arrives the in-memory
+    // path takes over and respects them.
+    if (!rowDataReady && serverAggregates) {
+      const grid = new Map<number, number[]>();
+      let grandTotal = 0;
+      serverAggregates.yearMonth.forEach(({ y, m, net }) => {
+        if (!grid.has(y)) grid.set(y, new Array(12).fill(0));
+        // server month is 1-indexed; client grid is 0-indexed
+        grid.get(y)![m - 1] += net;
+        grandTotal += net;
+      });
+      const years = Array.from(grid.keys())
+        .filter((y) => (grid.get(y) ?? []).some((v) => v !== 0))
+        .sort();
+      return { years, grid, grandTotal };
+    }
+
+    // In-memory path: row data is loaded → respect filters and clicks
     const grid = new Map<number, number[]>(); // year → [12 month buckets]
     let grandTotal = 0;
     invoices.forEach((inv) => {
@@ -344,7 +389,7 @@ export default function InvoiceMonthView({
     return { years, grid, grandTotal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -355,6 +400,19 @@ export default function InvoiceMonthView({
   //   `open` field = $ Returned at Net (returns)
   //   `shipped` field = $ Net Invoiced (shipped − returned)
   const styleRows = useMemo(() => {
+    // Aggregates path — server returns top 500 styles, pre-summed
+    if (!rowDataReady && serverAggregates) {
+      return serverAggregates.topStyles
+        .filter((r) => r.returned !== 0 || r.net !== 0)
+        .map((r) => ({
+          styleNumber: r.styleNumber,
+          styleDesc: r.styleDesc ?? '',
+          open: r.returned,  // "open" column in this view = returns
+          shipped: r.net,    // "shipped" column = net invoiced
+        }))
+        .sort((a, b) => b.shipped - a.shipped);
+    }
+
     const m = new Map<string, { styleNumber: string; styleDesc: string; open: number; shipped: number }>();
     invoices.forEach((inv) => {
       if (!isInvoiced(inv)) return;
@@ -372,7 +430,7 @@ export default function InvoiceMonthView({
       .sort((a, b) => b.shipped - a.shipped);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -412,6 +470,17 @@ export default function InvoiceMonthView({
 
   // ── Customer breakdown ──
   const customerRows = useMemo(() => {
+    if (!rowDataReady && serverAggregates) {
+      return serverAggregates.topCustomers
+        .filter((r) => r.returned !== 0 || r.net !== 0)
+        .map((r) => ({
+          customer: r.customer,
+          open: r.returned,
+          shipped: r.net,
+        }))
+        .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
+    }
+
     const m = new Map<string, { customer: string; open: number; shipped: number }>();
     invoices.forEach((inv) => {
       if (!isInvoiced(inv)) return;
@@ -428,7 +497,7 @@ export default function InvoiceMonthView({
       .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -653,6 +722,22 @@ export default function InvoiceMonthView({
           {fmtFull(yearMonthGrid.grandTotal)} total
         </div>
       </div>
+
+      {/* Aggregates-mode notice — pivot is rendering from server totals
+          while row-level data finishes loading in the background. Filters
+          and cross-filtering activate once row data arrives. */}
+      {!rowDataReady && serverAggregates && (
+        <div className="text-xs bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-4 py-2 flex items-center gap-2 text-cyan-700 dark:text-cyan-300">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          <span>
+            Showing pre-aggregated DB totals.{' '}
+            {invoices.length > 0
+              ? `Row-level data loading: ${invoices.length.toLocaleString()} of ~${aggregatesRowCount.toLocaleString()} rows.`
+              : 'Row-level data is loading in the background.'}{' '}
+            Filters and cross-filtering will activate once it completes.
+          </span>
+        </div>
+      )}
 
       {/* Diagnostic strip — date source breakdown for currently filtered rows */}
       {dateSourceStats.total > 0 && (

@@ -54,6 +54,15 @@ function openDb(): Promise<IDBDatabase> {
 interface InvoiceCacheMeta {
   count: number;
   savedAt: number;
+  // Server version captured when the cache was written. Compared against
+  // /api/data/invoices/version on next load to skip pagination entirely
+  // when the DB hasn't changed. Older caches (pre-versioning) won't have
+  // this field; treat them as stale-by-default to force one re-fetch.
+  version?: string | null;
+  // True when the cache was written mid-fetch as a checkpoint, false when
+  // the full pagination completed. Partial caches still load (so the user
+  // sees something) but get topped up to full on next visit.
+  partial?: boolean;
 }
 
 /** Return cached invoices if still fresh; null otherwise. */
@@ -61,6 +70,8 @@ export async function loadInvoicesFromCache(): Promise<{
   invoices: InvoiceRecord[];
   ageMs: number;
   stale: boolean;
+  version: string | null;
+  partial: boolean;
 } | null> {
   try {
     const db = await openDb();
@@ -82,15 +93,27 @@ export async function loadInvoicesFromCache(): Promise<{
       req.onerror = () => reject(req.error);
     });
     db.close();
-    return { invoices, ageMs, stale: ageMs > CACHE_TTL_MS };
+    return {
+      invoices,
+      ageMs,
+      stale: ageMs > CACHE_TTL_MS,
+      version: meta.version ?? null,
+      partial: meta.partial ?? false,
+    };
   } catch (err) {
     console.warn('Invoice cache read failed:', err);
     return null;
   }
 }
 
-/** Replace the cached invoice set. */
-export async function saveInvoicesToCache(invoices: InvoiceRecord[]): Promise<void> {
+/** Replace the cached invoice set. Pass `version` from the server-side
+ *  /api/data/invoices/version probe so we can short-circuit on next load.
+ *  Pass `partial: true` for in-progress checkpoints during pagination.
+ */
+export async function saveInvoicesToCache(
+  invoices: InvoiceRecord[],
+  opts?: { version?: string | null; partial?: boolean },
+): Promise<void> {
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -102,7 +125,15 @@ export async function saveInvoicesToCache(invoices: InvoiceRecord[]): Promise<vo
       // IndexedDB transactions auto-commit when the queue drains, so we
       // pipeline puts within a single tx for speed.
       for (const inv of invoices) store.put(inv);
-      meta.put({ count: invoices.length, savedAt: Date.now() } as InvoiceCacheMeta, META_KEY);
+      meta.put(
+        {
+          count: invoices.length,
+          savedAt: Date.now(),
+          version: opts?.version ?? null,
+          partial: opts?.partial ?? false,
+        } as InvoiceCacheMeta,
+        META_KEY,
+      );
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
