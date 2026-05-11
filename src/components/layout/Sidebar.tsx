@@ -32,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'pullback' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'invopnmonth' | 'invoicemonth' | 'geoheatmap' | 'snapshots';
+export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'pullback' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'forecastplanner' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'invopnmonth' | 'invoicemonth' | 'geoheatmap' | 'snapshots';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -85,6 +85,7 @@ const navGroups: NavGroup[] = [
       { id: 'inventory', label: 'Inventory', icon: Warehouse, emoji: '📦' },
       { id: 'sellthrough', label: 'Sell-Through', icon: ArrowRightLeft, emoji: '🔄' },
       { id: 'forecast', label: 'Forecast', icon: TrendingUp, emoji: '🔮' },
+      { id: 'forecastplanner', label: 'Forecast Planner', icon: TrendingUp, emoji: '📈' },
       { id: 'customers', label: 'Customers', icon: Users, emoji: '👥' },
       { id: 'margins', label: 'Margins', icon: Percent, emoji: '💰' },
       { id: 'topstyles', label: 'Top Styles', icon: Trophy, emoji: '🏆' },

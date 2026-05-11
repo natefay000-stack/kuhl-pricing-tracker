@@ -23,6 +23,7 @@ const PullbackView = retryDynamic(() => import('@/components/views/PullbackView'
 const InvOpnMonthView = retryDynamic(() => import('@/components/views/InvOpnMonthView'));
 const InvoiceMonthView = retryDynamic(() => import('@/components/views/InvoiceMonthView'));
 const SnapshotsView = retryDynamic(() => import('@/components/views/SnapshotsView'));
+const ForecastPlannerView = retryDynamic(() => import('@/components/views/ForecastPlannerView'));
 const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
 const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
@@ -2188,6 +2189,12 @@ export default function Home() {
           {activeView === 'snapshots' && (
             <ErrorBoundary viewName="Snapshots">
               <SnapshotsView />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'forecastplanner' && (
+            <ErrorBoundary viewName="Forecast Planner">
+              <ForecastPlannerView />
             </ErrorBoundary>
           )}
 
