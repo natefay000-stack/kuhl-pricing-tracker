@@ -425,3 +425,23 @@ model Inventory {
   @@index([period])
   @@index([customerVendor])
 }
+
+
+// Daily aggregate snapshots of the Invoice table — independent backup
+// trail for spotting regressions and verifying historical totals. Each
+// row captures the same data the Invoice Month tab renders. See
+// /api/admin/snapshot-invoices for the writer + retention policy. Full
+// row-level recovery still relies on Neon point-in-time recovery; these
+// snapshots exist to detect that something went wrong.
+model InvoiceSnapshot {
+  id                String   @id @default(cuid())
+  takenAt           DateTime @default(now())
+  trigger           String   // "cron" or "manual"
+  totalRows         Int
+  totalNetInvoiced  Float
+  yearMonth         Json     // [{ y, m, count, net }, ...]
+  topStyles         Json     // top 500 by abs(net)
+  topCustomers      Json     // top 500 by abs(net)
+
+  @@index([takenAt])
+}

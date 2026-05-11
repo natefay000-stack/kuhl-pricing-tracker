@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAdminToken } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -36,6 +37,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = requireAdminToken(request);
+  if (denied) return denied;
+
   const url = new URL(request.url);
   const force = url.searchParams.get('force') === '1' || url.searchParams.get('force') === 'true';
   const confirm = url.searchParams.get('confirm');
