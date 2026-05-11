@@ -32,7 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'pullback' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'invopnmonth' | 'invoicemonth' | 'geoheatmap';
+export type ViewId = 'executive' | 'dashboard' | 'season' | 'seasoncomp' | 'grid' | 'pullback' | 'products' | 'pricing' | 'sales' | 'topstyles' | 'costs' | 'margins' | 'customers' | 'inventory' | 'sellthrough' | 'forecast' | 'linelist' | 'validation' | 'datasources' | 'sourcefiles' | 'stylecolor' | 'tariffs' | 'invopnseason' | 'invopnmonth' | 'invoicemonth' | 'geoheatmap' | 'snapshots';
 
 interface SidebarProps {
   activeView: ViewId;
@@ -92,6 +92,7 @@ const navGroups: NavGroup[] = [
       { id: 'invopnseason', label: 'Inv-Opn Season', icon: ClipboardList, emoji: '📦' },
       { id: 'invopnmonth', label: 'Inv-Opn Month', icon: Calendar, emoji: '🗓️' },
       { id: 'invoicemonth', label: 'Invoice Month', icon: Calendar, emoji: '🧾' },
+      { id: 'snapshots', label: 'Snapshots', icon: Calendar, emoji: '📸' },
       { id: 'geoheatmap', label: 'Geo Heat Map', icon: MapPin, emoji: '📍' },
       { id: 'pullback', label: 'Pullback', icon: Flame, emoji: '🔥' },
     ],

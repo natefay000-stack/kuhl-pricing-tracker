@@ -22,6 +22,7 @@ const GridView = retryDynamic(() => import('@/components/views/GridView'));
 const PullbackView = retryDynamic(() => import('@/components/views/PullbackView'));
 const InvOpnMonthView = retryDynamic(() => import('@/components/views/InvOpnMonthView'));
 const InvoiceMonthView = retryDynamic(() => import('@/components/views/InvoiceMonthView'));
+const SnapshotsView = retryDynamic(() => import('@/components/views/SnapshotsView'));
 const SeasonCompView = retryDynamic(() => import('@/components/views/SeasonCompView'));
 const SalesView = retryDynamic(() => import('@/components/views/SalesView'));
 const CostsView = retryDynamic(() => import('@/components/views/CostsView'));
@@ -2181,6 +2182,12 @@ export default function Home() {
                 selectedSeason={selectedSeason}
                 onStyleClick={handleStyleClick}
               />
+            </ErrorBoundary>
+          )}
+
+          {activeView === 'snapshots' && (
+            <ErrorBoundary viewName="Snapshots">
+              <SnapshotsView />
             </ErrorBoundary>
           )}
 
