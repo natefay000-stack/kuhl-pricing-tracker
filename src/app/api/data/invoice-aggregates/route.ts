@@ -79,6 +79,27 @@ export async function GET() {
       LIMIT 500
     `);
 
+    // Per-state rollup for Geo Heat Map's instant first paint. State
+    // totals (revenue, units, customer count) only — no category mix,
+    // gender breakdown, or customer-type slice. Those still require the
+    // in-memory row stream and activate once it lands.
+    const byState = await prisma.$queryRawUnsafe<
+      Array<{ state: string; rows: bigint; shipped: number; returned: number; net: number; units: bigint; customer_count: bigint }>
+    >(`
+      SELECT
+        "shipToState" AS state,
+        COUNT(*)::bigint AS rows,
+        COALESCE(SUM("shippedAtNet"),0)::float AS shipped,
+        COALESCE(SUM("returnedAtNet"),0)::float AS returned,
+        (COALESCE(SUM("shippedAtNet"),0) - COALESCE(SUM("returnedAtNet"),0))::float AS net,
+        COALESCE(SUM("unitsShipped"),0)::bigint AS units,
+        COUNT(DISTINCT "customer")::bigint AS customer_count
+      FROM "Invoice"
+      WHERE "shipToState" IS NOT NULL AND "invoiceNumber" IS NOT NULL
+      GROUP BY "shipToState"
+      ORDER BY net DESC
+    `);
+
     // Filter option lists (compact)
     const seasons = await prisma.$queryRawUnsafe<Array<{ season: string | null }>>(
       `SELECT DISTINCT "season" FROM "Invoice" WHERE "season" IS NOT NULL ORDER BY "season"`,
@@ -104,6 +125,15 @@ export async function GET() {
         returned: r.returned,
         net: r.net,
         open: r.open,
+      })),
+      byState: byState.map((r) => ({
+        state: r.state,
+        rows: Number(r.rows),
+        shipped: r.shipped,
+        returned: r.returned,
+        net: r.net,
+        units: Number(r.units),
+        customerCount: Number(r.customer_count),
       })),
       seasons: seasons.map((r) => r.season).filter((s): s is string => Boolean(s)),
       customerTypes: customerTypes.map((r) => r.ct).filter((s): s is string => Boolean(s)),

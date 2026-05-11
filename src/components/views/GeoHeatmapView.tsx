@@ -12,6 +12,7 @@ import { loadCbsaMetros, aggregateSalesByMetro, type MetroData } from '@/lib/cbs
 import { matchesSeason } from '@/lib/store';
 import { loadCityCoords, loadStateCentroids, loadZipCentroids, loadZipPopulation, buildHeatPoints, buildZipAggregations, buildZipDotData, type CityCoords, type StateCentroids, type ZipCentroids, type ZipPopulation } from '@/lib/geo-coords';
 import retryDynamic from '@/lib/retryDynamic';
+import { RefreshCw } from 'lucide-react';
 import type { MetroMarker, ZipDotMarker } from '@/components/geo/LeafletHeatMap';
 
 const LeafletHeatMap = retryDynamic(() => import('@/components/geo/LeafletHeatMap'));
@@ -202,6 +203,38 @@ export default function GeoHeatmapView({
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('');
 
+  // ── Server-side per-state aggregates for instant first paint ──
+  // Only the state-level heat map renders from this; metro / city / zip
+  // detail and any active filter still wait for in-memory row data.
+  const [serverByState, setServerByState] = useState<Array<{
+    state: string;
+    rows: number;
+    shipped: number;
+    returned: number;
+    net: number;
+    units: number;
+    customerCount: number;
+  }> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/data/invoice-aggregates');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.byState)) {
+          setServerByState(data.byState);
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const aggregatesRowCount = useMemo(
+    () => (serverByState ?? []).reduce((s, r) => s + r.rows, 0),
+    [serverByState],
+  );
+
   // Derive dateStart/dateEnd from month + year selections
   const dateStart = useMemo(() => {
     if (!selectedYear) return '';
@@ -217,6 +250,22 @@ export default function GeoHeatmapView({
     const lastDay = new Date(y, m, 0).getDate();
     return `${selectedYear}-${month}-${String(lastDay).padStart(2, '0')}`;
   }, [selectedMonth, selectedYear]);
+
+  // Active filters that the aggregates path can't honor — they require
+  // row-level data. If any are set, fall back to in-memory pivot even
+  // before the row stream completes.
+  const hasActiveFilters = !!(
+    selectedSeason || selectedDivision || selectedCategory ||
+    selectedCustomerType || selectedCustomer || quickGender ||
+    dateStart || dateEnd
+  );
+
+  // Switch from aggregates → in-memory row pivot when row data is "complete
+  // enough" OR filters are applied. Aggregates are unfiltered totals.
+  const inMemoryRowCount = invoices.length + sales.length;
+  const rowDataReady = hasActiveFilters || (inMemoryRowCount > 0 && (
+    aggregatesRowCount === 0 || inMemoryRowCount >= aggregatesRowCount * 0.95
+  ));
 
   // Available years and months — pulled from any record (sales OR invoices)
   // that has either an invoiceDate or an accountingPeriod we can parse.
@@ -343,6 +392,42 @@ export default function GeoHeatmapView({
 
   // Aggregate sales by state
   const { stateData, maxValue, totalRevenue, totalUnits, statesWithData } = useMemo(() => {
+    // Aggregates path — render state-level totals from server immediately.
+    // Per-category, gender, and customer-type breakdowns are NOT populated
+    // here (they require row-level detail); the hover/expand panels show
+    // empty placeholders until in-memory row data arrives.
+    if (!rowDataReady && serverByState) {
+      const map = new Map<string, StateData>();
+      for (const r of serverByState) {
+        const code = normalizeState(r.state);
+        if (!code) continue;
+        // .customers is a Set in the StateData type — fake one with the
+        // right .size by populating with placeholder ids. The view only
+        // ever reads .size for this field.
+        const customers = new Set<string>();
+        for (let i = 0; i < r.customerCount; i++) customers.add(`__c_${i}__`);
+        map.set(code, {
+          state: code,
+          stateName: STATE_NAMES[code] || code,
+          revenue: r.net,
+          shippedAtNet: r.net,
+          units: r.units,
+          unitsShipped: r.units,
+          orders: r.rows,
+          customers,
+          categories: {},
+          topCategory: '',
+          genderRevenue: {},
+          customerTypeRevenue: {},
+        });
+      }
+      const values = Array.from(map.values());
+      const maxVal = Math.max(...values.map((d) => getMetricValue(d, metric)), 1);
+      const totalRev = values.reduce((sum, d) => sum + d.revenue, 0);
+      const totalU = values.reduce((sum, d) => sum + d.units, 0);
+      return { stateData: map, maxValue: maxVal, totalRevenue: totalRev, totalUnits: totalU, statesWithData: values.length };
+    }
+
     const map = new Map<string, StateData>();
 
     for (const sale of filteredSales) {
@@ -396,7 +481,7 @@ export default function GeoHeatmapView({
     const totalU = values.reduce((sum, d) => sum + d.units, 0);
 
     return { stateData: map, maxValue: maxVal, totalRevenue: totalRev, totalUnits: totalU, statesWithData: values.length };
-  }, [filteredSales, metric]);
+  }, [filteredSales, metric, rowDataReady, serverByState]);
 
   // Sort states by selected metric for table
   const sortedStates = useMemo(() => {
@@ -610,6 +695,22 @@ export default function GeoHeatmapView({
 
   return (
     <div className="space-y-4">
+      {/* Aggregates-mode notice — state heat map renders from server totals
+          while row-level data finishes loading. Filters / metro / city /
+          zip detail and category mix activate once row data arrives. */}
+      {!rowDataReady && serverByState && (
+        <div className="text-xs bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-4 py-2 flex items-center gap-2 text-cyan-700 dark:text-cyan-300">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          <span>
+            Showing pre-aggregated state totals.{' '}
+            {inMemoryRowCount > 0
+              ? `Row-level data loading: ${inMemoryRowCount.toLocaleString()} of ~${aggregatesRowCount.toLocaleString()} rows.`
+              : 'Row-level data is loading in the background.'}{' '}
+            Filters, metro/city detail, and category breakdowns activate once it completes.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
