@@ -1,14 +1,42 @@
+/* eslint-disable */
+// CLI invoice importer.
+//
+//   node import-invoice.js <path/to/file.xlsx> [api-url]
+//
+// Examples:
+//   node import-invoice.js ~/Downloads/2025-Q3\ Invoice\ data\ 5.4.xlsx
+//   node import-invoice.js data/2026-01\ invoice.xlsx http://localhost:3000/api/data/import
+//
+// Defaults to the Vercel production API if no URL is given. Sends
+// type='invoice' so rows land in the Invoice table (NOT 'sales' — that
+// was the old footgun that silently routed invoice data to the wrong
+// table). Uses skipDuplicates against the wider natural-key + NULLS NOT
+// DISTINCT index, so re-running on the same file is a no-op.
 const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-const filePath = path.join(__dirname, 'data', '2026-01 invoice.xlsx');
-console.log('Reading invoice file...');
-const workbook = XLSX.readFile(filePath, { cellDates: true });
+const filePath = process.argv[2];
+if (!filePath) {
+  console.error('Usage: node import-invoice.js <path/to/file.xlsx> [api-url]');
+  console.error('Example: node import-invoice.js ~/Downloads/2025-Q3\\ Invoice\\ data\\ 5.4.xlsx');
+  process.exit(1);
+}
+const resolvedPath = path.resolve(filePath);
+if (!fs.existsSync(resolvedPath)) {
+  console.error(`File not found: ${resolvedPath}`);
+  process.exit(1);
+}
+
+const API_URL = process.argv[3] || 'https://kuhl-tracker.vercel.app/api/data/import';
+const BATCH_SIZE = 2000;
+
+console.log(`Reading ${resolvedPath}...`);
+const workbook = XLSX.readFile(resolvedPath, { cellDates: true });
 const sheet = workbook.Sheets[workbook.SheetNames[0]];
 const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-console.log(`Parsed ${rows.length} rows`);
+console.log(`Parsed ${rows.length.toLocaleString()} rows`);
 
 function mapRow(row) {
   let invoiceDate = null;
@@ -22,18 +50,16 @@ function mapRow(row) {
     colorCode: String(row['Color'] || ''),
     colorDesc: String(row['Color Description'] || ''),
     season: String(row['Season'] || '').trim(),
-    seasonType: 'Main',
     customer: String(row['Customer Name'] || ''),
     customerType: String(row['Customer Type'] || ''),
-    divisionDesc: String(row['Gender Description'] || ''),
     gender: String(row['Gender Description'] || ''),
     orderType: String(row['Order Type Description'] || row['Order Type'] || ''),
-    unitsBooked: 0, unitsOpen: 0, revenue: 0, shipped: 0, cost: 0,
-    wholesalePrice: 0, msrp: 0, netUnitPrice: 0, salesRep: '', categoryDesc: '',
     invoiceDate,
     accountingPeriod: String(row['Accounting Period'] || ''),
     invoiceNumber: String(row['Invoice Number'] || ''),
     shipToState: String(row['Ship To State'] || ''),
+    shipToCity: String(row['Ship To City'] || ''),
+    shipToZip: String(row['Zip Code'] || row['Zip'] || ''),
     returnedAtNet: Number(row['$ Returned at Net Price'] || 0),
     shippedAtNet: Number(row['$ Shipped at Net Price'] || 0),
     totalPrice: Number(row['$ Total Price'] || 0),
@@ -50,30 +76,33 @@ function mapRow(row) {
     totalAtNet: Number(row['$ Total at Net Price'] || 0),
     totalAtWholesale: Number(row['$ Total at Wholesale'] || 0),
     returnedAtWholesale: Number(row['$ Returned at Wholesale Price'] || 0),
-    shipToCity: '', shipToZip: '', billToState: '', billToCity: '', billToZip: '',
-    unitsShipped: 0, unitsReturned: 0,
+    unitsShipped: Number(row['Units Shipped'] || 0),
+    unitsReturned: Number(row['Units Returned'] || 0),
   };
 }
 
 const mapped = rows.filter(r => r['Style']).map(mapRow);
-console.log(`Mapped ${mapped.length} records`);
+console.log(`Mapped ${mapped.length.toLocaleString()} records (filtered out rows with no Style)`);
+console.log(`Target: ${API_URL}`);
 
-const BATCH_SIZE = 1000;
-const API_URL = 'https://kuhl-tracker.vercel.app/api/data/import';
-const START_FROM = 32000; // First 32K already imported
-const remaining = mapped.slice(START_FROM);
-const totalBatches = Math.ceil(remaining.length / BATCH_SIZE);
-console.log(`\nResuming from record ${START_FROM}. Sending ${remaining.length} records in ${totalBatches} batches...`);
+const totalBatches = Math.ceil(mapped.length / BATCH_SIZE);
+console.log(`\nSending ${mapped.length.toLocaleString()} records in ${totalBatches} batches of ${BATCH_SIZE}...\n`);
 
 let totalImported = 0;
-for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
-  const batch = remaining.slice(i, i + BATCH_SIZE);
+const startMs = Date.now();
+for (let i = 0; i < mapped.length; i += BATCH_SIZE) {
+  const batch = mapped.slice(i, i + BATCH_SIZE);
   const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-  
-  const payload = JSON.stringify({ type: 'sales', data: batch, fileName: '2026-01 invoice.xlsx', replaceExisting: false });
+
+  const payload = JSON.stringify({
+    type: 'invoice',
+    data: batch,
+    fileName: path.basename(resolvedPath),
+    replaceExisting: false,
+  });
   const tmpFile = '/tmp/invoice-batch.json';
   fs.writeFileSync(tmpFile, payload);
-  
+
   let success = false;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -83,7 +112,8 @@ for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
       );
       const json = JSON.parse(result);
       if (json.success) {
-        console.log(`Batch ${batchNum}/${totalBatches}: ${json.count} records`);
+        const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+        console.log(`Batch ${batchNum}/${totalBatches}: +${json.count} (cumulative ${totalImported + json.count}, ${elapsed}s)`);
         totalImported += json.count;
         success = true;
         break;
@@ -98,4 +128,6 @@ for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
   if (!success) { console.error(`Batch ${batchNum} FAILED after 3 attempts, stopping.`); process.exit(1); }
 }
 
-console.log(`\nDone! Imported ${totalImported} additional records (${START_FROM + totalImported} total with invoice data)`);
+const totalSec = ((Date.now() - startMs) / 1000).toFixed(1);
+console.log(`\nDone. Server reported ${totalImported.toLocaleString()} rows imported in ${totalSec}s.`);
+console.log('(Note: server-side skipDuplicates may report 0 per batch even when rows DO insert — verify via /api/admin/invoice-year-stats for actual delta.)');
