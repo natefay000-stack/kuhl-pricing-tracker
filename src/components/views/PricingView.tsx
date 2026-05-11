@@ -14,7 +14,7 @@ import {
   Edit3,
   History,
 } from 'lucide-react';
-import { exportToExcel } from '@/utils/exportData';
+import { exportToExcel, exportMultiSheetExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatDelta, formatNumber, formatPercent, getMarginColor, getMarginBg } from '@/utils/format';
 import { matchesFilter } from '@/utils/filters';
@@ -462,6 +462,85 @@ export default function PricingView({
     );
   };
 
+  // Season-over-season MSRP comparison export — pivots the Pricing table
+  // so each row is one style (or style+color), columns are seasons. Two
+  // sheets in the same workbook: by-style rollup + per-color detail.
+  const [msrpCompLoading, setMsrpCompLoading] = useState(false);
+  const handleExportMsrpComp = async () => {
+    if (msrpCompLoading) return;
+    setMsrpCompLoading(true);
+    try {
+      const res = await fetch('/api/data/pricing-msrp-comp');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Unknown error');
+      const seasons: string[] = data.seasons ?? [];
+      const byStyle: Array<{ styleNumber: string; styleDesc: string; seasonMsrps: Record<string, number> }> = data.byStyle ?? [];
+      const byColor: Array<{ styleNumber: string; styleDesc: string; colorCode: string; colorDesc: string; seasonMsrps: Record<string, number> }> = data.byColor ?? [];
+
+      // Build per-style sheet rows. Δ vs prior season + % change land in
+      // separate columns so the user can sort/filter on them in Excel
+      // without losing the full season trail.
+      const styleSheet = byStyle.map(r => {
+        const row: Record<string, unknown> = {
+          Style: r.styleNumber,
+          Description: r.styleDesc,
+        };
+        seasons.forEach(s => {
+          row[s] = r.seasonMsrps[s] ?? null;
+        });
+        // Δ first → latest non-null season
+        const present = seasons.filter(s => r.seasonMsrps[s] !== undefined);
+        const first = present[0];
+        const last = present[present.length - 1];
+        if (first && last && first !== last) {
+          const delta = r.seasonMsrps[last] - r.seasonMsrps[first];
+          const pct = r.seasonMsrps[first] !== 0 ? delta / r.seasonMsrps[first] : 0;
+          row[`Δ ${first}→${last}`] = delta;
+          row[`% chg`] = pct;
+        } else {
+          row[`Δ first→latest`] = null;
+          row[`% chg`] = null;
+        }
+        return row;
+      });
+
+      const colorSheet = byColor.map(r => {
+        const row: Record<string, unknown> = {
+          Style: r.styleNumber,
+          Description: r.styleDesc,
+          Color: r.colorCode,
+          'Color Desc': r.colorDesc,
+        };
+        seasons.forEach(s => {
+          row[s] = r.seasonMsrps[s] ?? null;
+        });
+        const present = seasons.filter(s => r.seasonMsrps[s] !== undefined);
+        const first = present[0];
+        const last = present[present.length - 1];
+        if (first && last && first !== last) {
+          const delta = r.seasonMsrps[last] - r.seasonMsrps[first];
+          const pct = r.seasonMsrps[first] !== 0 ? delta / r.seasonMsrps[first] : 0;
+          row[`Δ ${first}→${last}`] = delta;
+          row[`% chg`] = pct;
+        }
+        return row;
+      });
+
+      exportMultiSheetExcel(
+        [
+          { name: 'By Style', data: styleSheet },
+          { name: 'By Style + Color', data: colorSheet },
+        ],
+        'msrp_comp',
+      );
+    } catch (err) {
+      alert(`MSRP comp export failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setMsrpCompLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -516,6 +595,15 @@ export default function PricingView({
         >
           <Download className="w-5 h-5" />
           Export
+        </button>
+        <button
+          onClick={handleExportMsrpComp}
+          disabled={msrpCompLoading}
+          className="flex items-center gap-2 px-5 py-3 bg-cyan-600 hover:bg-cyan-700 text-white text-base font-bold rounded-xl transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Pivot Pricing table — one row per style (and per color), columns are seasons. Two sheets in one .xlsx."
+        >
+          <Download className={`w-5 h-5 ${msrpCompLoading ? 'animate-pulse' : ''}`} />
+          {msrpCompLoading ? 'Building…' : 'Export MSRP Comp'}
         </button>
       </div>
       </div>
