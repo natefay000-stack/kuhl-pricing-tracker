@@ -14,12 +14,12 @@
  * table. Click again to deselect.
  */
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { InvoiceRecord, Product, SalesRecord } from '@/types/product';
 import { sortSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
 import MultiSelect from '@/components/MultiSelect';
-import { Search, Filter, X, Calendar, ChevronRight } from 'lucide-react';
+import { Search, Filter, X, Calendar, ChevronRight, RefreshCw } from 'lucide-react';
 
 interface InvOpnMonthViewProps {
   invoices: InvoiceRecord[];
@@ -128,6 +128,43 @@ export default function InvOpnMonthView({
   const [clickedCustomer, setClickedCustomer] = useState<string | null>(null);
   // Cell click: lock breakdowns to one year+month (m is 0-indexed). null = off.
   const [clickedYearMonth, setClickedYearMonth] = useState<{ y: number; m: number } | null>(null);
+
+  // ── Server aggregates for instant first paint ──
+  // Same endpoint Invoice Month uses; carries `open` alongside `net` so this
+  // view's open + shipped − returned formula renders without row-level data.
+  const [serverAggregates, setServerAggregates] = useState<{
+    yearMonth: { y: number; m: number; count: number; net: number; open: number }[];
+    topStyles: { styleNumber: string; styleDesc: string; shipped: number; returned: number; net: number; open: number }[];
+    topCustomers: { customer: string; shipped: number; returned: number; net: number; open: number }[];
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/data/invoice-aggregates');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setServerAggregates({
+            yearMonth: data.yearMonth ?? [],
+            topStyles: data.topStyles ?? [],
+            topCustomers: data.topCustomers ?? [],
+          });
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const aggregatesRowCount = useMemo(() => {
+    if (!serverAggregates) return 0;
+    return serverAggregates.yearMonth.reduce((s, r) => s + r.count, 0);
+  }, [serverAggregates]);
+
+  // Switch from aggregates → in-memory once row data is "complete enough".
+  const rowDataReady = invoices.length > 0 && (
+    aggregatesRowCount === 0 || invoices.length >= aggregatesRowCount * 0.95
+  );
 
   // ── Lookup: styleNumber → categoryDesc (since invoices don't carry it directly) ──
   const styleToCategory = useMemo(() => {
@@ -347,6 +384,22 @@ export default function InvOpnMonthView({
   // matching the active filters. Bucket date resolved via resolveBucket()
   // (defined above): invoiceDate → accountingPeriod → season-derived.
   const yearMonthGrid = useMemo(() => {
+    // Aggregates path — render unfiltered totals immediately
+    if (!rowDataReady && serverAggregates) {
+      const grid = new Map<number, number[]>();
+      let grandTotal = 0;
+      serverAggregates.yearMonth.forEach(({ y, m, net, open }) => {
+        if (!grid.has(y)) grid.set(y, new Array(12).fill(0));
+        const v = open + net; // Inv-Opn = open + (shipped − returned)
+        grid.get(y)![m - 1] += v;
+        grandTotal += v;
+      });
+      const years = Array.from(grid.keys())
+        .filter((y) => (grid.get(y) ?? []).some((v) => v !== 0))
+        .sort();
+      return { years, grid, grandTotal };
+    }
+
     const grid = new Map<number, number[]>(); // year → [12 month buckets]
     let grandTotal = 0;
     invoices.forEach((inv) => {
@@ -366,7 +419,7 @@ export default function InvOpnMonthView({
     return { years, grid, grandTotal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -374,6 +427,18 @@ export default function InvOpnMonthView({
 
   // ── Style breakdown ──
   const styleRows = useMemo(() => {
+    if (!rowDataReady && serverAggregates) {
+      return serverAggregates.topStyles
+        .filter((r) => r.open !== 0 || r.net !== 0)
+        .map((r) => ({
+          styleNumber: r.styleNumber,
+          styleDesc: r.styleDesc ?? '',
+          open: r.open,
+          shipped: r.net, // "shipped" column = net invoiced (shipped − returned)
+        }))
+        .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
+    }
+
     const m = new Map<string, { styleNumber: string; styleDesc: string; open: number; shipped: number }>();
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forStyleTable')) return;
@@ -390,7 +455,7 @@ export default function InvOpnMonthView({
       .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -429,6 +494,17 @@ export default function InvOpnMonthView({
 
   // ── Customer breakdown ──
   const customerRows = useMemo(() => {
+    if (!rowDataReady && serverAggregates) {
+      return serverAggregates.topCustomers
+        .filter((r) => r.open !== 0 || r.net !== 0)
+        .map((r) => ({
+          customer: r.customer,
+          open: r.open,
+          shipped: r.net,
+        }))
+        .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
+    }
+
     const m = new Map<string, { customer: string; open: number; shipped: number }>();
     invoices.forEach((inv) => {
       if (!matchesInvoice(inv, 'forCustomerTable')) return;
@@ -444,7 +520,7 @@ export default function InvOpnMonthView({
       .sort((a, b) => (b.open + b.shipped) - (a.open + a.shipped));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    invoices,
+    invoices, rowDataReady, serverAggregates,
     monthFilter, seasonFilter, customerTypeFilter, customerFilter,
     categoryFilter, genderFilter, orderTypeFilter, colorFilter, styleSearch,
     clickedStyle, clickedCustomer, clickedYearMonth, globalSeason, styleToCategory,
@@ -634,6 +710,22 @@ export default function InvOpnMonthView({
           {fmtFull(yearMonthGrid.grandTotal)} total
         </div>
       </div>
+
+      {/* Aggregates-mode notice — pivot rendering from server totals while
+          row-level data finishes loading. Filters/cross-filter activate
+          once row data arrives. Mirrors Invoice Month for consistency. */}
+      {!rowDataReady && serverAggregates && (
+        <div className="text-xs bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-4 py-2 flex items-center gap-2 text-cyan-700 dark:text-cyan-300">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          <span>
+            Showing pre-aggregated DB totals.{' '}
+            {invoices.length > 0
+              ? `Row-level data loading: ${invoices.length.toLocaleString()} of ~${aggregatesRowCount.toLocaleString()} rows.`
+              : 'Row-level data is loading in the background.'}{' '}
+            Filters and cross-filtering will activate once it completes.
+          </span>
+        </div>
+      )}
 
       {/* Diagnostic strip — date source breakdown for currently filtered rows */}
       {dateSourceStats.total > 0 && (

@@ -20,8 +20,11 @@ export const maxDuration = 60;
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
-  const pageSizeRaw = parseInt(searchParams.get('pageSize') ?? '4000', 10) || 4000;
-  const pageSize = Math.min(Math.max(1, pageSizeRaw), 5000); // clamp 1..5000
+  const pageSizeRaw = parseInt(searchParams.get('pageSize') ?? '10000', 10) || 10000;
+  const pageSize = Math.min(Math.max(1, pageSizeRaw), 10000); // clamp 1..10000
+  // Bumped from 5000 → 10000 to halve round-trip count on the cold-load
+  // pagination (~30s instead of ~60s for 2.3M rows). Each page still ships
+  // ~1.5 MB JSON, comfortably under Vercel's 4.5 MB serverless response cap.
 
   try {
     const [total, invoices] = await Promise.all([

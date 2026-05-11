@@ -900,10 +900,10 @@ export default function Home() {
         } catch { /* non-fatal */ }
       }
 
-      // Try 1: Database API. Page size 5000 (max) + 4-way parallel fetch so
-      // 1M+ rows finish in ~30s instead of 5min.
+      // Try 1: Database API. Page size 10000 (max) + 4-way parallel fetch so
+      // 2M+ rows finish in ~30s instead of 5min.
       try {
-        const pageSize = 5000;
+        const pageSize = 10000;
         // First fetch tells us total → we then fan out.
         const firstRes = await fetch(`/api/data/invoices?page=1&pageSize=${pageSize}`);
         if (!firstRes.ok) throw new Error(`HTTP ${firstRes.status}`);
