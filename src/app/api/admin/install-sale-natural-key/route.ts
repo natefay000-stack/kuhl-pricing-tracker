@@ -18,8 +18,11 @@ export const maxDuration = 300;
  *
  * Composite key (matches @@unique in prisma/schema.prisma):
  *   (season, customer, salesRep, styleNumber, colorCode, invoiceNumber,
- *    shipToCity, shipToState)
+ *    shipToCity, shipToState, orderType)
  * with NULLS NOT DISTINCT so optional/null columns collapse correctly.
+ * orderType included after Murdoch's debugging — the same SKU can have
+ * parallel rows for different order categories (B / S / 0 / etc.) and
+ * collapsing them silently truncates a customer's total.
  *
  * Idempotent: re-runs are safe. The dedupe step keeps the row with
  * the most-recent createdAt per group (= the latest snapshot of that
@@ -27,7 +30,7 @@ export const maxDuration = 300;
  */
 const NATURAL_KEY_COLS = [
   '"season"', '"customer"', '"salesRep"', '"styleNumber"', '"colorCode"',
-  '"invoiceNumber"', '"shipToCity"', '"shipToState"',
+  '"invoiceNumber"', '"shipToCity"', '"shipToState"', '"orderType"',
 ] as const;
 
 const PARTITION_COLS = NATURAL_KEY_COLS
@@ -117,7 +120,7 @@ export async function POST(request: Request) {
       rowsBefore: before,
       rowsRemoved: totalRemoved,
       rowsAfter: after,
-      indexInstalled: 'sale_natural_key (NULLS NOT DISTINCT, 8 columns — no $/units)',
+      indexInstalled: 'sale_natural_key (NULLS NOT DISTINCT, 9 columns including orderType)',
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
