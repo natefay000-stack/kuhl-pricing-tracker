@@ -7,7 +7,7 @@ import { DollarSign, Package, TrendingUp, Layers, ChevronRight, Calculator, Aler
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrency, formatCurrencyShort, formatPercent, formatNumber, getMarginColor, getMarginBg } from '@/utils/format';
 import { matchesSeason } from '@/lib/store';
-import { matchesDivision } from '@/utils/divisionMap';
+import { matchesDivision, matchesGender } from '@/utils/divisionMap';
 import { matchesFilter } from '@/utils/filters';
 
 // Helper to derive gender from divisionDesc (pure function, module-level)
@@ -35,6 +35,7 @@ interface DashboardViewProps {
   salesAggregations?: SalesAggregations | null;
   selectedSeason: string;
   selectedDivision: string;
+  selectedGender?: string;
   selectedCategory: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
@@ -47,6 +48,7 @@ export default function DashboardView({
   salesAggregations,
   selectedSeason,
   selectedDivision,
+  selectedGender = '',
   selectedCategory,
   searchQuery: globalSearchQuery,
   onStyleClick,
@@ -59,6 +61,7 @@ export default function DashboardView({
     return sales.filter((s) => {
       if (!matchesSeason(s.season, selectedSeason)) return false;
       if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesGender(s.gender, selectedGender)) return false;
       if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
       if (globalSearchQuery) {
         const q = globalSearchQuery.toLowerCase();
@@ -212,7 +215,7 @@ export default function DashboardView({
     }
 
     return [];
-  }, [hasSalesData, filteredSales, productGenderMap, salesAggregations, selectedSeason, selectedDivision]);
+  }, [hasSalesData, filteredSales, productGenderMap, salesAggregations, selectedSeason, selectedDivision, selectedGender]);
 
   // Cost summary stats
   const costStats = useMemo(() => {

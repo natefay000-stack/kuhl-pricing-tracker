@@ -2132,6 +2132,7 @@ export default function Home() {
                 salesAggregations={salesAggregations}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
+                selectedGender={selectedGender}
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
@@ -2233,6 +2234,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
+                selectedGender={selectedGender}
                 selectedCategory={selectedCategory}
                 searchQuery={searchQuery}
                 onStyleClick={handleStyleClick}
@@ -2267,6 +2269,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
+                selectedGender={selectedGender}
                 selectedCategory={selectedCategory}
                 selectedCustomerType={selectedCustomerType}
                 selectedCustomer={selectedCustomer}
@@ -2415,6 +2418,7 @@ export default function Home() {
                 sales={dateFilteredSales}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
+                selectedGender={selectedGender}
                 selectedCategory={selectedCategory}
                 selectedCustomerType={selectedCustomerType}
                 searchQuery={searchQuery}
@@ -2484,6 +2488,7 @@ export default function Home() {
                 invoices={enrichedInvoices}
                 selectedSeason={selectedSeason}
                 selectedDivision={selectedDivision}
+                selectedGender={selectedGender}
                 selectedCategory={selectedCategory}
                 selectedCustomerType={selectedCustomerType}
                 selectedCustomer={selectedCustomer}

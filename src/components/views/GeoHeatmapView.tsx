@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { SalesRecord, InvoiceRecord, normalizeCategory, CUSTOMER_TYPE_LABELS } from '@/types/product';
-import { matchesDivision } from '@/utils/divisionMap';
+import { matchesDivision, matchesGender } from '@/utils/divisionMap';
 import { matchesFilter } from '@/utils/filters';
 import {
   loadZipToCountyMap,
@@ -170,11 +170,12 @@ interface GeoHeatmapViewProps {
   selectedCategory: string;
   selectedCustomerType: string;
   selectedCustomer: string;
+  selectedGender?: string;
 }
 
 export default function GeoHeatmapView({
   sales, invoices = [], selectedSeason, selectedDivision, selectedCategory,
-  selectedCustomerType, selectedCustomer,
+  selectedCustomerType, selectedCustomer, selectedGender = '',
 }: GeoHeatmapViewProps) {
   // State-level state
   const [selectedState, setSelectedState] = useState<string | null>(null);
@@ -255,7 +256,7 @@ export default function GeoHeatmapView({
   // row-level data. If any are set, fall back to in-memory pivot even
   // before the row stream completes.
   const hasActiveFilters = !!(
-    selectedSeason || selectedDivision || selectedCategory ||
+    selectedSeason || selectedDivision || selectedGender || selectedCategory ||
     selectedCustomerType || selectedCustomer || quickGender ||
     dateStart || dateEnd
   );
@@ -367,6 +368,7 @@ export default function GeoHeatmapView({
     return allGeoRecords.filter((s) => {
       if (!matchesSeason(s.season, selectedSeason)) return false;
       if (!matchesDivision(s.divisionDesc, selectedDivision)) return false;
+      if (!matchesGender((s as { gender?: string }).gender, selectedGender)) return false;
       if (!matchesFilter(normalizeCategory(s.categoryDesc), selectedCategory)) return false;
       if (selectedCustomerType) {
         const tokens = selectedCustomerType.split('|').filter(Boolean);
@@ -388,7 +390,7 @@ export default function GeoHeatmapView({
       }
       return true;
     });
-  }, [allGeoRecords, selectedSeason, selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, quickGender, dateStart, dateEnd]);
+  }, [allGeoRecords, selectedSeason, selectedDivision, selectedGender, selectedCategory, selectedCustomerType, selectedCustomer, quickGender, dateStart, dateEnd]);
 
   // Aggregate sales by state
   const { stateData, maxValue, totalRevenue, totalUnits, statesWithData } = useMemo(() => {

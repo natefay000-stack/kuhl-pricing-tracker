@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Product, SalesRecord, CUSTOMER_TYPE_LABELS, normalizeCategory } from '@/types/product';
 import { sortSeasons, compareSeasons } from '@/lib/store';
 import { isRelevantSeason } from '@/utils/season';
-import { matchesDivision } from '@/utils/divisionMap';
+import { matchesDivision, matchesGender } from '@/utils/divisionMap';
 import { Search, Download, Users } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportData';
 import { formatCurrencyShort, formatNumberShort } from '@/utils/format';
@@ -15,6 +15,7 @@ interface CustomerViewProps {
   sales: SalesRecord[];
   selectedSeason?: string;
   selectedDivision?: string;
+  selectedGender?: string;
   selectedCategory?: string;
   selectedCustomerType?: string;
   searchQuery?: string;
@@ -68,6 +69,7 @@ export default function CustomerView({
   sales,
   selectedSeason: globalSeason = '',
   selectedDivision: globalDivision = '',
+  selectedGender: globalGender = '',
   selectedCategory: globalCategory = '',
   selectedCustomerType: globalCustomerType = '',
   searchQuery: globalSearchQuery,
@@ -143,6 +145,7 @@ export default function CustomerView({
         if (tokens.length > 0 && !tokens.includes(norm)) return;
       }
       if (!matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalGender && !matchesGender(sale.gender, globalGender)) return;
       const cust = sale.customer || 'Unknown';
       if (!map.has(cust)) {
         map.set(cust, { customer: cust, customerType: sale.customerType || '', revenue: 0, shipped: 0, units: 0, totalCost: 0, styles: new Set(), orders: 0 });
@@ -157,7 +160,7 @@ export default function CustomerView({
     });
 
     return Array.from(map.values());
-  }, [sales, activeSeason, globalCustomerType, globalCategory, globalDivision]);
+  }, [sales, activeSeason, globalCustomerType, globalCategory, globalDivision, globalGender]);
 
   /* ── Prior-season metrics for YoY comparison ───────────────────── */
   const priorMetricsMap = useMemo(() => {
@@ -222,6 +225,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalGender && !matchesGender(sale.gender, globalGender)) return;
       if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
       if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const sn = sale.styleNumber;
@@ -234,7 +238,7 @@ export default function CustomerView({
       .map(([styleNumber, d]) => ({ styleNumber, ...d }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [activeCustomer, sales, activeSeason, globalDivision, globalCategory, globalCustomerType]);
+  }, [activeCustomer, sales, activeSeason, globalDivision, globalGender, globalCategory, globalCustomerType]);
 
   /* ── Detail: Revenue by category ───────────────────────────────── */
   const categoryBreakdown = useMemo(() => {
@@ -243,6 +247,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer || sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalGender && !matchesGender(sale.gender, globalGender)) return;
       if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
       map.set(cat, (map.get(cat) || 0) + (sale.revenue || 0));
@@ -251,7 +256,7 @@ export default function CustomerView({
       .map(([category, revenue]) => ({ category, revenue }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [activeCustomer, sales, activeSeason, globalDivision, globalCustomerType]);
+  }, [activeCustomer, sales, activeSeason, globalDivision, globalGender, globalCustomerType]);
 
   const maxCatRevenue = categoryBreakdown[0]?.revenue || 1;
 
@@ -262,6 +267,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.season !== activeSeason) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalGender && !matchesGender(sale.gender, globalGender)) return;
       if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const cat = normalizeCategory(sale.categoryDesc) || 'Unknown';
       const rev = sale.revenue || 0;
@@ -273,7 +279,7 @@ export default function CustomerView({
       map.forEach((rev, cat) => shares.set(cat, (rev / total) * 100));
     }
     return shares;
-  }, [sales, activeSeason, globalDivision, globalCustomerType]);
+  }, [sales, activeSeason, globalDivision, globalGender, globalCustomerType]);
 
   /* ── Detail: Season revenue history (with shipped/booked) ───────── */
   const seasonHistory = useMemo(() => {
@@ -282,6 +288,7 @@ export default function CustomerView({
     sales.forEach(sale => {
       if (sale.customer !== activeCustomer) return;
       if (globalDivision && !matchesDivision(sale.divisionDesc, globalDivision)) return;
+      if (globalGender && !matchesGender(sale.gender, globalGender)) return;
       if (globalCategory && normalizeCategory(sale.categoryDesc) !== normalizeCategory(globalCategory)) return;
       if (globalCustomerType && sale.customerType !== globalCustomerType) return;
       const s = sale.season;

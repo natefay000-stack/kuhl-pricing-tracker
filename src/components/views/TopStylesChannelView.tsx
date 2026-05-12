@@ -9,7 +9,7 @@ import { sortSeasons } from '@/lib/store';
 import { exportToExcel } from '@/utils/exportData';
 import { SourceLegend } from '@/components/SourceBadge';
 import { getCombineKey } from '@/utils/combineStyles';
-import { matchesDivision } from '@/utils/divisionMap';
+import { matchesDivision, matchesGender } from '@/utils/divisionMap';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -72,6 +72,7 @@ interface TopStylesChannelViewProps {
   sales: SalesRecord[];
   selectedSeason: string;
   selectedDivision: string;
+  selectedGender?: string;
   selectedCategory: string;
   selectedCustomerType?: string;
   selectedCustomer?: string;
@@ -94,6 +95,7 @@ export default function TopStylesChannelView({
   sales,
   selectedSeason,
   selectedDivision,
+  selectedGender = '',
   selectedCategory,
   selectedCustomerType: globalCustomerType = '',
   selectedCustomer: globalCustomer = '',
@@ -228,6 +230,7 @@ export default function TopStylesChannelView({
       if (activeSeasonsSet.size > 0 && !activeSeasonsSet.has(s.season)) return false;
       // Division: filter directly on sales using fuzzy matchesDivision
       if (localDivision && !matchesDivision(s.divisionDesc || '', localDivision)) return false;
+      if (selectedGender && !matchesGender(s.gender, selectedGender)) return false;
       // Category: use product-lookup if available, otherwise filter sales directly
       if (localCategory) {
         if (productCategoryStyleSet) {
@@ -246,7 +249,7 @@ export default function TopStylesChannelView({
       }
       return true;
     });
-  }, [sales, activeSeasons, localDivision, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, globalSearchQuery]);
+  }, [sales, activeSeasons, localDivision, selectedGender, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, globalSearchQuery]);
 
   // ── 2. Channel sales map ──────────────────────────────────────
   // Map<channelId, Map<styleKey, { revenue, units, desc }>>
@@ -347,6 +350,7 @@ export default function TopStylesChannelView({
       if (!priorSeasons.has(sale.season)) continue;
       // Apply the same filters as filteredSales so trends compare apples-to-apples
       if (localDivision && !matchesDivision(sale.divisionDesc || '', localDivision)) continue;
+      if (selectedGender && !matchesGender(sale.gender, selectedGender)) continue;
       if (localCategory) {
         if (productCategoryStyleSet) {
           if (!productCategoryStyleSet.has(sale.styleNumber)) continue;
@@ -378,7 +382,7 @@ export default function TopStylesChannelView({
     }
 
     return map;
-  }, [sales, priorSeasons, localDivision, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, combineStyles]);
+  }, [sales, priorSeasons, localDivision, selectedGender, localCategory, productCategoryStyleSet, localCustomerType, localCustomer, localRep, designerStyleSet, combineStyles]);
 
   // ── 5. Channel rankings ───────────────────────────────────────
   const channelRankings = useMemo(() => {

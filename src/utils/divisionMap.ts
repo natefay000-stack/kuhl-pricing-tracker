@@ -46,3 +46,22 @@ export function matchesDivision(
   if (tokens.length === 0) return true;
   return tokens.some((tok) => matchesSingleDivision(divisionDesc, tok));
 }
+
+/**
+ * Multi-select-aware gender match. Sale.gender / Invoice.gender carry
+ * clean values like "Men", "Women", "Unisex" — exact-match against the
+ * pipe-delimited selection (e.g. "Men|Women"). Empty selection = pass.
+ *
+ * Distinct from matchesDivision: gender values don't need code-to-name
+ * translation. The Division dropdown was retired in f56666d; Gender is
+ * the single source of truth for that filter dimension going forward.
+ */
+export function matchesGender(
+  gender: string | null | undefined,
+  selectedGender: string | null | undefined,
+): boolean {
+  if (!selectedGender) return true;
+  const tokens = selectedGender.split('|').filter(Boolean);
+  if (tokens.length === 0) return true;
+  return tokens.includes(gender ?? '');
+}

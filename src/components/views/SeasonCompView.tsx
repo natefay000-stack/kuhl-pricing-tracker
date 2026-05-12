@@ -9,7 +9,7 @@ import { Download, X, AlertTriangle, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SourceLegend } from '@/components/SourceBadge';
 import { formatCurrencyShort } from '@/utils/format';
-import { matchesDivision } from '@/utils/divisionMap';
+import { matchesDivision, matchesGender } from '@/utils/divisionMap';
 import SalesLoadingBanner from '@/components/SalesLoadingBanner';
 
 interface SeasonCompViewProps {
@@ -17,6 +17,7 @@ interface SeasonCompViewProps {
   sales: SalesRecord[];
   selectedSeason?: string;
   selectedDivision?: string;
+  selectedGender?: string;
   selectedCategory?: string;
   searchQuery?: string;
   onStyleClick: (styleNumber: string) => void;
@@ -77,6 +78,7 @@ export default function SeasonCompView({
   sales,
   selectedSeason: globalSeason = '',
   selectedDivision: globalDivision = '',
+  selectedGender: globalGender = '',
   selectedCategory: globalCategory = '',
   searchQuery: globalSearchQuery,
   onStyleClick,
@@ -257,6 +259,10 @@ export default function SeasonCompView({
           if (!passes) return;
         }
       }
+      // Page-level gender filter (separate from the legacy division-derived
+      // gender check above). Sale.gender is exact-matched against the
+      // pipe-delimited selection.
+      if (globalGender && !matchesGender(s.gender, globalGender)) return;
       if (selectedDesigner) {
         const designerTokens = selectedDesigner.split('|').filter(Boolean);
         if (designerTokens.length > 0) {
@@ -292,7 +298,7 @@ export default function SeasonCompView({
     });
 
     return data;
-  }, [products, sales, seasons, selectedDivision, selectedDesigner, selectedCustomerType, selectedCustomer, allSeasons, globalSearchQuery]);
+  }, [products, sales, seasons, selectedDivision, globalGender, selectedDesigner, selectedCustomerType, selectedCustomer, allSeasons, globalSearchQuery]);
 
   // Get data for a specific season/category
   const getData = (season: string, category: string) => {
