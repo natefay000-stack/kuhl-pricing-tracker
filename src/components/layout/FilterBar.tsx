@@ -217,14 +217,18 @@ export default function FilterBar({
 
       {/* ── Row 2: Dropdown Filters ─────────────────────────────── */}
       <div className="px-6 py-2.5 flex items-end gap-6 flex-wrap">
-        <MultiSelect
-          label="Division"
-          placeholder="All Divisions"
-          options={divisions}
-          values={selectedDivision ? selectedDivision.split('|').filter(Boolean) : []}
-          onChange={(arr) => onDivisionChange(arr.join('|'))}
-          widthClass="w-[160px]"
-        />
+        {/* Division dropdown was removed because it duplicates Gender —
+            the underlying Sale.divisionDesc column stores numeric codes
+            ("01"/"02"/"08") that map 1:1 to the Sale.gender column's
+            human-readable values ("Men"/"Women"/"Unisex"). The Division
+            filter also was effectively broken on server-side filtered
+            views: dropdown showed translated names but the WHERE clause
+            queried raw values, returning zero matches.
+
+            Gender (below) is the working replacement. State + props for
+            selectedDivision are intentionally kept so views that read
+            it via matchesDivision() in-memory continue to work even
+            though no UI mutates it. */}
         <MultiSelect
           label="Category"
           placeholder="All Categories"
