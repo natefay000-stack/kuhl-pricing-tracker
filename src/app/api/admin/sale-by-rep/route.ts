@@ -17,13 +17,18 @@ export async function GET(request: Request) {
       units: bigint;
       customers: bigint;
     }>>(
+      // NULLIF(x, 0) inside COALESCE so a zero in shippedAtNet correctly
+      // falls through to the older `shipped` column (matches the JS
+      // logic: r.shippedAtNet || r.shipped || 0). Same for openAtNet.
       `SELECT
          "salesRep" AS rep,
          COUNT(*)::bigint AS orders,
-         COALESCE(SUM(COALESCE("shippedAtNet", "shipped")),0)::float AS shipped,
-         COALESCE(SUM(COALESCE("openAtNet", GREATEST("revenue" - COALESCE("shippedAtNet","shipped",0), 0))),0)::float AS open,
-         (COALESCE(SUM(COALESCE("shippedAtNet","shipped")),0) +
-          COALESCE(SUM(COALESCE("openAtNet", GREATEST("revenue" - COALESCE("shippedAtNet","shipped",0), 0))),0))::float AS total,
+         COALESCE(SUM(COALESCE(NULLIF("shippedAtNet", 0), "shipped", 0)),0)::float AS shipped,
+         COALESCE(SUM(COALESCE(NULLIF("openAtNet", 0),
+                               GREATEST("revenue" - COALESCE(NULLIF("shippedAtNet",0),"shipped",0), 0))),0)::float AS open,
+         (COALESCE(SUM(COALESCE(NULLIF("shippedAtNet",0),"shipped",0)),0) +
+          COALESCE(SUM(COALESCE(NULLIF("openAtNet",0),
+                                GREATEST("revenue" - COALESCE(NULLIF("shippedAtNet",0),"shipped",0), 0))),0))::float AS total,
          COALESCE(SUM("unitsShipped" + "unitsBooked"),0)::bigint AS units,
          COUNT(DISTINCT "customer")::bigint AS customers
        FROM "Sale"
