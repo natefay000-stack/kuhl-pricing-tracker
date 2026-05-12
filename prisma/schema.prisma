@@ -464,6 +464,9 @@ model ForecastEntry {
   colorCode        String?
   unitsForecast    Int      @default(0)
   dollarsForecast  Float    @default(0)
+  // Rep's manual ranking of this color within its style (1 = top pick).
+  // Only meaningful on color-level rows; null on category/style rows.
+  colorRank        Int?
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

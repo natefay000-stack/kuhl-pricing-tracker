@@ -261,11 +261,11 @@ export default function ForecastPlannerView() {
     colorCode: string | null,
   ) => [targetSeason, customer ?? '', category ?? '', styleNumber ?? '', colorCode ?? ''].join('||');
 
-  const [entries, setEntries] = useState<Record<string, { units: number; dollars: number }>>({});
+  const [entries, setEntries] = useState<Record<string, { units: number; dollars: number; rank: number | null }>>({});
   // Pending values being typed but not yet saved. Keyed the same way.
   // When a save is in flight, the optimistic value sits here until the
   // server PUT resolves and we promote it into `entries`.
-  const [pending, setPending] = useState<Record<string, { units: number; dollars: number }>>({});
+  const [pending, setPending] = useState<Record<string, { units: number; dollars: number; rank: number | null }>>({});
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Load entries whenever the (targetSeason, rep, customerScope) triple
@@ -283,7 +283,7 @@ export default function ForecastPlannerView() {
         if (!res.ok) return;
         const d = await res.json();
         if (cancelled || !Array.isArray(d.entries)) return;
-        const m: Record<string, { units: number; dollars: number }> = {};
+        const m: Record<string, { units: number; dollars: number; rank: number | null }> = {};
         for (const e of d.entries) {
           const k = entryKey(
             String(e.targetSeason),
@@ -292,7 +292,11 @@ export default function ForecastPlannerView() {
             e.styleNumber ?? null,
             e.colorCode ?? null,
           );
-          m[k] = { units: Number(e.unitsForecast ?? 0), dollars: Number(e.dollarsForecast ?? 0) };
+          m[k] = {
+            units: Number(e.unitsForecast ?? 0),
+            dollars: Number(e.dollarsForecast ?? 0),
+            rank: e.colorRank == null ? null : Number(e.colorRank),
+          };
         }
         setEntries(m);
         setPending({});
@@ -303,13 +307,13 @@ export default function ForecastPlannerView() {
   }, [targetSeason, editingRep, customerScope]);
 
   // Read the current value (pending if mid-edit, else saved entry)
-  const valueFor = (k: string): { units: number; dollars: number } =>
-    pending[k] ?? entries[k] ?? { units: 0, dollars: 0 };
+  const valueFor = (k: string): { units: number; dollars: number; rank: number | null } =>
+    pending[k] ?? entries[k] ?? { units: 0, dollars: 0, rank: null };
 
   // Update locally + schedule a debounced save (500ms after last keystroke)
   const queueSave = (
     rowScope: { category: string | null; styleNumber: string | null; colorCode: string | null },
-    next: { units: number; dollars: number },
+    next: { units: number; dollars: number; rank: number | null },
   ) => {
     if (!editMode || !editingRep || !targetSeason) return;
     const k = entryKey(targetSeason, customerScope, rowScope.category, rowScope.styleNumber, rowScope.colorCode);
@@ -329,6 +333,7 @@ export default function ForecastPlannerView() {
             colorCode: rowScope.colorCode,
             unitsForecast: next.units,
             dollarsForecast: next.dollars,
+            colorRank: next.rank,
           }),
         });
         if (res.ok) {
@@ -395,7 +400,7 @@ export default function ForecastPlannerView() {
               min={0}
               disabled={!editMode}
               value={v.units || ''}
-              onChange={(e) => queueSave(rowScope, { units: parseInt(e.target.value, 10) || 0, dollars: v.dollars })}
+              onChange={(e) => queueSave(rowScope, { units: parseInt(e.target.value, 10) || 0, dollars: v.dollars, rank: v.rank })}
               placeholder={editMode ? '0' : '—'}
               className={inputCls}
             />
@@ -409,7 +414,7 @@ export default function ForecastPlannerView() {
               step={0.01}
               disabled={!editMode}
               value={v.dollars || ''}
-              onChange={(e) => queueSave(rowScope, { units: v.units, dollars: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => queueSave(rowScope, { units: v.units, dollars: parseFloat(e.target.value) || 0, rank: v.rank })}
               placeholder={editMode ? '$0' : '—'}
               className={inputCls}
             />
@@ -700,10 +705,38 @@ export default function ForecastPlannerView() {
                               {renderForecastCells({ category: r.label, styleNumber: s.key, colorCode: null }, 'sm')}
                             </tr>
                             {/* Color sub-rows */}
-                            {styleOpen && colorSubData[subKey] && colorSubData[subKey].rows.map((c) => (
+                            {styleOpen && colorSubData[subKey] && colorSubData[subKey].rows.map((c) => {
+                              // Rank input lives in the leftmost cell next to
+                              // the color name. Lets the rep prioritize colors
+                              // 1..N within a style for forecasting.
+                              const colorCode = c.key.includes('||') ? c.key.split('||')[1] || null : null;
+                              const colorRowScope = { category: r.label, styleNumber: s.key, colorCode };
+                              const colorEntryK = entryKey(targetSeason, customerScope, colorRowScope.category, colorRowScope.styleNumber, colorRowScope.colorCode);
+                              const colorVal = valueFor(colorEntryK);
+                              return (
                               <tr key={`${subKey}||${c.key}`} className="border-b border-border-primary/30 bg-surface-secondary/20">
                                 <td className="pl-14 pr-3 py-1 text-xs text-text-faint sticky left-0 bg-surface-secondary/20">
-                                  <span className="truncate max-w-[260px] inline-block">{c.label}</span>
+                                  <span className="inline-flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={99}
+                                      disabled={!editMode}
+                                      value={colorVal.rank ?? ''}
+                                      onChange={(e) => {
+                                        const v = e.target.value === '' ? null : Math.max(1, parseInt(e.target.value, 10) || 0) || null;
+                                        queueSave(colorRowScope, { units: colorVal.units, dollars: colorVal.dollars, rank: v });
+                                      }}
+                                      placeholder={editMode ? '#' : '—'}
+                                      title={editMode ? `Rank this color 1..N within ${s.key}` : 'Select one rep to enable ranking'}
+                                      className={`w-10 text-center font-mono text-xs px-1 py-0.5 rounded border ${
+                                        colorVal.rank
+                                          ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold'
+                                          : 'border-border-primary bg-surface text-text-muted'
+                                      } focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 disabled:bg-surface-secondary disabled:cursor-not-allowed`}
+                                    />
+                                    <span className="truncate max-w-[220px] inline-block">{c.label}</span>
+                                  </span>
                                 </td>
                                 {seasons.map(season => {
                                   const a = c.bySeason[season];
@@ -732,13 +765,10 @@ export default function ForecastPlannerView() {
                                     </>
                                   );
                                 })()}
-                                {(() => {
-                                  // c.key is "styleNumber||colorCode" — split out the colorCode for the entry scope
-                                  const colorCode = c.key.includes('||') ? c.key.split('||')[1] || null : null;
-                                  return renderForecastCells({ category: r.label, styleNumber: s.key, colorCode }, 'sm');
-                                })()}
+                                {renderForecastCells(colorRowScope, 'sm')}
                               </tr>
-                            ))}
+                              );
+                            })}
                             {styleOpen && !colorSubData[subKey] && (
                               <tr className="border-b border-border-primary/30 bg-surface-secondary/10">
                                 <td colSpan={tableColCount} className="px-12 py-2 text-xs text-text-faint italic">Loading colors…</td>

@@ -49,11 +49,16 @@ async function ensureTable() {
       "colorCode"        TEXT,
       "unitsForecast"    INTEGER NOT NULL DEFAULT 0,
       "dollarsForecast"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "colorRank"        INTEGER,
       "notes"            TEXT,
       "createdAt"        TIMESTAMP NOT NULL DEFAULT NOW(),
       "updatedAt"        TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
+  // Idempotent ALTER for existing tables created before colorRank existed.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "ForecastEntry" ADD COLUMN IF NOT EXISTS "colorRank" INTEGER`,
+  );
   await prisma.$executeRawUnsafe(`
     CREATE UNIQUE INDEX IF NOT EXISTS "ForecastEntry_natural_key"
       ON "ForecastEntry" ("targetSeason","rep","customer","category","styleNumber","colorCode")
@@ -125,10 +130,15 @@ export async function PUT(request: Request) {
   }
   const units = Number(body.unitsForecast ?? 0);
   const dollars = Number(body.dollarsForecast ?? 0);
+  // colorRank: positive integer, or null to clear. Allow it through even
+  // when units/dollars are zero (rep might rank without committing $ yet).
+  const colorRank = body.colorRank === null || body.colorRank === undefined || body.colorRank === ''
+    ? null
+    : Math.max(1, Math.floor(Number(body.colorRank) || 0)) || null;
   const notes = typeof body.notes === 'string' && body.notes.length > 0 ? body.notes : null;
-  // Both inputs zero → delete (clears the forecast). Uses NULLS NOT DISTINCT
-  // so the WHERE clause matches NULL columns correctly.
-  if (units === 0 && dollars === 0 && !notes) {
+  // All inputs empty → delete (fully clears the forecast). Uses NULLS NOT
+  // DISTINCT so the WHERE clause matches NULL columns correctly.
+  if (units === 0 && dollars === 0 && colorRank === null && !notes) {
     try {
       await ensureTable();
       const r = await prisma.$executeRawUnsafe(
@@ -154,16 +164,17 @@ export async function PUT(request: Request) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO "ForecastEntry" (
         "id", "targetSeason", "rep", "customer", "category", "styleNumber", "colorCode",
-        "unitsForecast", "dollarsForecast", "notes", "updatedAt"
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, NOW())
+        "unitsForecast", "dollarsForecast", "colorRank", "notes", "updatedAt"
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, NOW())
        ON CONFLICT ("targetSeason","rep","customer","category","styleNumber","colorCode")
        DO UPDATE SET
          "unitsForecast" = EXCLUDED."unitsForecast",
          "dollarsForecast" = EXCLUDED."dollarsForecast",
+         "colorRank" = EXCLUDED."colorRank",
          "notes" = EXCLUDED."notes",
          "updatedAt" = NOW()`,
       id, key.targetSeason, key.rep, key.customer, key.category, key.styleNumber, key.colorCode,
-      units, dollars, notes,
+      units, dollars, colorRank, notes,
     );
     return NextResponse.json({ success: true, action: 'upserted' });
   } catch (err) {
