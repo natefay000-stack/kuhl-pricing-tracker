@@ -34,6 +34,10 @@ interface PlannerRow {
   bySeason: Record<string, PlannerSeasonAgg>;
   yoyDeltaPct: number | null;
   avgTotal: number;
+  /** True when this color is offered for the target season but has no
+   *  historical sales yet — surfaced from the Pricing table so reps can
+   *  rank brand-new colorways alongside the historical ones. */
+  newForSeason?: boolean;
 }
 interface PlannerResponse {
   success: boolean;
@@ -714,8 +718,8 @@ export default function ForecastPlannerView() {
                               const colorEntryK = entryKey(targetSeason, customerScope, colorRowScope.category, colorRowScope.styleNumber, colorRowScope.colorCode);
                               const colorVal = valueFor(colorEntryK);
                               return (
-                              <tr key={`${subKey}||${c.key}`} className="border-b border-border-primary/30 bg-surface-secondary/20">
-                                <td className="pl-14 pr-3 py-1 text-xs text-text-faint sticky left-0 bg-surface-secondary/20">
+                              <tr key={`${subKey}||${c.key}`} className={`border-b border-border-primary/30 ${c.newForSeason ? 'bg-emerald-500/5' : 'bg-surface-secondary/30'}`}>
+                                <td className={`pl-14 pr-3 py-1 text-xs sticky left-0 ${c.newForSeason ? 'bg-emerald-500/5' : 'bg-surface-secondary/30'} text-text-primary`}>
                                   <span className="inline-flex items-center gap-2">
                                     <input
                                       type="number"
@@ -732,10 +736,13 @@ export default function ForecastPlannerView() {
                                       className={`w-10 text-center font-mono text-xs px-1 py-0.5 rounded border ${
                                         colorVal.rank
                                           ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold'
-                                          : 'border-border-primary bg-surface text-text-muted'
+                                          : 'border-border-primary bg-surface text-text-secondary'
                                       } focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 disabled:bg-surface-secondary disabled:cursor-not-allowed`}
                                     />
-                                    <span className="truncate max-w-[220px] inline-block">{c.label}</span>
+                                    <span className="truncate max-w-[200px] inline-block font-medium">{c.label}</span>
+                                    {c.newForSeason && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40">NEW</span>
+                                    )}
                                   </span>
                                 </td>
                                 {seasons.map(season => {
@@ -743,13 +750,13 @@ export default function ForecastPlannerView() {
                                   return (
                                     <Fragment key={season}>
                                       {showUnits && (
-                                        <td className="px-2 py-1 text-right font-mono text-xs text-text-faint border-l border-border-primary/40">{fmtUnits(a.units)}</td>
+                                        <td className="px-2 py-1 text-right font-mono text-xs text-text-secondary border-l border-border-primary/40">{fmtUnits(a.units)}</td>
                                       )}
                                       {showDollars && (
                                         <>
-                                          <td className={`px-2 py-1 text-right font-mono text-xs ${showUnits ? '' : 'border-l border-border-primary/40'}`}>{fmtCurShort(a.shipped)}</td>
-                                          <td className="px-2 py-1 text-right font-mono text-xs text-text-faint">{fmtCurShort(a.open)}</td>
-                                          <td className="px-2 py-1 text-right font-mono text-xs font-semibold">{fmtCurShort(a.total)}</td>
+                                          <td className={`px-2 py-1 text-right font-mono text-xs text-text-primary ${showUnits ? '' : 'border-l border-border-primary/40'}`}>{fmtCurShort(a.shipped)}</td>
+                                          <td className="px-2 py-1 text-right font-mono text-xs text-text-secondary">{fmtCurShort(a.open)}</td>
+                                          <td className="px-2 py-1 text-right font-mono text-xs font-semibold text-text-primary">{fmtCurShort(a.total)}</td>
                                         </>
                                       )}
                                     </Fragment>
@@ -760,8 +767,12 @@ export default function ForecastPlannerView() {
                                   const avg = avgForRow(c);
                                   return (
                                     <>
-                                      <td className="px-2 py-1 text-right font-mono text-xs border-l-2 border-border-strong text-text-faint">{fmtPct(yoy)}</td>
-                                      <td className="px-3 py-1 text-right font-mono text-xs font-bold text-cyan-600/80">{fmtAvg(avg)}</td>
+                                      <td className={`px-2 py-1 text-right font-mono text-xs border-l-2 border-border-strong ${
+                                        yoy === null ? 'text-text-secondary' :
+                                        yoy > 0 ? 'text-emerald-600' :
+                                        yoy < 0 ? 'text-red-600' : 'text-text-secondary'
+                                      }`}>{fmtPct(yoy)}</td>
+                                      <td className="px-3 py-1 text-right font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300">{fmtAvg(avg)}</td>
                                     </>
                                   );
                                 })()}

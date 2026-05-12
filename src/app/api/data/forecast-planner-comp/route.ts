@@ -146,8 +146,18 @@ export async function GET(request: Request) {
       if (r.customer) agg.customerSet.add(r.customer);
     }
 
-    // Build response rows with YoY + 2-yr avg fields
-    const responseRows = Array.from(grid.entries()).map(([key, e]) => {
+    // Build response rows with YoY + 2-yr avg fields. newForSeason is
+    // optionally set (true) when we splice in colors planned for the
+    // target season that have no historical sales yet.
+    interface ResponseRow {
+      key: string;
+      label: string;
+      bySeason: Record<string, { shipped: number; open: number; total: number; units: number; orders: number; customers: number }>;
+      yoyDeltaPct: number | null;
+      avgTotal: number;
+      newForSeason?: boolean;
+    }
+    const responseRows: ResponseRow[] = Array.from(grid.entries()).map(([key, e]) => {
       const bySeason: Record<string, { shipped: number; open: number; total: number; units: number; orders: number; customers: number }> = {};
       seasons.forEach(s => {
         const a = e.bySeason.get(s);
@@ -167,7 +177,46 @@ export async function GET(request: Request) {
       return { key, label: e.label, bySeason, yoyDeltaPct, avgTotal };
     });
 
-    // Sort by avg total descending so the most-significant rows surface first
+    // For color-level drilldown: enrich with colors planned for the
+    // TARGET season that have no historical sales yet — so a rep can
+    // see and rank a brand-new colorway alongside the historical ones.
+    // Source: Pricing table for the target season (each style/color/season
+    // gets a Pricing row when it's offered). Marked `newForSeason: true`
+    // so the UI can surface a "NEW" badge.
+    if (groupBy === 'color' && styleScope) {
+      try {
+        const planned = await prisma.pricing.findMany({
+          where: { styleNumber: styleScope, season: targetSeason },
+          select: { colorCode: true, colorDesc: true },
+        });
+        const seenCodes = new Set(
+          responseRows.map(r => (r.key.split('||')[1] ?? '').toUpperCase()),
+        );
+        for (const p of planned) {
+          const code = (p.colorCode ?? '').trim();
+          if (!code) continue;
+          if (seenCodes.has(code.toUpperCase())) continue;
+          // Add a row with all-zero historical, marked as new-for-target
+          const emptyBySeason: Record<string, { shipped: number; open: number; total: number; units: number; orders: number; customers: number }> = {};
+          seasons.forEach(s => {
+            emptyBySeason[s] = { shipped: 0, open: 0, total: 0, units: 0, orders: 0, customers: 0 };
+          });
+          responseRows.push({
+            key: `${styleScope}||${code}`,
+            label: `${code} — ${p.colorDesc ?? ''}`.trim(),
+            bySeason: emptyBySeason,
+            yoyDeltaPct: null,
+            avgTotal: 0,
+            newForSeason: true,
+          });
+          seenCodes.add(code.toUpperCase());
+        }
+      } catch { /* non-fatal — historical-only is still useful */ }
+    }
+
+    // Sort by avg total descending so the most-significant rows surface first.
+    // New-for-season colors (avgTotal = 0) sink to the bottom, which is
+    // intentional — historical sellers come first, brand-new colors after.
     responseRows.sort((a, b) => b.avgTotal - a.avgTotal);
 
     // Grand totals row
