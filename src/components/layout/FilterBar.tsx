@@ -14,6 +14,7 @@ interface FilterBarProps {
   designers: string[];
   customerTypes: string[];
   customers: string[];
+  genders: string[];
   years: string[];
   months: string[];
   selectedSeason: string;
@@ -22,6 +23,7 @@ interface FilterBarProps {
   selectedDesigner: string;
   selectedCustomerType: string;
   selectedCustomer: string;
+  selectedGender: string;
   selectedMonth: string;
   selectedYear: string;
   onSeasonChange: (season: string) => void;
@@ -30,6 +32,7 @@ interface FilterBarProps {
   onDesignerChange: (designer: string) => void;
   onCustomerTypeChange: (ct: string) => void;
   onCustomerChange: (customer: string) => void;
+  onGenderChange: (gender: string) => void;
   onMonthChange: (month: string) => void;
   onYearChange: (year: string) => void;
 }
@@ -78,6 +81,7 @@ export default function FilterBar({
   designers,
   customerTypes,
   customers,
+  genders,
   years,
   months,
   selectedSeason,
@@ -86,6 +90,7 @@ export default function FilterBar({
   selectedDesigner,
   selectedCustomerType,
   selectedCustomer,
+  selectedGender,
   selectedMonth,
   selectedYear,
   onSeasonChange,
@@ -94,6 +99,7 @@ export default function FilterBar({
   onDesignerChange,
   onCustomerTypeChange,
   onCustomerChange,
+  onGenderChange,
   onMonthChange,
   onYearChange,
 }: FilterBarProps) {
@@ -251,6 +257,16 @@ export default function FilterBar({
           onChange={(arr) => onCustomerChange(arr.join('|'))}
           widthClass="w-[170px]"
         />
+        {genders.length > 0 && (
+          <MultiSelect
+            label="Gender"
+            placeholder="All Genders"
+            options={genders}
+            values={selectedGender ? selectedGender.split('|').filter(Boolean) : []}
+            onChange={(arr) => onGenderChange(arr.join('|'))}
+            widthClass="w-[140px]"
+          />
+        )}
 
         {/* Separator before date filters */}
         {years.length > 0 && (

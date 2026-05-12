@@ -83,6 +83,7 @@ interface ForecastPlannerViewProps {
   selectedCustomerType?: string;
   selectedCustomer?: string;
   selectedDesigner?: string;
+  selectedGender?: string;
 }
 
 export default function ForecastPlannerView({
@@ -91,6 +92,7 @@ export default function ForecastPlannerView({
   selectedCustomerType = '',
   selectedCustomer = '',
   selectedDesigner = '',
+  selectedGender = '',
 }: ForecastPlannerViewProps = {}) {
   // ── Filter / config state ──
   const [allSeasons, setAllSeasons] = useState<string[]>([]);
@@ -161,6 +163,7 @@ export default function ForecastPlannerView({
     if (selectedCustomerType) params.set('customerType', selectedCustomerType);
     if (selectedCustomer && customerFilter.length === 0) params.set('customer', selectedCustomer);
     if (selectedDesigner) params.set('designer', selectedDesigner);
+    if (selectedGender) params.set('gender', selectedGender);
     const res = await fetch(`/api/data/forecast-planner-comp?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const d: PlannerResponse = await res.json();
@@ -199,7 +202,7 @@ export default function ForecastPlannerView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     targetSeason, seasonsBack, repFilter, customerFilter,
-    selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, selectedDesigner,
+    selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, selectedDesigner, selectedGender,
   ]);
 
   // ── Drill: expand a category to show its styles ──
@@ -496,10 +499,11 @@ export default function ForecastPlannerView({
           <p className="text-xs text-text-faint mt-1">
             Data source: Sale table (booked + shipped) · {seasons.length > 0 ? `Comparing ${seasons.join(' vs ')} for forecasting ${data?.targetSeason}` : 'Loading…'}
           </p>
-          {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || selectedDesigner) && (
+          {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || selectedDesigner || selectedGender) && (
             <p className="text-xs text-text-secondary mt-1 inline-flex flex-wrap gap-1.5 items-center">
               <span className="text-text-faint">Page filters:</span>
               {selectedDivision && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">division={selectedDivision}</span>}
+              {selectedGender && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">gender={selectedGender}</span>}
               {selectedCategory && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">category={selectedCategory}</span>}
               {selectedCustomerType && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">type={selectedCustomerType}</span>}
               {selectedCustomer && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">customer={selectedCustomer}</span>}

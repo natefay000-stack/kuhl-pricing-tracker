@@ -245,6 +245,7 @@ export default function Home() {
   const [selectedDesigner, setSelectedDesigner] = useState<string>('');
   const [selectedCustomerType, setSelectedCustomerType] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [selectedGender, setSelectedGender] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>('');
 
@@ -256,6 +257,7 @@ export default function Home() {
     setSelectedDesigner('');
     setSelectedCustomerType('');
     setSelectedCustomer('');
+    setSelectedGender('');
     setSelectedMonth('');
     setSelectedYear('');
     setSearchQuery('');
@@ -329,6 +331,15 @@ export default function Home() {
         });
       }
     });
+    return Array.from(all).sort();
+  }, [sales]);
+
+  // Distinct gender values across the in-memory sales set. Sale.gender is
+  // typically populated like "Men's" / "Women's" / "Unisex" — surfaced as
+  // its own filter (separate from Division which can carry the same idea).
+  const genders = useMemo(() => {
+    const all = new Set<string>();
+    sales.forEach(s => { if (s.gender) all.add(s.gender); });
     return Array.from(all).sort();
   }, [sales]);
 
@@ -2051,6 +2062,7 @@ export default function Home() {
           designers={designers}
           customerTypes={activeView === 'geoheatmap' ? invoiceCustomerTypes : customerTypes}
           customers={activeView === 'geoheatmap' ? invoiceCustomerNames : customerNames}
+          genders={genders}
           years={availableYears}
           months={availableMonths}
           selectedSeason={selectedSeason}
@@ -2059,6 +2071,7 @@ export default function Home() {
           selectedDesigner={selectedDesigner}
           selectedCustomerType={selectedCustomerType}
           selectedCustomer={selectedCustomer}
+          selectedGender={selectedGender}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           onSeasonChange={setSelectedSeason}
@@ -2067,6 +2080,7 @@ export default function Home() {
           onDesignerChange={setSelectedDesigner}
           onCustomerTypeChange={setSelectedCustomerType}
           onCustomerChange={setSelectedCustomer}
+          onGenderChange={setSelectedGender}
           onMonthChange={setSelectedMonth}
           onYearChange={setSelectedYear}
         />
@@ -2207,6 +2221,7 @@ export default function Home() {
                 selectedCustomerType={selectedCustomerType}
                 selectedCustomer={selectedCustomer}
                 selectedDesigner={selectedDesigner}
+                selectedGender={selectedGender}
               />
             </ErrorBoundary>
           )}

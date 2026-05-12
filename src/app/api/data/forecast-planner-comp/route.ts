@@ -66,6 +66,8 @@ export async function GET(request: Request) {
   const categoryFilter = url.searchParams.get('categoryFilter') ?? '';
   const customerTypeFilter = url.searchParams.get('customerType') ?? '';
   const designerFilter = url.searchParams.get('designer') ?? '';
+  // gender is pipe-delimited (multi-select). e.g. "Men's|Women's"
+  const genderFilter = (url.searchParams.get('gender') ?? '').split('|').map(s => s.trim()).filter(Boolean);
 
   if (!targetSeason) {
     return NextResponse.json({ error: 'targetSeason required (e.g., 27SP)' }, { status: 400 });
@@ -97,6 +99,10 @@ export async function GET(request: Request) {
         ...(customerTypeFilter
           ? { customerType: { contains: customerTypeFilter, mode: 'insensitive' as const } }
           : {}),
+        // gender (multi-select via pipe-delimited string in URL): exact
+        // match against Sale.gender. Distinct from divisionDesc because
+        // some imports populate them differently.
+        ...(genderFilter.length > 0 ? { gender: { in: genderFilter } } : {}),
         // designer: Sale table doesn't carry it; would need a JOIN through
         // Product. Intentionally not applied here yet — flagging it inert
         // is better than silently mismatching.
@@ -266,6 +272,7 @@ export async function GET(request: Request) {
         categoryFilter,
         customerTypeFilter,
         designerFilter,
+        genderFilter,
       },
       rows: responseRows,
       grandTotal,
