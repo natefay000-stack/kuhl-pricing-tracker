@@ -60,6 +60,12 @@ export async function GET(request: Request) {
   const customerFilter = (url.searchParams.get('customer') ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const categoryScope = url.searchParams.get('category') ?? '';
   const styleScope = url.searchParams.get('styleNumber') ?? '';
+  // Page-level global filters (single values, optional). When set, they
+  // intersect with the planner's own multi-selects above.
+  const divisionFilter = url.searchParams.get('division') ?? '';
+  const categoryFilter = url.searchParams.get('categoryFilter') ?? '';
+  const customerTypeFilter = url.searchParams.get('customerType') ?? '';
+  const designerFilter = url.searchParams.get('designer') ?? '';
 
   if (!targetSeason) {
     return NextResponse.json({ error: 'targetSeason required (e.g., 27SP)' }, { status: 400 });
@@ -81,6 +87,19 @@ export async function GET(request: Request) {
         ...(customerFilter.length > 0 ? { customer: { in: customerFilter } } : {}),
         ...(categoryScope ? { categoryDesc: categoryScope } : {}),
         ...(styleScope ? { styleNumber: styleScope } : {}),
+        // Page-level globals. divisionDesc is exact-match (e.g. "Men's"),
+        // customerType uses contains because the column stores a comma-
+        // separated list ("EC,WS,SP"), and the global filter passes a
+        // single value or pipe-separated set. categoryFilter is only
+        // applied when no drill-down categoryScope is set.
+        ...(divisionFilter ? { divisionDesc: divisionFilter } : {}),
+        ...(!categoryScope && categoryFilter ? { categoryDesc: categoryFilter } : {}),
+        ...(customerTypeFilter
+          ? { customerType: { contains: customerTypeFilter, mode: 'insensitive' as const } }
+          : {}),
+        // designer: Sale table doesn't carry it; would need a JOIN through
+        // Product. Intentionally not applied here yet — flagging it inert
+        // is better than silently mismatching.
       },
       select: {
         season: true,
@@ -238,7 +257,16 @@ export async function GET(request: Request) {
       targetSeason,
       comparisonSeasons: seasons,
       groupBy,
-      filters: { rep: repFilter, customer: customerFilter, categoryScope, styleScope },
+      filters: {
+        rep: repFilter,
+        customer: customerFilter,
+        categoryScope,
+        styleScope,
+        divisionFilter,
+        categoryFilter,
+        customerTypeFilter,
+        designerFilter,
+      },
       rows: responseRows,
       grandTotal,
       generatedAt: new Date().toISOString(),

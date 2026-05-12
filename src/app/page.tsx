@@ -2201,7 +2201,13 @@ export default function Home() {
 
           {activeView === 'forecastplanner' && (
             <ErrorBoundary viewName="Forecast Planner">
-              <ForecastPlannerView />
+              <ForecastPlannerView
+                selectedDivision={selectedDivision}
+                selectedCategory={selectedCategory}
+                selectedCustomerType={selectedCustomerType}
+                selectedCustomer={selectedCustomer}
+                selectedDesigner={selectedDesigner}
+              />
             </ErrorBoundary>
           )}
 

@@ -73,7 +73,25 @@ function defaultTargetSeason(allSeasons: string[]): string {
   return `${String(newest.y + 1).padStart(2, '0')}${newest.t}`;
 }
 
-export default function ForecastPlannerView() {
+interface ForecastPlannerViewProps {
+  /** Page-level global filters. All optional — undefined / empty string
+   *  means "no filter" for that dimension. They're sent as-is to the
+   *  /api/data/forecast-planner-comp endpoint and ANDed with the planner's
+   *  own per-page Rep + Customer multi-selects. */
+  selectedDivision?: string;
+  selectedCategory?: string;
+  selectedCustomerType?: string;
+  selectedCustomer?: string;
+  selectedDesigner?: string;
+}
+
+export default function ForecastPlannerView({
+  selectedDivision = '',
+  selectedCategory = '',
+  selectedCustomerType = '',
+  selectedCustomer = '',
+  selectedDesigner = '',
+}: ForecastPlannerViewProps = {}) {
   // ── Filter / config state ──
   const [allSeasons, setAllSeasons] = useState<string[]>([]);
   const [allReps, setAllReps] = useState<string[]>([]);
@@ -131,6 +149,12 @@ export default function ForecastPlannerView() {
     if (customerFilter.length > 0) params.set('customer', customerFilter.join(','));
     if (overrides?.category) params.set('category', overrides.category);
     if (overrides?.styleNumber) params.set('styleNumber', overrides.styleNumber);
+    // Page-level globals — pass through. Empty strings are skipped.
+    if (selectedDivision) params.set('division', selectedDivision);
+    if (selectedCategory) params.set('categoryFilter', selectedCategory);
+    if (selectedCustomerType) params.set('customerType', selectedCustomerType);
+    if (selectedCustomer && customerFilter.length === 0) params.set('customer', selectedCustomer);
+    if (selectedDesigner) params.set('designer', selectedDesigner);
     const res = await fetch(`/api/data/forecast-planner-comp?${params.toString()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const d: PlannerResponse = await res.json();
@@ -155,11 +179,16 @@ export default function ForecastPlannerView() {
     }
   };
 
-  // Auto-refresh whenever the inputs that affect the top-level query change
+  // Auto-refresh whenever the inputs that affect the top-level query change.
+  // Page-level filters (division / category / etc.) are included so changing
+  // them in the top-of-page filter strip rebuilds the planner immediately.
   useEffect(() => {
     if (targetSeason) refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetSeason, seasonsBack, repFilter, customerFilter]);
+  }, [
+    targetSeason, seasonsBack, repFilter, customerFilter,
+    selectedDivision, selectedCategory, selectedCustomerType, selectedCustomer, selectedDesigner,
+  ]);
 
   // ── Drill: expand a category to show its styles ──
   const toggleCategory = async (cat: string) => {
@@ -455,6 +484,16 @@ export default function ForecastPlannerView() {
           <p className="text-xs text-text-faint mt-1">
             Data source: Sale table (booked + shipped) · {seasons.length > 0 ? `Comparing ${seasons.join(' vs ')} for forecasting ${data?.targetSeason}` : 'Loading…'}
           </p>
+          {(selectedDivision || selectedCategory || selectedCustomerType || selectedCustomer || selectedDesigner) && (
+            <p className="text-xs text-text-secondary mt-1 inline-flex flex-wrap gap-1.5 items-center">
+              <span className="text-text-faint">Page filters:</span>
+              {selectedDivision && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">division={selectedDivision}</span>}
+              {selectedCategory && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">category={selectedCategory}</span>}
+              {selectedCustomerType && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">type={selectedCustomerType}</span>}
+              {selectedCustomer && <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-mono">customer={selectedCustomer}</span>}
+              {selectedDesigner && <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono" title="Sale table has no designer column — filter is inert here.">designer={selectedDesigner} (inert)</span>}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
