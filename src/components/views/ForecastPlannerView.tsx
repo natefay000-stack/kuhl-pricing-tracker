@@ -13,8 +13,8 @@
  * pre-aggregated rows so the client stays light.
  */
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, RefreshCw, Download, Filter, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, RefreshCw, Download, Filter, X, TrendingUp, TrendingDown, Minus, Lock, Pencil } from 'lucide-react';
 import MultiSelect from '@/components/MultiSelect';
 import { exportMultiSheetExcel } from '@/utils/exportData';
 
@@ -242,13 +242,117 @@ export default function ForecastPlannerView() {
   const hasFilters = repFilter.length > 0 || customerFilter.length > 0;
   const seasons = data?.comparisonSeasons ?? [];
 
+  // ── Edit mode + forecast entries ──
+  // Identity = the single rep filter. If a user has exactly one rep
+  // selected, edits attribute to them. Multi/none = read-only (we don't
+  // know who they are). Customer scope is similarly single-or-null.
+  const editingRep = repFilter.length === 1 ? repFilter[0] : null;
+  const customerScope = customerFilter.length === 1 ? customerFilter[0] : null;
+  const editMode = editingRep !== null;
+
+  // Local map of forecast entries keyed by composite identity. The keys
+  // mirror the unique index on the ForecastEntry table. Null scope fields
+  // become empty string in the key so JS object lookups work cleanly.
+  const entryKey = (
+    targetSeason: string,
+    customer: string | null,
+    category: string | null,
+    styleNumber: string | null,
+    colorCode: string | null,
+  ) => [targetSeason, customer ?? '', category ?? '', styleNumber ?? '', colorCode ?? ''].join('||');
+
+  const [entries, setEntries] = useState<Record<string, { units: number; dollars: number }>>({});
+  // Pending values being typed but not yet saved. Keyed the same way.
+  // When a save is in flight, the optimistic value sits here until the
+  // server PUT resolves and we promote it into `entries`.
+  const [pending, setPending] = useState<Record<string, { units: number; dollars: number }>>({});
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Load entries whenever the (targetSeason, rep, customerScope) triple
+  // changes. Multi-rep / no-rep selection clears the table.
+  useEffect(() => {
+    if (!editingRep || !targetSeason) { setEntries({}); return; }
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams();
+      params.set('targetSeason', targetSeason);
+      params.set('rep', editingRep);
+      if (customerScope) params.set('customer', customerScope);
+      try {
+        const res = await fetch(`/api/data/forecast-entries?${params.toString()}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        if (cancelled || !Array.isArray(d.entries)) return;
+        const m: Record<string, { units: number; dollars: number }> = {};
+        for (const e of d.entries) {
+          const k = entryKey(
+            String(e.targetSeason),
+            e.customer ?? null,
+            e.category ?? null,
+            e.styleNumber ?? null,
+            e.colorCode ?? null,
+          );
+          m[k] = { units: Number(e.unitsForecast ?? 0), dollars: Number(e.dollarsForecast ?? 0) };
+        }
+        setEntries(m);
+        setPending({});
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetSeason, editingRep, customerScope]);
+
+  // Read the current value (pending if mid-edit, else saved entry)
+  const valueFor = (k: string): { units: number; dollars: number } =>
+    pending[k] ?? entries[k] ?? { units: 0, dollars: 0 };
+
+  // Update locally + schedule a debounced save (500ms after last keystroke)
+  const queueSave = (
+    rowScope: { category: string | null; styleNumber: string | null; colorCode: string | null },
+    next: { units: number; dollars: number },
+  ) => {
+    if (!editMode || !editingRep || !targetSeason) return;
+    const k = entryKey(targetSeason, customerScope, rowScope.category, rowScope.styleNumber, rowScope.colorCode);
+    setPending((prev) => ({ ...prev, [k]: next }));
+    clearTimeout(saveTimers.current[k]);
+    saveTimers.current[k] = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/data/forecast-entries', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetSeason,
+            rep: editingRep,
+            customer: customerScope,
+            category: rowScope.category,
+            styleNumber: rowScope.styleNumber,
+            colorCode: rowScope.colorCode,
+            unitsForecast: next.units,
+            dollarsForecast: next.dollars,
+          }),
+        });
+        if (res.ok) {
+          // Promote pending → saved on success
+          setEntries((prev) => ({ ...prev, [k]: next }));
+          setPending((prev) => {
+            const { [k]: _drop, ...rest } = prev;
+            void _drop;
+            return rest;
+          });
+        }
+      } catch { /* keep in pending so the user can retry */ }
+    }, 500);
+  };
+
   // ── Metric-mode-aware helpers ──
   const showUnits = metricMode === 'units' || metricMode === 'both';
   const showDollars = metricMode === 'dollars' || metricMode === 'both';
   // 1 col for Units (when shown) + 3 cols for $ block (Shipped/Open/Total)
   const colsPerSeason = (showUnits ? 1 : 0) + (showDollars ? 3 : 0);
-  // Total table width: sticky-left (1) + (cols/season × seasons) + YoY + Avg
-  const tableColCount = 1 + colsPerSeason * seasons.length + 2;
+  // Forecast input columns (the new editable block for the target season)
+  const forecastCols = (showUnits ? 1 : 0) + (showDollars ? 1 : 0);
+  // Total table width: sticky-left (1) + (cols/season × seasons) + YoY + Avg + forecast cols
+  const tableColCount = 1 + colsPerSeason * seasons.length + 2 + forecastCols;
 
   // YoY for a row, in units when in units-only mode, dollars otherwise.
   const yoyForRow = (r: PlannerRow): number | null => {
@@ -267,6 +371,65 @@ export default function ForecastPlannerView() {
   };
   const fmtAvg = (v: number) => (metricMode === 'units' ? fmtUnits(Math.round(v)) : fmtCur(v));
   const avgColLabel = metricMode === 'units' ? 'Avg Units' : 'Avg Total $';
+
+  // Inline forecast inputs for one row. Renders 1 or 2 cells depending on
+  // metric mode. Read-only when editMode is off (just shows the saved
+  // value if any).
+  const renderForecastCells = (
+    rowScope: { category: string | null; styleNumber: string | null; colorCode: string | null },
+    sizing: 'lg' | 'sm' = 'lg',
+  ) => {
+    const k = entryKey(targetSeason, customerScope, rowScope.category, rowScope.styleNumber, rowScope.colorCode);
+    const v = valueFor(k);
+    const isPending = !!pending[k];
+    const padY = sizing === 'lg' ? 'py-1' : 'py-0.5';
+    const wInput = sizing === 'lg' ? 'w-24' : 'w-20';
+    const inputCls = `${wInput} text-right font-mono text-xs px-1.5 ${padY} bg-surface border border-border-primary rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-surface-secondary disabled:cursor-not-allowed`;
+    const tdCls = `px-2 ${sizing === 'lg' ? 'py-2' : 'py-1.5'} text-right font-mono ${isPending ? 'bg-amber-500/10' : 'bg-emerald-500/5'}`;
+    return (
+      <>
+        {showUnits && (
+          <td className={tdCls}>
+            <input
+              type="number"
+              min={0}
+              disabled={!editMode}
+              value={v.units || ''}
+              onChange={(e) => queueSave(rowScope, { units: parseInt(e.target.value, 10) || 0, dollars: v.dollars })}
+              placeholder={editMode ? '0' : '—'}
+              className={inputCls}
+            />
+          </td>
+        )}
+        {showDollars && (
+          <td className={tdCls}>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              disabled={!editMode}
+              value={v.dollars || ''}
+              onChange={(e) => queueSave(rowScope, { units: v.units, dollars: parseFloat(e.target.value) || 0 })}
+              placeholder={editMode ? '$0' : '—'}
+              className={inputCls}
+            />
+          </td>
+        )}
+      </>
+    );
+  };
+
+  // Header cells matching renderForecastCells layout
+  const renderForecastHeaderCells = () => (
+    <>
+      {showUnits && (
+        <th className="text-right px-2 py-2.5 font-bold border-l-2 border-emerald-500/50 bg-emerald-500/10">{targetSeason} Units</th>
+      )}
+      {showDollars && (
+        <th className={`text-right px-2 py-2.5 font-bold bg-emerald-500/10 ${showUnits ? '' : 'border-l-2 border-emerald-500/50'}`}>{targetSeason} $</th>
+      )}
+    </>
+  );
 
   return (
     <div className="p-6 space-y-4">
@@ -383,6 +546,26 @@ export default function ForecastPlannerView() {
         </div>
       )}
 
+      {/* Edit-mode banner: tells the user whether their inputs save and as whom. */}
+      <div className={`text-xs rounded-lg px-4 py-2 flex items-center gap-2 ${
+        editMode
+          ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+          : 'bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300'
+      }`}>
+        {editMode ? <Pencil className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+        {editMode ? (
+          <span>
+            Editing as <span className="font-mono font-semibold">{editingRep}</span>
+            {customerScope ? <> for customer <span className="font-mono font-semibold">{customerScope}</span></> : ' (across all customers in this rep’s book)'}.
+            Forecast inputs save automatically on blur.
+          </span>
+        ) : (
+          <span>
+            Read-only — select exactly one rep in the filter above to enter / edit forecast values for {targetSeason}.
+          </span>
+        )}
+      </div>
+
       {/* Main pivot table */}
       {data && (
         <div className="bg-surface rounded-xl border-2 border-border-primary overflow-hidden">
@@ -407,6 +590,7 @@ export default function ForecastPlannerView() {
                   ))}
                   <th className="text-right px-2 py-2.5 font-semibold border-l-2 border-border-strong">YoY Δ%</th>
                   <th className="text-right px-3 py-2.5 font-bold bg-cyan-500/10">{avgColLabel} <span className="text-text-faint font-normal">(reference)</span></th>
+                  {renderForecastHeaderCells()}
                 </tr>
               </thead>
               <tbody>
@@ -463,6 +647,7 @@ export default function ForecastPlannerView() {
                             </>
                           );
                         })()}
+                        {renderForecastCells({ category: r.label, styleNumber: null, colorCode: null }, 'lg')}
                       </tr>
                       {/* Style sub-rows */}
                       {isOpen && styleSubData[r.key] && styleSubData[r.key].rows.map((s) => {
@@ -512,6 +697,7 @@ export default function ForecastPlannerView() {
                                   </>
                                 );
                               })()}
+                              {renderForecastCells({ category: r.label, styleNumber: s.key, colorCode: null }, 'sm')}
                             </tr>
                             {/* Color sub-rows */}
                             {styleOpen && colorSubData[subKey] && colorSubData[subKey].rows.map((c) => (
@@ -545,6 +731,11 @@ export default function ForecastPlannerView() {
                                       <td className="px-3 py-1 text-right font-mono text-xs font-bold text-cyan-600/80">{fmtAvg(avg)}</td>
                                     </>
                                   );
+                                })()}
+                                {(() => {
+                                  // c.key is "styleNumber||colorCode" — split out the colorCode for the entry scope
+                                  const colorCode = c.key.includes('||') ? c.key.split('||')[1] || null : null;
+                                  return renderForecastCells({ category: r.label, styleNumber: s.key, colorCode }, 'sm');
                                 })()}
                               </tr>
                             ))}
@@ -595,6 +786,22 @@ export default function ForecastPlannerView() {
                       })}
                       <td className="px-2 py-2.5 text-right font-mono text-text-faint border-l-2 border-border-strong">—</td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10">{fmtAvg(gAvg)}</td>
+                      {/* Forecast totals — sum of every per-row input the user has entered */}
+                      {(() => {
+                        const allValues = Object.entries({ ...entries, ...pending });
+                        const sumU = allValues.reduce((a, [, v]) => a + (v.units || 0), 0);
+                        const sumD = allValues.reduce((a, [, v]) => a + (v.dollars || 0), 0);
+                        return (
+                          <>
+                            {showUnits && (
+                              <td className="px-2 py-2.5 text-right font-mono font-bold border-l-2 border-emerald-500/50 bg-emerald-500/10">{fmtUnits(sumU)}</td>
+                            )}
+                            {showDollars && (
+                              <td className={`px-2 py-2.5 text-right font-mono font-bold bg-emerald-500/10 ${showUnits ? '' : 'border-l-2 border-emerald-500/50'}`}>{fmtCurShort(sumD)}</td>
+                            )}
+                          </>
+                        );
+                      })()}
                     </tr>
                   );
                 })()}

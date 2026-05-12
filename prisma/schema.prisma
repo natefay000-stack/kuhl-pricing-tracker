@@ -445,3 +445,30 @@ model InvoiceSnapshot {
 
   @@index([takenAt])
 }
+
+
+// Per-rep forecast entries for an upcoming season — driven from the
+// Forecast Planner UI inputs. Composite unique key uses NULLS NOT
+// DISTINCT (Postgres 15+) so optional scope columns (customer,
+// category, styleNumber, colorCode) collapse correctly. Table is
+// created via raw SQL on first use of /api/data/forecast-entries
+// because we cannot run prisma db push from this environment;
+// schema.prisma reflects the intended shape for documentation.
+model ForecastEntry {
+  id               String   @id @default(cuid())
+  targetSeason     String
+  rep              String
+  customer         String?
+  category         String?
+  styleNumber      String?
+  colorCode        String?
+  unitsForecast    Int      @default(0)
+  dollarsForecast  Float    @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([targetSeason, rep, customer, category, styleNumber, colorCode], name: "ForecastEntry_natural_key")
+  @@index([targetSeason])
+  @@index([rep])
+}
