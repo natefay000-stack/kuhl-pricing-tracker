@@ -6,35 +6,32 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * Install the Sale natural-key unique index so Sales imports become
- * idempotent (skipDuplicates can actually skip).
+ * Install the Sale natural-key unique index. EXCLUDES dollar/unit
+ * fields (revenue / shipped / shippedAtNet / openAtNet / unitsBooked /
+ * unitsShipped) so re-imports of the same line item with evolved
+ * dollar values UPDATE in place via ON CONFLICT DO UPDATE rather than
+ * landing as a new row.
  *
  *   GET                          → preview: count rows + count duplicates
  *   POST ?dedupe=true&token=...  → dedupe in batches + CREATE UNIQUE INDEX
  *   POST ?token=...              → just CREATE the index (fails if dups exist)
  *
- * The composite key matches the @@unique on the Sale model in
- * prisma/schema.prisma:
+ * Composite key (matches @@unique in prisma/schema.prisma):
  *   (season, customer, salesRep, styleNumber, colorCode, invoiceNumber,
- *    shipToCity, shipToState, revenue, shippedAtNet, openAtNet)
- * with NULLS NOT DISTINCT so optional/null columns collapse correctly
- * — same fix we needed on Invoice.
+ *    shipToCity, shipToState)
+ * with NULLS NOT DISTINCT so optional/null columns collapse correctly.
  *
- * Idempotent: re-runs are safe.
+ * Idempotent: re-runs are safe. The dedupe step keeps the row with
+ * the most-recent createdAt per group (= the latest snapshot of that
+ * order's state).
  */
 const NATURAL_KEY_COLS = [
   '"season"', '"customer"', '"salesRep"', '"styleNumber"', '"colorCode"',
   '"invoiceNumber"', '"shipToCity"', '"shipToState"',
-  '"revenue"', '"shippedAtNet"', '"openAtNet"',
 ] as const;
 
 const PARTITION_COLS = NATURAL_KEY_COLS
-  .map((c) => {
-    // For text-ish columns use COALESCE-with-sentinel to make NULLs collide;
-    // for numeric columns use COALESCE(col, 0).
-    const numeric = ['"revenue"', '"shippedAtNet"', '"openAtNet"'].includes(c);
-    return numeric ? `COALESCE(${c}, 0)` : `COALESCE(${c}, '__NULL__')`;
-  })
+  .map((c) => `COALESCE(${c}, '__NULL__')`)
   .join(', ');
 
 export async function GET() {
@@ -80,13 +77,16 @@ export async function POST(request: Request) {
       const BATCH = 5000;
       let safety = 0;
       while (true) {
+        // Order by createdAt DESC so we keep the LATEST snapshot of
+        // each line item — that's the most-recent state of the order.
+        // Tie-break by id DESC for determinism.
         const r = await prisma.$executeRawUnsafe(`
           DELETE FROM "Sale"
           WHERE ctid IN (
             SELECT ctid FROM (
               SELECT ctid, ROW_NUMBER() OVER (
                 PARTITION BY ${PARTITION_COLS}
-                ORDER BY id
+                ORDER BY "createdAt" DESC, id DESC
               ) AS rn
               FROM "Sale"
             ) sub
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         totalRemoved += Number(r);
         if (Number(r) === 0) break;
         safety++;
-        if (safety > 200) break; // 1M rows max — generous safety stop
+        if (safety > 1000) break; // 5M rows max — generous safety stop
       }
     }
 
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
       rowsBefore: before,
       rowsRemoved: totalRemoved,
       rowsAfter: after,
-      indexInstalled: 'sale_natural_key (NULLS NOT DISTINCT, 11 columns)',
+      indexInstalled: 'sale_natural_key (NULLS NOT DISTINCT, 8 columns — no $/units)',
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

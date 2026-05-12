@@ -202,10 +202,13 @@ export async function POST(request: NextRequest) {
               unitsReturned: Number(item.unitsReturned || 0),
             }));
             // skipDuplicates honors the @@unique natural key on Sale
-            // (installed via /api/admin/install-sale-natural-key). With
-            // NULLS NOT DISTINCT, re-importing the same file is a no-op.
-            // Without the index installed yet, this still works — Postgres
-            // just has nothing to skip on, so behaves like a plain insert.
+            // (installed via /api/admin/install-sale-natural-key). The
+            // narrow form of the key — (season, customer, salesRep,
+            // styleNumber, colorCode, invoiceNumber, shipToCity, shipToState)
+            // — means re-importing the same line item with EVOLVED dollar
+            // values will SKIP rather than insert a snapshot dup. To
+            // refresh stale dollars, wipe the affected season first via
+            // /api/admin/delete-sales-by-season, then re-import.
             const result = await tx.sale.createMany({ data: batch, skipDuplicates: true });
             count += result.count;
           }
