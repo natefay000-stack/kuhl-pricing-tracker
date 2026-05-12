@@ -1280,7 +1280,9 @@ export default function Home() {
             type: 'sales',
             data: batch,
             fileName: `full_sales_import_batch_${batchNum}`,
-            replaceExisting: i === 0,
+            // Append-only — see /api/admin/install-sale-natural-key for
+            // the index that makes skipDuplicates idempotent on the server.
+            replaceExisting: false,
           }),
         });
       }
@@ -1339,16 +1341,18 @@ export default function Home() {
 
       for (const season of seasonList) {
         const seasonSales = salesBySeason[season];
-        // First batch for this season: delete existing + insert (replaceExisting: true)
-        // Subsequent batches: append only (replaceExisting: false)
+        // Append-only — server uses skipDuplicates against the natural-key
+        // unique index so re-importing the same file is idempotent. Old
+        // behavior was "first batch deletes the season, subsequent batches
+        // append" which silently wiped data when a file was incomplete.
+        // See /api/admin/install-sale-natural-key for the index install.
         const totalBatches = Math.ceil(seasonSales.length / BATCH_SIZE);
 
         for (let i = 0; i < seasonSales.length; i += BATCH_SIZE) {
           const batch = seasonSales.slice(i, i + BATCH_SIZE);
           const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-          const isFirstBatch = i === 0;
 
-          console.log(`${season} batch ${batchNum}/${totalBatches} (${batch.length} records${isFirstBatch ? ', replacing' : ''})`);
+          console.log(`${season} batch ${batchNum}/${totalBatches} (${batch.length} records, appending)`);
 
           await checkedFetchWithRetry('/api/data/import', {
             method: 'POST',
@@ -1358,14 +1362,14 @@ export default function Home() {
               season,
               data: batch,
               fileName: `sales_${season}_batch_${batchNum}`,
-              replaceExisting: isFirstBatch,
+              replaceExisting: false,
             }),
           });
         }
-        console.log(`✓ ${season}: ${seasonSales.length} records saved`);
+        console.log(`✓ ${season}: ${seasonSales.length} records sent (server skipDuplicates may skip exact-match rows)`);
       }
 
-      console.log('Sales REPLACE import complete');
+      console.log('Sales APPEND import complete');
       // Trigger snapshot rebuild after successful DB write
       try { await fetch('/api/deploy-hook', { method: 'POST' }); } catch { /* non-blocking */ }
     } catch (dbErr) {
@@ -1923,7 +1927,10 @@ export default function Home() {
               season: data.season,
               data: batch,
               fileName: `${data.season}_sales_import_batch_${batchNum}`,
-              replaceExisting: i === 0, // Only replace on first batch
+              // Append-only with server-side skipDuplicates — same idempotency
+              // pattern Invoice imports use. Old "first batch deletes the
+              // season" behavior wiped data when a file was incomplete.
+              replaceExisting: false,
             }),
           });
         }

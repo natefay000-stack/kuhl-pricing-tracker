@@ -117,6 +117,15 @@ model Sale {
   @@index([invoiceDate])
   @@index([accountingPeriod])
   @@index([shipToState])
+  // Composite natural key that lets re-imports be idempotent via
+  // createMany({ skipDuplicates: true }). Wide enough to allow real
+  // distinct line items (different reps, ship-tos, dollar amounts) to
+  // coexist; truly identical rows collapse. The DB index uses NULLS
+  // NOT DISTINCT (Postgres 15+) so optional fields collide correctly —
+  // see /api/admin/install-sale-natural-key. Same lesson Invoice
+  // taught us: NULL warehouse / customer / invoiceNumber would slip
+  // past skipDuplicates without it.
+  @@unique([season, customer, salesRep, styleNumber, colorCode, invoiceNumber, shipToCity, shipToState, revenue, shippedAtNet, openAtNet], name: "sale_natural_key")
 }
 
 // Invoice data — separate from sales, contains geographic fields for heat map

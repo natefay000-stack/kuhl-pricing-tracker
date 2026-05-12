@@ -201,8 +201,13 @@ export async function POST(request: NextRequest) {
               unitsShipped: Number(item.unitsShipped || 0),
               unitsReturned: Number(item.unitsReturned || 0),
             }));
-            await tx.sale.createMany({ data: batch });
-            count += batch.length;
+            // skipDuplicates honors the @@unique natural key on Sale
+            // (installed via /api/admin/install-sale-natural-key). With
+            // NULLS NOT DISTINCT, re-importing the same file is a no-op.
+            // Without the index installed yet, this still works — Postgres
+            // just has nothing to skip on, so behaves like a plain insert.
+            const result = await tx.sale.createMany({ data: batch, skipDuplicates: true });
+            count += result.count;
           }
           break;
 
