@@ -111,6 +111,12 @@ export default function ForecastPlannerView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Generation counter to ignore stale fetch responses. Without this,
+  // changing filters quickly can leave you with an earlier (slower) fetch
+  // overwriting a newer (faster) one — the rep filter looking like it
+  // doesn't apply because the unfiltered call landed second.
+  const fetchGenRef = useRef(0);
+
   // Inline drill-down — track which categories/styles are expanded and
   // cache their server responses so re-expanding is instant.
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
@@ -163,6 +169,10 @@ export default function ForecastPlannerView({
   };
 
   const refresh = async () => {
+    // Bump generation; any in-flight fetch with a stale gen will be
+    // discarded when it returns (prevents the wrong-data flicker when
+    // filters change while a previous fetch is in flight).
+    const gen = ++fetchGenRef.current;
     setLoading(true);
     setError(null);
     setExpandedCategory(null);
@@ -171,11 +181,13 @@ export default function ForecastPlannerView({
     setColorSubData({});
     try {
       const top = await fetchPlanner({ groupBy: 'category' });
+      if (gen !== fetchGenRef.current) return; // stale response, drop
       setData(top);
     } catch (err) {
+      if (gen !== fetchGenRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (gen === fetchGenRef.current) setLoading(false);
     }
   };
 
