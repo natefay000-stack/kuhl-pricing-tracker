@@ -78,6 +78,11 @@ export default function ForecastPlannerView() {
   const [seasonsBack, setSeasonsBack] = useState<number>(2);
   const [repFilter, setRepFilter] = useState<string[]>([]);
   const [customerFilter, setCustomerFilter] = useState<string[]>([]);
+  // Some reps forecast in units, some in $, some in both. Default 'both'
+  // matches the previous behavior; switching to 'units' or 'dollars'
+  // hides the columns the user doesn't care about and re-bases the
+  // YoY/Avg columns to the chosen metric.
+  const [metricMode, setMetricMode] = useState<'units' | 'dollars' | 'both'>('both');
 
   // ── Data state ──
   const [data, setData] = useState<PlannerResponse | null>(null);
@@ -192,17 +197,22 @@ export default function ForecastPlannerView() {
   const handleExport = () => {
     if (!data) return;
     const seasons = data.comparisonSeasons;
+    // Export columns track the visible metric mode so the .xlsx matches
+    // what the user is looking at on screen.
     const buildSheet = (rows: PlannerRow[], firstCol: string) =>
       rows.map(r => {
         const out: Record<string, unknown> = { [firstCol]: r.label };
         seasons.forEach(s => {
-          out[`${s} Units`] = r.bySeason[s].units || null;
-          out[`${s} Shipped $`] = r.bySeason[s].shipped || null;
-          out[`${s} Open $`] = r.bySeason[s].open || null;
-          out[`${s} Total $`] = r.bySeason[s].total || null;
+          if (showUnits) out[`${s} Units`] = r.bySeason[s].units || null;
+          if (showDollars) {
+            out[`${s} Shipped $`] = r.bySeason[s].shipped || null;
+            out[`${s} Open $`] = r.bySeason[s].open || null;
+            out[`${s} Total $`] = r.bySeason[s].total || null;
+          }
         });
-        out['YoY Δ %'] = r.yoyDeltaPct !== null ? r.yoyDeltaPct : null;
-        out[`Avg Total $`] = r.avgTotal;
+        const yoy = yoyForRow(r);
+        out['YoY Δ %'] = yoy !== null ? yoy : null;
+        out[avgColLabel] = avgForRow(r);
         return out;
       });
 
@@ -231,6 +241,32 @@ export default function ForecastPlannerView() {
 
   const hasFilters = repFilter.length > 0 || customerFilter.length > 0;
   const seasons = data?.comparisonSeasons ?? [];
+
+  // ── Metric-mode-aware helpers ──
+  const showUnits = metricMode === 'units' || metricMode === 'both';
+  const showDollars = metricMode === 'dollars' || metricMode === 'both';
+  // 1 col for Units (when shown) + 3 cols for $ block (Shipped/Open/Total)
+  const colsPerSeason = (showUnits ? 1 : 0) + (showDollars ? 3 : 0);
+  // Total table width: sticky-left (1) + (cols/season × seasons) + YoY + Avg
+  const tableColCount = 1 + colsPerSeason * seasons.length + 2;
+
+  // YoY for a row, in units when in units-only mode, dollars otherwise.
+  const yoyForRow = (r: PlannerRow): number | null => {
+    if (metricMode !== 'units' || seasons.length < 2) return r.yoyDeltaPct;
+    const last = seasons[seasons.length - 1];
+    const prev = seasons[seasons.length - 2];
+    const lastU = r.bySeason[last]?.units ?? 0;
+    const prevU = r.bySeason[prev]?.units ?? 0;
+    return prevU !== 0 ? (lastU - prevU) / prevU : null;
+  };
+  // Avg across comparison seasons — units in units mode, $ otherwise.
+  const avgForRow = (r: PlannerRow): number => {
+    if (metricMode !== 'units') return r.avgTotal;
+    const us = seasons.map((s) => r.bySeason[s]?.units ?? 0).filter((v) => v !== 0);
+    return us.length > 0 ? us.reduce((a, b) => a + b, 0) / us.length : 0;
+  };
+  const fmtAvg = (v: number) => (metricMode === 'units' ? fmtUnits(Math.round(v)) : fmtCur(v));
+  const avgColLabel = metricMode === 'units' ? 'Avg Units' : 'Avg Total $';
 
   return (
     <div className="p-6 space-y-4">
@@ -308,6 +344,25 @@ export default function ForecastPlannerView() {
         </div>
         <MultiSelect label="Rep" placeholder="All reps" options={allReps} values={repFilter} onChange={setRepFilter} widthClass="w-[200px]" />
         <MultiSelect label="Customer" placeholder="All customers" options={allCustomers} values={customerFilter} onChange={setCustomerFilter} widthClass="w-[240px]" />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-text-secondary uppercase tracking-wide">Show</label>
+          <div className="inline-flex rounded-lg border-2 border-border-primary overflow-hidden">
+            {(['units', 'dollars', 'both'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMetricMode(m)}
+                className={`px-3 py-2 text-sm font-semibold transition-colors ${
+                  metricMode === m
+                    ? 'bg-cyan-500 text-white'
+                    : 'bg-surface text-text-secondary hover:bg-hover-accent'
+                }`}
+              >
+                {m === 'units' ? 'Units' : m === 'dollars' ? '$' : 'Both'}
+              </button>
+            ))}
+          </div>
+        </div>
         {hasFilters && (
           <button
             onClick={() => { setRepFilter([]); setCustomerFilter([]); }}
@@ -338,19 +393,25 @@ export default function ForecastPlannerView() {
                   <th className="text-left px-3 py-2.5 font-semibold sticky left-0 bg-surface-tertiary">Category</th>
                   {seasons.map(s => (
                     <Fragment key={s}>
-                      <th className="text-right px-2 py-2.5 font-semibold border-l border-border-primary/60">{s} Units</th>
-                      <th className="text-right px-2 py-2.5 font-semibold">{s} Shipped</th>
-                      <th className="text-right px-2 py-2.5 font-semibold">{s} Open</th>
-                      <th className="text-right px-2 py-2.5 font-semibold bg-surface-secondary/50">{s} Total</th>
+                      {showUnits && (
+                        <th className="text-right px-2 py-2.5 font-semibold border-l border-border-primary/60">{s} Units</th>
+                      )}
+                      {showDollars && (
+                        <>
+                          <th className={`text-right px-2 py-2.5 font-semibold ${showUnits ? '' : 'border-l border-border-primary/60'}`}>{s} Shipped</th>
+                          <th className="text-right px-2 py-2.5 font-semibold">{s} Open</th>
+                          <th className="text-right px-2 py-2.5 font-semibold bg-surface-secondary/50">{s} Total</th>
+                        </>
+                      )}
                     </Fragment>
                   ))}
                   <th className="text-right px-2 py-2.5 font-semibold border-l-2 border-border-strong">YoY Δ%</th>
-                  <th className="text-right px-3 py-2.5 font-bold bg-cyan-500/10">Avg Total $ <span className="text-text-faint font-normal">(reference)</span></th>
+                  <th className="text-right px-3 py-2.5 font-bold bg-cyan-500/10">{avgColLabel} <span className="text-text-faint font-normal">(reference)</span></th>
                 </tr>
               </thead>
               <tbody>
                 {data.rows.length === 0 && !loading && (
-                  <tr><td colSpan={3 + seasons.length * 4 + 2} className="px-3 py-6 text-center text-text-muted">No data for the current filters.</td></tr>
+                  <tr><td colSpan={tableColCount} className="px-3 py-6 text-center text-text-muted">No data for the current filters.</td></tr>
                 )}
                 {data.rows.map((r) => {
                   const isOpen = expandedCategory === r.key;
@@ -370,24 +431,38 @@ export default function ForecastPlannerView() {
                           const a = r.bySeason[s];
                           return (
                             <Fragment key={s}>
-                              <td className="px-2 py-2 text-right font-mono text-text-secondary border-l border-border-primary/60">{fmtUnits(a.units)}</td>
-                              <td className="px-2 py-2 text-right font-mono">{fmtCurShort(a.shipped)}</td>
-                              <td className="px-2 py-2 text-right font-mono text-text-secondary">{fmtCurShort(a.open)}</td>
-                              <td className="px-2 py-2 text-right font-mono font-semibold bg-surface-secondary/30">{fmtCurShort(a.total)}</td>
+                              {showUnits && (
+                                <td className="px-2 py-2 text-right font-mono text-text-secondary border-l border-border-primary/60">{fmtUnits(a.units)}</td>
+                              )}
+                              {showDollars && (
+                                <>
+                                  <td className={`px-2 py-2 text-right font-mono ${showUnits ? '' : 'border-l border-border-primary/60'}`}>{fmtCurShort(a.shipped)}</td>
+                                  <td className="px-2 py-2 text-right font-mono text-text-secondary">{fmtCurShort(a.open)}</td>
+                                  <td className="px-2 py-2 text-right font-mono font-semibold bg-surface-secondary/30">{fmtCurShort(a.total)}</td>
+                                </>
+                              )}
                             </Fragment>
                           );
                         })}
-                        <td className={`px-2 py-2 text-right font-mono font-semibold border-l-2 border-border-strong ${
-                          r.yoyDeltaPct === null ? 'text-text-faint' :
-                          r.yoyDeltaPct > 0 ? 'text-emerald-500' :
-                          r.yoyDeltaPct < 0 ? 'text-red-500' : 'text-text-muted'
-                        }`}>
-                          <span className="inline-flex items-center gap-1">
-                            {r.yoyDeltaPct === null ? <Minus className="w-3 h-3" /> : r.yoyDeltaPct > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            {fmtPct(r.yoyDeltaPct)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-500/5">{fmtCur(r.avgTotal)}</td>
+                        {(() => {
+                          const yoy = yoyForRow(r);
+                          const avg = avgForRow(r);
+                          return (
+                            <>
+                              <td className={`px-2 py-2 text-right font-mono font-semibold border-l-2 border-border-strong ${
+                                yoy === null ? 'text-text-faint' :
+                                yoy > 0 ? 'text-emerald-500' :
+                                yoy < 0 ? 'text-red-500' : 'text-text-muted'
+                              }`}>
+                                <span className="inline-flex items-center gap-1">
+                                  {yoy === null ? <Minus className="w-3 h-3" /> : yoy > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                  {fmtPct(yoy)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-500/5">{fmtAvg(avg)}</td>
+                            </>
+                          );
+                        })()}
                       </tr>
                       {/* Style sub-rows */}
                       {isOpen && styleSubData[r.key] && styleSubData[r.key].rows.map((s) => {
@@ -410,19 +485,33 @@ export default function ForecastPlannerView() {
                                 const a = s.bySeason[season];
                                 return (
                                   <Fragment key={season}>
-                                    <td className="px-2 py-1.5 text-right font-mono text-xs text-text-secondary border-l border-border-primary/60">{fmtUnits(a.units)}</td>
-                                    <td className="px-2 py-1.5 text-right font-mono text-xs">{fmtCurShort(a.shipped)}</td>
-                                    <td className="px-2 py-1.5 text-right font-mono text-xs text-text-secondary">{fmtCurShort(a.open)}</td>
-                                    <td className="px-2 py-1.5 text-right font-mono text-xs font-semibold bg-surface-secondary/20">{fmtCurShort(a.total)}</td>
+                                    {showUnits && (
+                                      <td className="px-2 py-1.5 text-right font-mono text-xs text-text-secondary border-l border-border-primary/60">{fmtUnits(a.units)}</td>
+                                    )}
+                                    {showDollars && (
+                                      <>
+                                        <td className={`px-2 py-1.5 text-right font-mono text-xs ${showUnits ? '' : 'border-l border-border-primary/60'}`}>{fmtCurShort(a.shipped)}</td>
+                                        <td className="px-2 py-1.5 text-right font-mono text-xs text-text-secondary">{fmtCurShort(a.open)}</td>
+                                        <td className="px-2 py-1.5 text-right font-mono text-xs font-semibold bg-surface-secondary/20">{fmtCurShort(a.total)}</td>
+                                      </>
+                                    )}
                                   </Fragment>
                                 );
                               })}
-                              <td className={`px-2 py-1.5 text-right font-mono text-xs font-semibold border-l-2 border-border-strong ${
-                                s.yoyDeltaPct === null ? 'text-text-faint' :
-                                s.yoyDeltaPct > 0 ? 'text-emerald-500' :
-                                s.yoyDeltaPct < 0 ? 'text-red-500' : 'text-text-muted'
-                              }`}>{fmtPct(s.yoyDeltaPct)}</td>
-                              <td className="px-3 py-1.5 text-right font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/5">{fmtCur(s.avgTotal)}</td>
+                              {(() => {
+                                const yoy = yoyForRow(s);
+                                const avg = avgForRow(s);
+                                return (
+                                  <>
+                                    <td className={`px-2 py-1.5 text-right font-mono text-xs font-semibold border-l-2 border-border-strong ${
+                                      yoy === null ? 'text-text-faint' :
+                                      yoy > 0 ? 'text-emerald-500' :
+                                      yoy < 0 ? 'text-red-500' : 'text-text-muted'
+                                    }`}>{fmtPct(yoy)}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/5">{fmtAvg(avg)}</td>
+                                  </>
+                                );
+                              })()}
                             </tr>
                             {/* Color sub-rows */}
                             {styleOpen && colorSubData[subKey] && colorSubData[subKey].rows.map((c) => (
@@ -434,20 +523,34 @@ export default function ForecastPlannerView() {
                                   const a = c.bySeason[season];
                                   return (
                                     <Fragment key={season}>
-                                      <td className="px-2 py-1 text-right font-mono text-xs text-text-faint border-l border-border-primary/40">{fmtUnits(a.units)}</td>
-                                      <td className="px-2 py-1 text-right font-mono text-xs">{fmtCurShort(a.shipped)}</td>
-                                      <td className="px-2 py-1 text-right font-mono text-xs text-text-faint">{fmtCurShort(a.open)}</td>
-                                      <td className="px-2 py-1 text-right font-mono text-xs font-semibold">{fmtCurShort(a.total)}</td>
+                                      {showUnits && (
+                                        <td className="px-2 py-1 text-right font-mono text-xs text-text-faint border-l border-border-primary/40">{fmtUnits(a.units)}</td>
+                                      )}
+                                      {showDollars && (
+                                        <>
+                                          <td className={`px-2 py-1 text-right font-mono text-xs ${showUnits ? '' : 'border-l border-border-primary/40'}`}>{fmtCurShort(a.shipped)}</td>
+                                          <td className="px-2 py-1 text-right font-mono text-xs text-text-faint">{fmtCurShort(a.open)}</td>
+                                          <td className="px-2 py-1 text-right font-mono text-xs font-semibold">{fmtCurShort(a.total)}</td>
+                                        </>
+                                      )}
                                     </Fragment>
                                   );
                                 })}
-                                <td className="px-2 py-1 text-right font-mono text-xs border-l-2 border-border-strong text-text-faint">{fmtPct(c.yoyDeltaPct)}</td>
-                                <td className="px-3 py-1 text-right font-mono text-xs font-bold text-cyan-600/80">{fmtCur(c.avgTotal)}</td>
+                                {(() => {
+                                  const yoy = yoyForRow(c);
+                                  const avg = avgForRow(c);
+                                  return (
+                                    <>
+                                      <td className="px-2 py-1 text-right font-mono text-xs border-l-2 border-border-strong text-text-faint">{fmtPct(yoy)}</td>
+                                      <td className="px-3 py-1 text-right font-mono text-xs font-bold text-cyan-600/80">{fmtAvg(avg)}</td>
+                                    </>
+                                  );
+                                })()}
                               </tr>
                             ))}
                             {styleOpen && !colorSubData[subKey] && (
                               <tr className="border-b border-border-primary/30 bg-surface-secondary/10">
-                                <td colSpan={3 + seasons.length * 4 + 2} className="px-12 py-2 text-xs text-text-faint italic">Loading colors…</td>
+                                <td colSpan={tableColCount} className="px-12 py-2 text-xs text-text-faint italic">Loading colors…</td>
                               </tr>
                             )}
                           </Fragment>
@@ -455,31 +558,46 @@ export default function ForecastPlannerView() {
                       })}
                       {isOpen && !styleSubData[r.key] && (
                         <tr className="border-b border-border-primary/30 bg-cyan-500/5">
-                          <td colSpan={3 + seasons.length * 4 + 2} className="px-8 py-2 text-xs text-text-faint italic">Loading styles…</td>
+                          <td colSpan={tableColCount} className="px-8 py-2 text-xs text-text-faint italic">Loading styles…</td>
                         </tr>
                       )}
                     </Fragment>
                   );
                 })}
                 {/* Grand total */}
-                {data.rows.length > 0 && (
-                  <tr className="border-t-2 border-border-strong bg-surface-tertiary">
-                    <td className="px-3 py-2.5 font-bold text-text-primary sticky left-0 bg-surface-tertiary">TOTAL</td>
-                    {seasons.map(s => {
-                      const t = data.grandTotal.bySeason[s];
-                      return (
-                        <Fragment key={s}>
-                          <td className="px-2 py-2.5 text-right font-mono font-bold border-l border-border-primary/60">{fmtUnits(t.units)}</td>
-                          <td className="px-2 py-2.5 text-right font-mono font-bold">{fmtCurShort(t.shipped)}</td>
-                          <td className="px-2 py-2.5 text-right font-mono font-bold text-text-secondary">{fmtCurShort(t.open)}</td>
-                          <td className="px-2 py-2.5 text-right font-mono font-bold bg-surface-secondary/40">{fmtCurShort(t.total)}</td>
-                        </Fragment>
-                      );
-                    })}
-                    <td className="px-2 py-2.5 text-right font-mono text-text-faint border-l-2 border-border-strong">—</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10">{fmtCur(data.grandTotal.avgTotal)}</td>
-                  </tr>
-                )}
+                {data.rows.length > 0 && (() => {
+                  // Avg for grand total respects metric mode
+                  const gAvg = metricMode === 'units'
+                    ? (() => {
+                        const us = seasons.map(s => data.grandTotal.bySeason[s]?.units ?? 0).filter(v => v !== 0);
+                        return us.length > 0 ? us.reduce((a, b) => a + b, 0) / us.length : 0;
+                      })()
+                    : data.grandTotal.avgTotal;
+                  return (
+                    <tr className="border-t-2 border-border-strong bg-surface-tertiary">
+                      <td className="px-3 py-2.5 font-bold text-text-primary sticky left-0 bg-surface-tertiary">TOTAL</td>
+                      {seasons.map(s => {
+                        const t = data.grandTotal.bySeason[s];
+                        return (
+                          <Fragment key={s}>
+                            {showUnits && (
+                              <td className="px-2 py-2.5 text-right font-mono font-bold border-l border-border-primary/60">{fmtUnits(t.units)}</td>
+                            )}
+                            {showDollars && (
+                              <>
+                                <td className={`px-2 py-2.5 text-right font-mono font-bold ${showUnits ? '' : 'border-l border-border-primary/60'}`}>{fmtCurShort(t.shipped)}</td>
+                                <td className="px-2 py-2.5 text-right font-mono font-bold text-text-secondary">{fmtCurShort(t.open)}</td>
+                                <td className="px-2 py-2.5 text-right font-mono font-bold bg-surface-secondary/40">{fmtCurShort(t.total)}</td>
+                              </>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                      <td className="px-2 py-2.5 text-right font-mono text-text-faint border-l-2 border-border-strong">—</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10">{fmtAvg(gAvg)}</td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
